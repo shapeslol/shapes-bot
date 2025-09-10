@@ -392,7 +392,7 @@ class MyBot(Bot):
                 ws_params.update(sequence=self.ws.sequence, resume=True, session=self.ws.session_id)
 
 #bot = commands.Bot(command_prefix="/", intents=intents)
-bot = MyBot(command_prefix="!", intents=intents)
+bot = MyBot(command_prefix="!", intents=discord.intents.all())
 #tree = app_commands.CommandTree(bot)
 
 # === Bot Events ===
@@ -594,7 +594,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 data = response.json()
                 if data and data.get("data") and len(data["data"]) > 0:
                     AvatarBust = data["data"][0].get("imageUrl")
-                    HeadShot = playerdata["imageUrl"]
+                    HeadShot = userinfo["imageUrl"]
                     embed.set_thumbnail(url=AvatarBust)
                     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     # Set an author (optional)
@@ -603,12 +603,12 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     await interaction.response.send_message(embed=embed)
                     return
                 else:
-                    print(f"Error fetching avatar headshot: {e}")
-                await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
+                    print(f"Error fetching avatar bust: {e}")
+                await interaction.response.send_message(f"Failed To Retrieve {user}'s Avatar!")
                 return
             except requests.exceptions.RequestException as e:
-                print(f"Error fetching avatar headshot: {e}")
-                await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
+                print(f"Error fetching avatar Avatar: {e}")
+                await interaction.response.send_message(f"Failed To Retrieve {user}'s Avatar!")
                 return
         else:
             print(f"{user} not found.")
@@ -619,6 +619,8 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
         return
 
 @bot.tree.command(name="test", description="Send a random adorable animal photo")
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.user_install()
 @app_commands.describe(
     animal="The type of animal",
     only_smol="Whether to show only baby animals"
@@ -628,8 +630,12 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     app_commands.Choice(name="Cat", value="animal_cat"),
     app_commands.Choice(name="Penguin", value="animal_penguin"),
 ])
-async def blep(interaction: discord.Interaction, animal: str, only_smol: bool = False):
+async def test(interaction: discord.Interaction, animal: str, only_smol: bool = False):
     await interaction.response.send_message(f"You chose {animal}, only_smol: {only_smol}")
+
+@bot.command()
+async def test(interaction):
+    await interaction.send("you're in a guild")
 
 # === App Commands ===
 # @app_commands.command(name="status", description="Get the spook.bio status")

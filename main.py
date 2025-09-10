@@ -587,6 +587,26 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             embed.add_field(name="UserID", value=UserID, inline=False)
             embed.add_field(name="Join Date", value=RobloxJoinDate_DiscordTimestamp, inline=False)
             # Set a thumbnail (optional)
+            url = f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={UserID}&size=420x420&format=Png&is=false"
+            try:
+                response = requests.get(url)
+                response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+                data = response.json()
+                if data and data.get("data") and len(data["data"]) > 0:
+                    HeadShot = data["data"][0].get("imageUrl")
+                    # Set an author (optional)
+                    embed.set_author(name=user, icon_url=HeadShot)
+                    print(data)
+                    await interaction.response.send_message(embed=embed)
+                    return
+                else:
+                    print(f"Error fetching avatar headshot: {e}")
+                await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
+                return
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching avatar headshot: {e}")
+                await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
+                return
             url = f"https://thumbnails.roblox.com/v1/users/avatar-bust?userIds={UserID}&size=150x150&format=Png&isCircular=false"
             try:
                 response = requests.get(url)
@@ -594,11 +614,9 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 data = response.json()
                 if data and data.get("data") and len(data["data"]) > 0:
                     AvatarBust = data["data"][0].get("imageUrl")
-                    HeadShot = userinfo["imageUrl"]
                     embed.set_thumbnail(url=AvatarBust)
                     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     # Set an author (optional)
-                    embed.set_author(name=user, icon_url=HeadShot)
                     print(data)
                     await interaction.response.send_message(embed=embed)
                     return

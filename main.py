@@ -392,7 +392,7 @@ class MyBot(Bot):
                 ws_params.update(sequence=self.ws.sequence, resume=True, session=self.ws.session_id)
 
 #bot = commands.Bot(command_prefix="/", intents=intents)
-bot = MyBot(command_prefix="!", intents=discord.intents.all())
+bot = MyBot(command_prefix="!", intents=discord.Intents.all())
 #tree = app_commands.CommandTree(bot)
 
 # === Bot Events ===
@@ -411,7 +411,7 @@ async def on_ready():
         # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
     # Start the cache updater task
-    MyBot(command_prefix="!", intents=intents)
+    MyBot(command_prefix="!", intents=Intents)
     bot.loop.create_task(update_guild_cache())
 
 @bot.event

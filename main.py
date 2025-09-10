@@ -468,12 +468,12 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 #print(f"Relative time: {discord_time_relative}")
 
 # === Commands ===
-@bot.tree.command(name="status", description="Get the shapes.lol status")
+@bot.tree.command(name="status", description="Get the shapes.lol status", dm_permission=True)
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message("# COMING SOON")
     # await interaction.response.send_message("[spook.bio Status Page](https://spookbio.statuspage.io)")
 
-@bot.tree.command(name="stop", description="Stop the bot.")
+@bot.tree.command(name="stop", description="Stop the bot.", dm_permission=True)
 async def stop(interaction: discord.Interaction):
     if interaction.user.name == {owner} or {co_owner}:
         await interaction.response.send_message(":white_check_mark: Shutdown Successfully!", ephemeral=False)
@@ -483,7 +483,7 @@ async def stop(interaction: discord.Interaction):
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
-@bot.tree.command(name="restart", description="Restart the bot.")
+@bot.tree.command(name="restart", description="Restart the bot.", dm_permission=True)
 async def restart(interaction: discord.Interaction):
     if interaction.user.name == {owner} or {co_owner}:
         await interaction.response.send_message(":white_check_mark: Restarted Successfully!!", ephemeral=False)
@@ -491,7 +491,7 @@ async def restart(interaction: discord.Interaction):
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
-@bot.tree.command(name="pfp", description="Get a pfp from a user's spook.bio profile.")
+@bot.tree.command(name="pfp", description="Get a pfp from a user's spook.bio profile.", dm_permission=True)
 async def pfp(interaction: discord.Interaction, username: str = "phis"):
     url = f"https://spook.bio/u/{username}/pfp.jpg"
     response = requests.get(url)
@@ -502,7 +502,7 @@ async def pfp(interaction: discord.Interaction, username: str = "phis"):
         await interaction.response.send_message(f":x: {response.status_code} Not Found :x:", ephemeral=True)
         print(f"Error fetching data: {response.status_code}")
 
-@bot.tree.command(name="discord2spook", description="Get a spook.bio profile from a discord user.")
+@bot.tree.command(name="discord2spook", description="Get a spook.bio profile from a discord user.", dm_permission=True)
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
     url = f"https://prp.bio/discord/{user.name}"
     print(url)
@@ -518,7 +518,7 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
 
-@bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.")
+@bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.", dm_permission=True)
 async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
     url = f"https://users.roblox.com/v1/usernames/users"
@@ -526,7 +526,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     # print(f"Fetching Data From {url}")
     print(f"Searching For {user}'s profile")
     await interaction.response.defer(thinking=True)
-    await interaction.send(f"https://shapeslol.github.io/shapes.lol/loading.gif Searching For {user}'s Roblox Profile!")
+    #await interaction.followup.send(f"https://shapeslol.github.io/shapes.lol/loading.gif Searching For {user}'s Roblox Profile!")
 
     request_payload = {
         "usernames": [user],
@@ -636,7 +636,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
         await interaction.response.send_message(f"An error occurred during the API request: {e}")
         return
 
-@bot.tree.command(name="test", description="Send a random adorable animal photo")
+@bot.tree.command(name="test", description="Send a random adorable animal photo", dm_permission=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.user_install()
 @app_commands.describe(
@@ -650,10 +650,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 ])
 async def test(interaction: discord.Interaction, animal: str, only_smol: bool = False):
     await interaction.response.send_message(f"You chose {animal}, only_smol: {only_smol}")
-
-@bot.command()
-async def test(interaction):
-    await interaction.send("you're in a guild")
 
 # === App Commands ===
 # @app_commands.command(name="status", description="Get the spook.bio status")

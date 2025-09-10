@@ -525,8 +525,8 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
     # print(f"Fetching Data From {url}")
     print(f"Searching For {user}'s profile")
-    # await interaction.response.defer(thinking=True)
-    await interaction.followup.send(f"https://shapeslol.github.io/images/loading.gif Searching For {user}'s Roblox Profile!")
+    await interaction.response.defer(thinking=True)
+    await interaction.followup.send(f"https://shapeslol.github.io/shapes.lol/loading.gif Searching For {user}'s Roblox Profile!")
 
     request_payload = {
         "usernames": [user],
@@ -594,7 +594,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 data = response.json()
                 if data and data.get("data") and len(data["data"]) > 0:
                     AvatarBust = data["data"][0].get("imageUrl")
-                    HeadShot = userinfo["imageUrl"]
+                    HeadShot = playerdata["imageUrl"]
                     embed.set_thumbnail(url=AvatarBust)
                     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     # Set an author (optional)

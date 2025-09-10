@@ -7,6 +7,7 @@ import signal
 import asyncio
 import discord
 import aiohttp
+from datetime import datetime, timezone
 from discord import app_commands
 import requests
 from discord.ext import commands
@@ -23,7 +24,7 @@ intents.guilds = True
 intents.message_content = True
 owner = "sl.ip"
 co_owner = "<@481295611417853982>"
-MainURL = "https://spook.bio"
+MainURL = "https://shapes.lol"
 
 try:
     with open('TOKEN.txt', 'r') as f:
@@ -260,7 +261,7 @@ async def update_guild_cache():
     while True:
         await bot.tree.sync()
         cached_guilds = list(bot.guilds)
-        print(f"[Cache Update] Cached {len(cached_guilds)} guilds at {time.strftime('%X')}")
+        print(f"[SYSTEM] Cached {len(cached_guilds)} guilds at {time.strftime('%X')}")
         await asyncio.sleep(120)
 
 class MyGateway(DiscordWebSocket):
@@ -390,7 +391,7 @@ class MyBot(Bot):
                 ws_params.update(sequence=self.ws.sequence, resume=True, session=self.ws.session_id)
 
 #bot = commands.Bot(command_prefix="/", intents=intents)
-bot = MyBot(command_prefix="/", intents=intents)
+bot = MyBot(command_prefix="!", intents=intents)
 #tree = app_commands.CommandTree(bot)
 
 # === Bot Events ===
@@ -402,17 +403,17 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.custom, name=f":link: {MainURL}/discord"))
     if len(bot.guilds) == 1:
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
+        # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
     else:
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
+        # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
     # Start the cache updater task
-    MyBot(command_prefix="/", intents=intents)
+    MyBot(command_prefix="!", intents=intents)
     bot.loop.create_task(update_guild_cache())
 
 @bot.event
 async def on_member_join(member):
-    role = discord.utils.get(member.guild.roles, name='Member')
+    role = discord.utils.get(member.guild.roles, name="Member")
     await member.add_roles(role)
     print(f"Gave {member.name} The Member Role!")
 
@@ -422,10 +423,52 @@ def restartbot():
     os.execv(sys.executable, ["python3 main.py =)"])
     os.kill(os.getpid(), signal.SIGINT)
 
+
+def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str:
+    """
+    Converts an ISO 8601 formatted UTC timestamp string to Discord's timestamp markdown.
+
+    Args:
+        iso_timestamp_str: The ISO 8601 formatted timestamp string (e.g., "2023-10-27T10:30:00Z").
+        format_type: The Discord timestamp format type (e.g., "t", "T", "d", "D", "f", "F", "R").
+                    Defaults to "f" (short date/time).
+
+    Returns:
+        A string formatted for Discord's timestamp display.
+    """
+    try:
+        # 1. Parse the ISO 8601 string into a datetime object.
+        # Use fromisoformat for modern Python versions (3.7+)
+        dt_object = datetime.fromisoformat(iso_timestamp_str.replace('Z', '+00:00'))
+
+        # Ensure the datetime object is timezone-aware and in UTC
+        if dt_object.tzinfo is None:
+            dt_object = pytz.utc.localize(dt_object)
+        else:
+            dt_object = dt_object.astimezone(pytz.utc)
+
+        # 2. Convert the datetime object to a Unix timestamp.
+        unix_timestamp = int(dt_object.timestamp())
+
+        # 3. Format the Unix timestamp into Discord's special timestamp markdown.
+        return f"<t:{unix_timestamp}:{format_type}>"
+    except ValueError as e:
+        return f"Error parsing timestamp: {e}"
+
+# TESTING
+#iso_time_utc = "2025-12-25T14:30:00Z"
+#discord_time_short = iso_to_discord_time(iso_time_utc, "f")
+#discord_time_relative = iso_to_discord_time(iso_time_utc, "R")
+
+#print(f"Short date/time: {discord_time_short}")
+#print(f"Long date/time: {discord_time_long}")
+#print(f"Relative time: {discord_time_relative}")
+
 # === Commands ===
-@bot.tree.command(name="status", description="Get the spook.bio status")
+@bot.tree.command(name="status", description="Get the shapes.lol status")
 async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message("[spook.bio Status Page](https://spookbio.statuspage.io)")
+    await interaction.response.send_message("# COMING SOON")
+    # await interaction.response.send_message("[spook.bio Status Page](https://spookbio.statuspage.io)")
 
 @bot.tree.command(name="stop", description="Stop the bot.")
 async def stop(interaction: discord.Interaction):
@@ -463,8 +506,8 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
     response = requests.get(url)
     print(response.text)
     if response.status_code == 200:
-        await interaction.response.send_message(f"{user.mention}'s [Profile]({response.text})", ephemeral=False)
-        print("Fetched data successfully!")
+        await interaction.response.send_message(f"{user.mention}'s [spook.bio Profile]({response.text})", ephemeral=False)
+        print(f"Fetched {response.text} successfully!")
     else:
         if interaction.user.name == user.name:
             await interaction.response.send_message(f":x: You don't have a spook.bio profile linked to your account {user.mention}! :x: To link your profile to your account please DM {owner} or {co_owner}")
@@ -473,12 +516,14 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
         print(f"Error fetching data: {response.status_code}")
 
 @bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.")
-async def robloxinfo(interaction: discord.Interaction, user: str = "LCJUNIOR1220"):
+async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
     url = f"https://users.roblox.com/v1/usernames/users"
 
-    print(f"Fetching Data From {url}")
-    print(f"Searching For {user}")
+    # print(f"Fetching Data From {url}")
+    print(f"Searching For {user}'s profile")
+    # await interaction.response.defer(thinking=True)
+    await interaction.followup.send(f"https://shapeslol.github.io/images/loading.gif Searching For {user}'s Roblox Profile!")
 
     request_payload = {
         "usernames": [user],
@@ -498,11 +543,9 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "LCJUNIOR1220
             userinfo = data["data"][0]
             UserID = userinfo["id"]
             Display = userinfo["displayName"]
+            print(f"UserInfo: {userinfo}")
 
-            if Display == user:
-                Username = Display
-            else:
-                Username =f"{Display} (@{user})"
+            
             
             url = f"https://users.roblox.com/v1/users/{UserID}"
             try:
@@ -512,13 +555,21 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "LCJUNIOR1220
                 print(playerdata)
                 Description = playerdata["description"]
                 Banned = playerdata["isBanned"]
+                user = playerdata["name"]
+                JoinDate = playerdata["created"]
+                RobloxJoinDate_DiscordTimestamp = isotodiscordtimestamp(JoinDate, "F")
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching user data for ID {UserID}: {e}")
                 await interaction.response.send_message("Error retrieving description")
                 return
-            
+
+            if Display == user:
+                Username = Display
+            else:
+                Username =f"{Display} (@{user})"
+
             if Banned:
-                Username=f"[Account Deleted] {Display} (@{user})"
+                Username=f":warning: [Account Deleted] {Display} (@{user})"
 
             # Construct the profile URL from the user ID
             profileurl = f"https://www.roblox.com/users/{UserID}/profile"
@@ -529,17 +580,19 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "LCJUNIOR1220
             color=discord.Color.blue() # You can use a hex code like 0x00ff00 for green
             )
             # Add fields to the embed (optional)
-            embed.add_field(name="UserID", value=UserID, inline=True)
-            embed.add_field(name="UserName", value=user, inline=False) # Not inline means it appears on a new line
+            embed.add_field(name="UserName", value=user, inline=True) # Not inline means it appears on a new line
+            embed.add_field(name="UserID", value=UserID, inline=False)
+            embed.add_field(name="Join Date", value=RobloxJoinDate_DiscordTimestamp, inline=False)
             # Set a thumbnail (optional)
-            url = f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={UserID}&size=420x420&format=Png&is=false"
+            url = f"https://thumbnails.roblox.com/v1/users/avatar-bust?userIds={UserID}&size=150x150&format=Png&isCircular=false"
             try:
                 response = requests.get(url)
                 response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
                 data = response.json()
                 if data and data.get("data") and len(data["data"]) > 0:
-                    HeadShot = data["data"][0].get("imageUrl")
-                    embed.set_thumbnail(url=HeadShot)
+                    AvatarBust = data["data"][0].get("imageUrl")
+                    HeadShot = userinfo["imageUrl"]
+                    embed.set_thumbnail(url=AvatarBust)
                     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     # Set an author (optional)
                     embed.set_author(name=user, icon_url=HeadShot)
@@ -561,6 +614,19 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "LCJUNIOR1220
         print(f"An error occurred during the API request: {e}")
         await interaction.response.send_message(f"An error occurred during the API request: {e}")
         return
+
+@bot.tree.command(name="test", description="Send a random adorable animal photo")
+@app_commands.describe(
+    animal="The type of animal",
+    only_smol="Whether to show only baby animals"
+)
+@app_commands.choices(animal=[
+    app_commands.Choice(name="Dog", value="animal_dog"),
+    app_commands.Choice(name="Cat", value="animal_cat"),
+    app_commands.Choice(name="Penguin", value="animal_penguin"),
+])
+async def blep(interaction: discord.Interaction, animal: str, only_smol: bool = False):
+    await interaction.response.send_message(f"You chose {animal}, only_smol: {only_smol}")
 
 # === App Commands ===
 # @app_commands.command(name="status", description="Get the spook.bio status")

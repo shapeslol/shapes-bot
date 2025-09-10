@@ -411,7 +411,7 @@ async def on_ready():
         # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
     # Start the cache updater task
-    MyBot(command_prefix="!", intents=Intents)
+    MyBot(command_prefix="!", intents=discord.Intents.all())
     bot.loop.create_task(update_guild_cache())
 
 @bot.event

@@ -526,7 +526,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     # print(f"Fetching Data From {url}")
     print(f"Searching For {user}'s profile")
     await interaction.response.defer(thinking=True)
-    await interaction.followup.send(f"https://shapeslol.github.io/shapes.lol/loading.gif Searching For {user}'s Roblox Profile!")
+    await interaction.send(f"https://shapeslol.github.io/shapes.lol/loading.gif Searching For {user}'s Roblox Profile!")
 
     request_payload = {
         "usernames": [user],

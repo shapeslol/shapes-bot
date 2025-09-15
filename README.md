@@ -1,1 +1,1 @@
-# Discord Bot Code For spook.bio
+# Discord Bot Code For shapes.lol

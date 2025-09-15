@@ -256,15 +256,6 @@ def send_message():
 cached_guilds = []
 bot_ready = False
 
-# === Background task to update cached guilds every 2 minutes ===
-async def update_guild_cache():
-    global cached_guilds
-    while True:
-        await bot.tree.sync()
-        cached_guilds = list(bot.guilds)
-        print(f"[SYSTEM] Cached {len(cached_guilds)} guilds at {time.strftime('%X')}")
-        await asyncio.sleep(120)
-
 class MyGateway(DiscordWebSocket):
 
     async def identify(self):
@@ -392,8 +383,28 @@ class MyBot(Bot):
                 ws_params.update(sequence=self.ws.sequence, resume=True, session=self.ws.session_id)
 
 #bot = commands.Bot(command_prefix="/", intents=intents)
-bot = MyBot(command_prefix="!", intents=discord.Intents.all())
+bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 #tree = app_commands.CommandTree(bot)
+
+# === Background task to update cached guilds every 2 minutes ===
+async def update_guild_cache():
+    global cached_guilds
+    while True:
+        await bot.tree.sync()
+        cached_guilds = list(bot.guilds)
+        print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
+        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.custom, name=f":link: {MainURL}/discord"))
+    if len(bot.guilds) == 1:
+        print(bot.guilds[0].name)
+        # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
+    else:
+        print(f"Watching {len(bot.guilds)} Servers")
+        # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
+
+    # Start the cache updater task
+    MyBot(command_prefix="!", intents=discord.Intents.all())
+    cached_guilds = []
+        await asyncio.sleep(30)
 
 # === Bot Events ===
 @bot.event
@@ -411,7 +422,7 @@ async def on_ready():
         # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
     # Start the cache updater task
-    MyBot(command_prefix="!", intents=discord.Intents.all())
+    MyBot(command_prefix="/", intents=discord.Intents.all())
     bot.loop.create_task(update_guild_cache())
 
 @bot.event
@@ -526,7 +537,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     # print(f"Fetching Data From {url}")
     print(f"Searching For {user}'s profile")
     await interaction.response.defer(thinking=True)
-    #await interaction.followup.send(f"https://shapeslol.github.io/shapes.lol/loading.gif Searching For {user}'s Roblox Profile!")
+    #await interaction.followup.send(f"<:Loading:1416950730094542881> Searching For {user}'s Roblox Profile!")
 
     request_payload = {
         "usernames": [user],
@@ -572,10 +583,20 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 Username =f"{Display} (@{user})"
 
             if Banned:
-                Username=f":warning: [Account Deleted] {Display} (@{user})"
+                Username=f":warning: [Account Deleted] {Username}"
 
             # Construct the profile URL from the user ID
             profileurl = f"https://www.roblox.com/users/{UserID}/profile"
+            class ViewProfile(discord.ui.ViewProfile):
+                @discord.ui.button(label="View Profile", style=discord.ButtonStyle.gray, emoji="<:RobloxLogo:1416951004607418398>")
+                async def button_callback(self, button, interaction):
+                    await button.response.send_message(profileurl)
+
+             @discord.ui.button(label="View Profile On Rolimons", style=discord.ButtonStyle.gray, emoji="<:RobloxLogo:1416951004607418398>")
+                async def button_callback(self, button, interaction):
+                    await button.response.send_message(profileurl)
+
+            
             # Create the embed object
             embed = discord.Embed(
             title=Username,
@@ -583,7 +604,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             color=discord.Color.blue() # You can use a hex code like 0x00ff00 for green
             )
             # Add fields to the embed (optional)
-            embed.add_field(name="UserName", value=user, inline=True) # Not inline means it appears on a new line
+            embed.add_field(name="UserName", value=user, inline=False) # Not inline means it appears on a new line
             embed.add_field(name="UserID", value=UserID, inline=False)
             embed.add_field(name="Join Date", value=RobloxJoinDate_DiscordTimestamp, inline=False)
             # Set a thumbnail (optional)
@@ -595,7 +616,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 if data and data.get("data") and len(data["data"]) > 0:
                     HeadShot = data["data"][0].get("imageUrl")
                     # Set an author (optional)
-                    embed.set_author(name=user, icon_url=HeadShot)
+                    embed.set_author(name=user, url=profileurl, icon_url=HeadShot)
                     print(data)
                     await interaction.response.send_message(embed=embed)
                     return
@@ -616,9 +637,9 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     AvatarBust = data["data"][0].get("imageUrl")
                     embed.set_thumbnail(url=AvatarBust)
                     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-                    # Set an author (optional)
+                    
                     print(data)
-                    await interaction.response.send_message(embed=embed)
+                    await interaction.response.send_message(embed=embed, view=ViewProfile())
                     return
                 else:
                     print(f"Error fetching avatar bust: {e}")
@@ -636,20 +657,11 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
         await interaction.response.send_message(f"An error occurred during the API request: {e}")
         return
 
-@bot.tree.command(name="test", description="Send a random adorable animal photo", dm_permission=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@app_commands.user_install()
-@app_commands.describe(
-    animal="The type of animal",
-    only_smol="Whether to show only baby animals"
-)
-@app_commands.choices(animal=[
-    app_commands.Choice(name="Dog", value="animal_dog"),
-    app_commands.Choice(name="Cat", value="animal_cat"),
-    app_commands.Choice(name="Penguin", value="animal_penguin"),
-])
-async def test(interaction: discord.Interaction, animal: str, only_smol: bool = False):
-    await interaction.response.send_message(f"You chose {animal}, only_smol: {only_smol}")
+ @bot.tree.command(name="mycommand", description="A user-installable command!")
+    @app_commands.allowed_installs(guilds=False, users=True)  # Allow user installs, disallow guild installs for this example
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True) # Define where the command can be used
+    async def my_user_command(interaction: discord.Interaction):
+        await interaction.response.send_message("This command was installed by a user!", ephemeral=True)
 
 # === App Commands ===
 # @app_commands.command(name="status", description="Get the spook.bio status")

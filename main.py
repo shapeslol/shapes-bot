@@ -592,9 +592,8 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             class ViewProfile(discord.ui.View):
                 @discord.ui.button(label="View Profile", style=discord.ButtonStyle.link, emoji="<:RobloxLogo:1416951004607418398>", url=profileurl)
 
-                @discord.ui.button(label="View Profile On Rolimons", style=discord.ButtonStyle.gray, emoji="<:RolimonsLogo:1417258794974711901>", url=rolimonsurl)
+                @discord.ui.button(label="View Profile On Rolimons", style=discord.ButtonStyle.link, emoji="<:RolimonsLogo:1417258794974711901>", url=rolimonsurl)
 
-            
             # Create the embed object
             embed = discord.Embed(
             title=Username,
@@ -605,7 +604,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             embed.add_field(name="UserName", value=user, inline=False) # Not inline means it appears on a new line
             embed.add_field(name="UserID", value=UserID, inline=False)
             embed.add_field(name="Join Date", value=RobloxJoinDate_DiscordTimestamp, inline=False)
-            # Set a thumbnail (optional)
+
             url = f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={UserID}&size=420x420&format=Png&is=false"
             try:
                 response = requests.get(url)
@@ -654,24 +653,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
         print(f"An error occurred during the API request: {e}")
         await interaction.response.send_message(f"An error occurred during the API request: {e}")
         return
-
-@bot.tree.command(name="mycommand", description="A user-installable command!")
-    @app_commands.allowed_installs(guilds=False, users=True)  # Allow user installs, disallow guild installs for this example
-    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True) # Define where the command can be used
-    async def my_user_command(interaction: discord.Interaction):
-        await interaction.response.send_message("This command was installed by a user!", ephemeral=True)
-
-# === App Commands ===
-# @app_commands.command(name="status", description="Get the spook.bio status")
-# async def ping(interaction: discord.Interaction):
-#    await interaction.response.send_message("[spook.bio Status Page](https://spookbio.statuspage.io)")
-
-# @app_commands.command(name="stop", description="Stops The Bot")
-
-# @app_commands.command(name="pfp", description="Get a pfp from someone's spook.bio profile.")
-
-# @app_commands.command(name="discord2spook", description="Get someone's spook.bio profile from their discord username.")
-
 
 # === Flask Runner in Thread ===
 def run_flask():

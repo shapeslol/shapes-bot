@@ -40,21 +40,67 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecret")
 
 HTML_TEMPLATE = """
-Bot Dashboard
-🤖 Bot Dashboard
-Status:
-Online
-Connected to {{ guilds|length }} {{ 'server' if guilds|length == 1 else 'servers' }}
-Join Our Server
-{% for g in guilds %}
-{{ g.name }}
-Channel:
-{% for c in g.text_channels %}
-{{ c.name }}
-{% endfor %}
-Message:
-{% endfor %}
-Logout
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bot Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #1e1e2f; color: #fff; padding: 20px; }
+        h1 { color: #50fa7b; }
+        select, input[type=text] { padding: 6px; border-radius: 5px; border: none; margin: 5px 0; }
+        input[type=submit] { background: #50fa7b; border: none; padding: 8px 12px; border-radius: 5px; color: #000; cursor: pointer; }
+        .server { background: #282a36; padding: 10px; margin-bottom: 15px; border-radius: 10px; }
+        .logout { margin-top: 20px; }
+        .presence-button {
+            display: inline-block;
+            margin-top: 10px;
+            background-color: #7289da;
+            color: white;
+            padding: 10px 18px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+        .presence-button:hover {
+            background-color: #5b6eae;
+        }
+    </style>
+</head>
+<body>
+    <h1>🤖 Bot Dashboard</h1>
+    <p>Status: <b style="color:lime;">Online</b></p>
+    <p>Connected to {{ guilds|length }} {{ 'server' if guilds|length == 1 else 'servers' }}</p>
+    
+    <!-- Presence Button -->
+    <a href="https://dsc.gg/spookbio" target="_blank" rel="noopener" class="presence-button">
+        Join Our Server
+    </a>
+    
+    {% for g in guilds %}
+        <div class="server">
+            <h3>{{ g.name }}</h3>
+            <form action="/send" method="post">
+                <input type="hidden" name="guild_id" value="{{ g.id }}">
+                <label for="channel">Channel:</label>
+                <select name="channel_id">
+                    {% for c in g.text_channels %}
+                        <option value="{{ c.id }}">{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+                <br>
+                <label for="message">Message:</label>
+                <input type="text" name="message" placeholder="Enter your message" required>
+                <br>
+                <input type="submit" value="Send">
+            </form>
+        </div>
+    {% endfor %}
+    <div class="logout">
+        <a href="/logout" style="color: #ff5555;">Logout</a>
+    </div>
+</body>
+</html>
 """
 
 # === Admin Auth Decorator ===
@@ -365,14 +411,14 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 @app_commands.allowed_installs(guilds=True, users=True) # users only, no guilds for install
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True) # all allowed
 async def test(interaction: discord.Interaction) -> None:
-    return await interaction.response.send_message(f"Hello {interaction.user.mention}! This command should work anywhere!")
+    await interaction.response.send_message(f"Hello {interaction.user.mention}! This command should work anywhere!")
 
 
 @bot.tree.command(name="status", description=f"Get the {MainURL} bot status")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def status(interaction: discord.Interaction):
-    return await interaction.response.send_message(f"[Our Status Page](https://spookbio.statuspage.io)")
+    await interaction.response.send_message(f"[Our Status Page](https://spookbio.statuspage.io)")
 
 @bot.tree.command(name="stop", description="Stop the bot.")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -385,18 +431,17 @@ async def stop(interaction: discord.Interaction):
         sys.exit(0)
         return 
     else:
-        return await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
+        await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
 @bot.tree.command(name="restart", description="Restart the bot.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def restart(interaction: discord.Interaction):
     if interaction.user.name == {owner} or {co_owner}:
+        await interaction.response.send_message(":white_check_mark: Restarted Successfully!!", ephemeral=False)
         restartbot()
-        return wait interaction.response.send_message(":white_check_mark: Restarted Successfully!!", ephemeral=False)
-        
     else:
-        return await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
+        await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
 @bot.tree.command(name="pfp", description="Get a pfp from a user's spook.bio profile.")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -424,7 +469,7 @@ async def discord2spook(interaction: discord.Interaction, user: discord.user): #
         print("Fetched data successfully!")
     else:
         if interaction.user.name == user.name:
-            await interaction.response.send_message(f":x: You don't have a spook.bio profile linked to your account {user.mention}! :x: To link your profile to your account please DM {owner} or {co_owner}")
+            await interaction.response.send_message(f":x: You don't have a spook.bio profile linked to your account {user.mention}! :x: To link your profile to your account please DM {owner} or {co_owner}", ephemeral=False)
             return
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
@@ -489,44 +534,62 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             class ViewProfile(discord.ui.View):
                 @discord.ui.button(label="View Profile", style=discord.ButtonStyle.link, emoji="<:RobloxLogo:1416951004607418398>", url=profileurl)
 
-                @discord.ui.button(label="View Profile On Rolimons", style=discord.ButtonStyle.gray, emoji="<:RolimonsLogo:1417258794974711901>", url=rolimonsurl)
+                @discord.ui.button(label="View Profile On Rolimons", style=discord.ButtonStyle.link, emoji="<:RolimonsLogo:1417258794974711901>", url=rolimonsurl)
 
-            # Create the embed object
+            # Create an embed
             embed = discord.Embed(
             title=Username,
             description=Description,
-            color=discord.Color.blue() # You can use a hex code like 0x00ff00 for green
+            color=discord.Color.blurple() # You can use a hex codes like 0x00ff00 for green
             )
             # Add fields to the embed (optional)
-            embed.add_field(name="UserID", value=UserID, inline=True)
+            embed.add_field(name="UserID", value=UserID, inline=False)
             embed.add_field(name="UserName", value=user, inline=False) # Not inline means it appears on a new line
             embed.add_field(name="Join Date", value=RobloxJoinDate_DiscordTimestamp, inline=False)
-            # Set a thumbnail (optional)
+            
             url = f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={UserID}&size=420x420&format=Png&is=false"
+
             try:
                 response = requests.get(url)
                 response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
                 data = response.json()
                 if data and data.get("data") and len(data["data"]) > 0:
                     HeadShot = data["data"][0].get("imageUrl")
-                    embed.set_thumbnail(url=HeadShot)
-                    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-                    # Set an author (optional)
                     embed.set_author(name=user, url=profileurl, icon_url=HeadShot)
+                    print(data)
+                    
+                else:
+                    print(f"Error fetching avatar headshot: {e}")
+                await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
+                
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching avatar headshot: {e}")
+                await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
+                
+            url = f"https://thumbnails.roblox.com/v1/users/avatar-bust?userIds={UserID}&size=150x150&format=Png&isCircular=false"
+            try:
+                response = requests.get(url)
+                response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+                data = response.json()
+                if data and data.get("data") and len(data["data"]) > 0:
+                    AvatarBust = data["data"][0].get("imageUrl")
+                    embed.set_thumbnail(url=AvatarBust)
+                    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     print(data)
                     await interaction.response.send_message(embed=embed, view=ViewProfile())
                     return
                 else:
-                    print(f"Error fetching avatar headshot: {e}")
-                await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
+                    print(f"Error fetching avatar bust: {e}")
+                await interaction.response.send_message(f"Failed To Retrieve {user}'s Avatar!")
                 return
             except requests.exceptions.RequestException as e:
-                print(f"Error fetching avatar headshot: {e}")
-                await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
+                print(f"Error fetching avatar Avatar: {e}")
+                await interaction.response.send_message(f"Failed To Retrieve {user}'s Avatar!")
                 return
         else:
             print(f"{user} not found.")
             await interaction.response.send_message(f"{user} not found.")
+            return
     except requests.exceptions.RequestException as e:
         print(f"An error occurred during the API request: {e}")
         await interaction.response.send_message(f"An error occurred during the API request: {e}")

@@ -536,12 +536,8 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
                 @discord.ui.button(label="View Profile On Rolimons", style=discord.ButtonStyle.link, emoji="<:RolimonsLogo:1417258794974711901>", url=rolimonsurl)
 
-            # Create an embed
-            embed = discord.Embed(
-                title=Username,
-                description=Description,
-                color=discord.Color.blurple() # You can use a hex codes like 0x00ff00 for green
-            )
+            # Create an embed                                              # You can use a hex codes like 0x00ff00 for green
+            embed = discord.Embed(title=Username, description=Description, color=discord.Color.blurple())
             # Add fields to the embed (optional)
             embed.add_field(name="UserID", value=UserID, inline=False)
             embed.add_field(name="UserName", value=user, inline=False) # Not inline means it appears on a new line

@@ -538,9 +538,9 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
             # Create an embed
             embed = discord.Embed(
-            title=Username,
-            description=Description,
-            color=discord.Color.blurple() # You can use a hex codes like 0x00ff00 for green
+                title=Username,
+                description=Description,
+                color=discord.Color.blurple() # You can use a hex codes like 0x00ff00 for green
             )
             # Add fields to the embed (optional)
             embed.add_field(name="UserID", value=UserID, inline=False)

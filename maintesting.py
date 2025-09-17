@@ -16,7 +16,6 @@ from discord.gateway import DiscordWebSocket, _log
 from discord.ext.commands import Bot
 from flask import Flask, render_template_string, request, redirect, url_for, session
 
-
 # === Hardcoded Admin Key (change this!) ===
 ADMIN_KEY = "lc1220"
 
@@ -133,15 +132,89 @@ def admin_login():
             return redirect(url_for("dashboard"))
         else:
             return '''
-Incorrect key.
-Try again
-'''
+                <h3 style="color: red; font-family: Arial, sans-serif;">Incorrect key.</h3>
+                <a href="/login" style="font-family: Arial, sans-serif; color: #50fa7b;">Try again</a>
+            '''
 
     return '''
-Admin Login
-Admin Login
-Login
-'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Admin Login</title>
+        <style>
+            body {
+                background: #121212;
+                color: #eee;
+                font-family: Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+            }
+            .login-container {
+                background: #282a36;
+                padding: 40px 50px;
+                border-radius: 12px;
+                box-shadow: 0 0 15px #50fa7b;
+                text-align: center;
+                width: 320px;
+            }
+            h2 {
+                margin-bottom: 25px;
+                color: #50fa7b;
+            }
+            input[type=password] {
+                width: 100%;
+                padding: 12px;
+                margin-bottom: 20px;
+                border: none;
+                border-radius: 6px;
+                font-size: 16px;
+                background: #44475a;
+                color: #f8f8f2;
+            }
+            input[type=password]::placeholder {
+                color: #bd93f9;
+            }
+            button {
+                background: #50fa7b;
+                border: none;
+                color: #000;
+                padding: 12px 0;
+                width: 100%;
+                font-size: 16px;
+                font-weight: bold;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: background 0.3s ease;
+            }
+            button:hover {
+                background: #44d366;
+            }
+            a {
+                display: inline-block;
+                margin-top: 15px;
+                color: #50fa7b;
+                text-decoration: none;
+                font-size: 14px;
+            }
+            a:hover {
+                text-decoration: underline;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="login-container">
+            <h2>Admin Login</h2>
+            <form method="POST">
+                <input type="password" name="key" placeholder="Enter admin key" required>
+                <button type="submit">Login</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    '''
 
 @app.route("/logout")
 def admin_logout():
@@ -153,7 +226,7 @@ def admin_logout():
 @admin_required
 def dashboard():
     if not bot_ready:
-        return "Bot is not ready yet, please try again in a moment."
+        return "<h3>Bot is not ready yet, please try again in a moment.</h3>"
     return render_template_string(HTML_TEMPLATE, guilds=cached_guilds)
 
 # Redirect /activity to /
@@ -310,29 +383,27 @@ class MyBot(Bot):
                 ws_params.update(sequence=self.ws.sequence, resume=True, session=self.ws.session_id)
 
 #bot = commands.Bot(command_prefix="/", intents=intents)
-bot = MyBot(command_prefix="/", intents=intents)
+bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 #tree = app_commands.CommandTree(bot)
 
-# === Background task to update cached guilds every 30 seconds ===
+# === Background task to update cached guilds every 2 minutes ===
 async def update_guild_cache():
     global cached_guilds
     while True:
         await bot.tree.sync()
         cached_guilds = list(bot.guilds)
         print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.custom, name=f":link: {MainURL}/discord"))
-        await asyncio.sleep(4)
-    if len(bot.guilds) == 1:
-        print(bot.guilds[0].name)
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
-    else:
-        print(f"Watching {len(bot.guilds)} Servers")
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
-
-    # Start the cache updater task
-    MyBot(command_prefix="!", intents=discord.Intents.all())
-    cached_guilds = []
-    await asyncio.sleep(30)
+        await bot.change_presence(activity=discord.Activity(
+            type=discord.ActivityType.custom,
+            name=f":link: {MainURL}/discord"
+        ))
+        if len(bot.guilds) == 1:
+            print(bot.guilds[0].name)
+            # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
+        else:
+            print(f"Watching {len(bot.guilds)} Servers")
+            # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
+        await asyncio.sleep(30)
 
 # === Bot Events ===
 @bot.event
@@ -342,19 +413,20 @@ async def on_ready():
     await bot.tree.sync()
     print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.custom, name=f":link: {MainURL}/discord"))
-    await asyncio.sleep(4)
     if len(bot.guilds) == 1:
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
+        print(bot.guilds[0].name)
+        # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
     else:
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
+        print(f"Watching {len(bot.guilds)} Servers")
+        # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
     # Start the cache updater task
-    MyBot(command_prefix="/", intents=intents)
+    MyBot(command_prefix="/", intents=discord.Intents.all())
     bot.loop.create_task(update_guild_cache())
 
 @bot.event
 async def on_member_join(member):
-    role = discord.utils.get(member.guild.roles, name='Member')
+    role = discord.utils.get(member.guild.roles, name="Member")
     await member.add_roles(role)
     print(f"Gave {member.name} The Member Role!")
 
@@ -363,7 +435,7 @@ def restartbot():
     print("Bot Restarting.")
     os.execv(sys.executable, ["python3 main.py =)"])
     os.kill(os.getpid(), signal.SIGINT)
-    sys.exit(0)
+
 
 def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str:
     """
@@ -405,37 +477,23 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 #print(f"Long date/time: {discord_time_long}")
 #print(f"Relative time: {discord_time_relative}")
 
-
 # === Commands ===
-@bot.tree.command(name="test", description="Testing Commands Anywhere!")
-@app_commands.allowed_installs(guilds=True, users=True) # users only, no guilds for install
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True) # all allowed
-async def test(interaction: discord.Interaction) -> None:
-    await interaction.response.send_message(f"Hello {interaction.user.mention}! This command should work anywhere!")
+@bot.tree.command(name="status", description="Get the shapes.lol status", dm_permission=True)
+async def ping(interaction: discord.Interaction):
+    await interaction.response.send_message("# COMING SOON")
+    # await interaction.response.send_message("[spook.bio Status Page](https://spookbio.statuspage.io)")
 
-
-@bot.tree.command(name="status", description=f"Get the {MainURL} bot status")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def status(interaction: discord.Interaction):
-    await interaction.response.send_message(f"[Our Status Page](https://spookbio.statuspage.io)")
-
-@bot.tree.command(name="stop", description="Stop the bot.")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="stop", description="Stop the bot.", dm_permission=True)
 async def stop(interaction: discord.Interaction):
     if interaction.user.name == {owner} or {co_owner}:
         await interaction.response.send_message(":white_check_mark: Shutdown Successfully!", ephemeral=False)
         await bot.close()
         print("Bot Stopped.")
-        sys.exit(0)
-        return 
+        sys.exit("Bot Stopped.")
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
-@bot.tree.command(name="restart", description="Restart the bot.")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="restart", description="Restart the bot.", dm_permission=True)
 async def restart(interaction: discord.Interaction):
     if interaction.user.name == {owner} or {co_owner}:
         await interaction.response.send_message(":white_check_mark: Restarted Successfully!!", ephemeral=False)
@@ -443,9 +501,7 @@ async def restart(interaction: discord.Interaction):
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
-@bot.tree.command(name="pfp", description="Get a pfp from a user's spook.bio profile.")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="pfp", description="Get a pfp from a user's spook.bio profile.", dm_permission=True)
 async def pfp(interaction: discord.Interaction, username: str = "phis"):
     url = f"https://spook.bio/u/{username}/pfp.jpg"
     response = requests.get(url)
@@ -456,59 +512,41 @@ async def pfp(interaction: discord.Interaction, username: str = "phis"):
         await interaction.response.send_message(f":x: {response.status_code} Not Found :x:", ephemeral=True)
         print(f"Error fetching data: {response.status_code}")
 
-@bot.tree.command(name="discord2spook", description="Get a spook.bio profile from a discord user.")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discord2spook(interaction: discord.Interaction, user: discord.user): # = <@481295611417853982>):
+@bot.tree.command(name="discord2spook", description="Get a spook.bio profile from a discord user.", dm_permission=True)
+async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
     url = f"https://prp.bio/discord/{user.name}"
     print(url)
     response = requests.get(url)
     print(response.text)
     if response.status_code == 200:
-        await interaction.response.send_message(f"{user.mention}'s [Profile]({response.text})", ephemeral=False)
-        print("Fetched data successfully!")
+        await interaction.response.send_message(f"{user.mention}'s [spook.bio Profile]({response.text})", ephemeral=False)
+        print(f"Fetched {response.text} successfully!")
     else:
         if interaction.user.name == user.name:
-            await interaction.response.send_message(f":x: You don't have a spook.bio profile linked to your account {user.mention}! :x: To link your profile to your account please DM {owner} or {co_owner}", ephemeral=False)
+            await interaction.response.send_message(f":x: You don't have a spook.bio profile linked to your account {user.mention}! :x: To link your profile to your account please DM {owner} or {co_owner}")
             return
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
 
-@bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.", dm_permission=True)
 async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
-
-    url = f"https://users.roblox.com/v1/usernames/users"
-
-    print(f"Fetching Data From {url}")
-    print(f"Searching For {user}")
-
+    # Set up the request payload and URL to search for the user
     request_payload = {
         "usernames": [user],
         "excludeBannedUsers": False
     }
+    url = "https://users.roblox.com/v1/usernames/users"
 
     try:
-        # Send a POST request to the Roblox API
         response = requests.post(url, json=request_payload)
-        response.raise_for_status() # Raise an exception for bad status codes
-        
-        # Parse the JSON response
+        response.raise_for_status()
         data = response.json()
-        
-        # Check if the Roblox API returned a user
         if data.get("data") and len(data["data"]) > 0:
             userinfo = data["data"][0]
             UserID = userinfo["id"]
             Display = userinfo["displayName"]
-            user = userinfo["name"]
+            print(f"UserInfo: {userinfo}")
 
-            if Display == user:
-                Username = Display
-            else:
-                Username =f"{Display} (@{user})"
-            
             url = f"https://users.roblox.com/v1/users/{UserID}"
             try:
                 response = requests.get(url)
@@ -517,67 +555,85 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 print(playerdata)
                 Description = playerdata["description"]
                 Banned = playerdata["isBanned"]
+                user = playerdata["name"]
                 JoinDate = playerdata["created"]
                 RobloxJoinDate_DiscordTimestamp = isotodiscordtimestamp(JoinDate, "F")
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching user data for ID {UserID}: {e}")
                 await interaction.response.send_message("Error retrieving description")
                 return
-            
-            if Banned:
-                Username=f"[Account Deleted] {Username}"
 
-            # Construct the profile URL from the user ID
+            if Display == user:
+                Username = Display
+            else:
+                Username = f"{Display} (@{user})"
+
+            if Banned:
+                Username = f":warning: [Account Deleted] {Username}"
+
             profileurl = f"https://www.roblox.com/users/{UserID}/profile"
             rolimonsurl = f"https://rolimons.com/player/{UserID}"
 
-            class ViewProfile(discord.ui.View):
-                @discord.ui.button(label="View Profile", style=discord.ButtonStyle.link, emoji="<:RobloxLogo:1416951004607418398>", url=profileurl)
+            # --- Create link buttons ---
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="View Profile",
+                style=discord.ButtonStyle.link,
+                emoji="<:RobloxLogo:1416951004607418398>",
+                url=profileurl
+            ))
+            view.add_item(discord.ui.Button(
+                label="View Profile On Rolimons",
+                style=discord.ButtonStyle.link,
+                emoji="<:RolimonsLogo:1417258794974711901>",
+                url=rolimonsurl
+            ))
 
-                @discord.ui.button(label="View Profile On Rolimons", style=discord.ButtonStyle.link, emoji="<:RolimonsLogo:1417258794974711901>", url=rolimonsurl)
-
-            # Create an embed                                              # You can use a hex codes like 0x00ff00 for green
-            embed = discord.Embed(title=Username, description=Description, color=discord.Color.blurple())
-            # Add fields to the embed (optional)
+            embed = discord.Embed(
+                title=Username,
+                description=Description,
+                color=discord.Color.blue()
+            )
+            embed.add_field(name="UserName", value=user, inline=False)
             embed.add_field(name="UserID", value=UserID, inline=False)
-            embed.add_field(name="UserName", value=user, inline=False) # Not inline means it appears on a new line
             embed.add_field(name="Join Date", value=RobloxJoinDate_DiscordTimestamp, inline=False)
-            
-            url = f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={UserID}&size=420x420&format=Png&is=false"
 
+            # Get avatar headshot
+            url = f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={UserID}&size=420x420&format=Png&is=false"
             try:
                 response = requests.get(url)
-                response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+                response.raise_for_status()
                 data = response.json()
                 if data and data.get("data") and len(data["data"]) > 0:
                     HeadShot = data["data"][0].get("imageUrl")
                     embed.set_author(name=user, url=profileurl, icon_url=HeadShot)
                     print(data)
-                    
                 else:
                     print(f"Error fetching avatar headshot: {e}")
-                await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
-                
+                    await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
+                    return
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching avatar headshot: {e}")
                 await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
-                
+                return
+
+            # Get avatar bust
             url = f"https://thumbnails.roblox.com/v1/users/avatar-bust?userIds={UserID}&size=150x150&format=Png&isCircular=false"
             try:
                 response = requests.get(url)
-                response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+                response.raise_for_status()
                 data = response.json()
                 if data and data.get("data") and len(data["data"]) > 0:
                     AvatarBust = data["data"][0].get("imageUrl")
                     embed.set_thumbnail(url=AvatarBust)
                     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     print(data)
-                    await interaction.response.send_message(embed=embed, view=ViewProfile())
+                    await interaction.response.send_message(embed=embed, view=view)
                     return
                 else:
                     print(f"Error fetching avatar bust: {e}")
-                await interaction.response.send_message(f"Failed To Retrieve {user}'s Avatar!")
-                return
+                    await interaction.response.send_message(f"Failed To Retrieve {user}'s Avatar!")
+                    return
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching avatar Avatar: {e}")
                 await interaction.response.send_message(f"Failed To Retrieve {user}'s Avatar!")
@@ -585,7 +641,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
         else:
             print(f"{user} not found.")
             await interaction.response.send_message(f"{user} not found.")
-            return
     except requests.exceptions.RequestException as e:
         print(f"An error occurred during the API request: {e}")
         await interaction.response.send_message(f"An error occurred during the API request: {e}")

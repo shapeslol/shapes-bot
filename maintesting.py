@@ -541,13 +541,14 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
-    # Set up the request payload and URL to search for the user
-    request_payload = {
-        "usernames": [user],
-        "excludeBannedUsers": False
-    }
-    url = "https://users.roblox.com/v1/usernames/users"
+    
+    print(f"Searching For {user}'s profile")
+    await interaction.response.defer(thinking=True)
+    await interaction.followup.send(f"<:Loading:1416950730094542881> Searching For {user}'s Roblox Profile!")
 
+    url = "https://users.roblox.com/v1/usernames/users"
+    # print(f"Fetching Data From {url}")
+    
     try:
         response = requests.post(url, json=request_payload)
         response.raise_for_status()

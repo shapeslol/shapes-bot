@@ -393,16 +393,16 @@ async def update_guild_cache():
         await bot.tree.sync()
         cached_guilds = list(bot.guilds)
         print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
-        await bot.change_presence(activity=discord.Activity(
-            type=discord.ActivityType.custom,
-            name=f":link: {MainURL}/discord"
-        ))
+        await bot.change_presence(activity=discord.CustomActivity(name=f"{MainURL}/discord", emoji="🔗"))
+        await asyncio.sleep(5)
         if len(bot.guilds) == 1:
             print(bot.guilds[0].name)
             # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
         else:
             print(f"Watching {len(bot.guilds)} Servers")
             # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
+
+        cached_guilds = []
         await asyncio.sleep(30)
 
 # === Bot Events ===
@@ -412,7 +412,7 @@ async def on_ready():
     bot_ready = True
     await bot.tree.sync()
     print(f"Logged in as {bot.user}")
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.custom, name=f":link: {MainURL}/discord"))
+    await bot.change_presence(activity=discord.CustomActivity(name=f"{MainURL}/discord", emoji="🔗"))
     if len(bot.guilds) == 1:
         print(bot.guilds[0].name)
         # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))

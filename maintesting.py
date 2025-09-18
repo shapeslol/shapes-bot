@@ -583,6 +583,19 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             if Banned:
                 Username = f":warning: [Account Deleted] {Username}"
 
+            url = f"https://api.ropro.io/getUserInfoTest.php?userid={UserID}"
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
+                RoProData = response.json()
+                print(RoProData)
+                Discord = RoProData["discord"]
+            
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching ropro data for ID {UserID}: {e}")
+                await interaction.response.send_message(f"Error retrieving Discord User from {url}")
+                return
+
             profileurl = f"https://www.roblox.com/users/{UserID}/profile"
             rolimonsurl = f"https://rolimons.com/player/{UserID}"
 
@@ -606,6 +619,9 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 description=Description,
                 color=discord.Color.blue()
             )
+            if Discord != "":
+                embed.add_field(name="Discord (RoPro)", value=Discord, inline=False)
+            
             embed.add_field(name="UserName", value=user, inline=False)
             embed.add_field(name="UserID", value=UserID, inline=False)
             embed.add_field(name="Join Date", value=RobloxJoinDate_DiscordTimestamp, inline=False)

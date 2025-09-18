@@ -393,7 +393,7 @@ async def update_guild_cache():
         await bot.tree.sync()
         cached_guilds = list(bot.guilds)
         print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
-        await bot.change_presence(activity=discord.CustomActivity(name=":link: spook.bio/discord"))
+        await bot.change_presence(activity=discord.CustomActivity(name="🔗 spook.bio/discord"))
         await asyncio.sleep(5)
         if len(bot.guilds) == 1:
             print(bot.guilds[0].name)

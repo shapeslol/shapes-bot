@@ -659,7 +659,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             if Discord != "":
                 embed.add_field(
                     name="Discord (RoPro)",
-                    value=f"```txt{Discord}```",
+                    value=f"```{Discord}```",
                     inline=False
                 )
             

@@ -544,7 +544,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     
     print(f"Searching For {user}'s profile")
     await interaction.response.defer(thinking=True)
-    # await interaction.followup.send(f"<:Loading:1416950730094542881> Searching For {user}'s Roblox Profile!")
+    await interaction.followup.send(f"<:Loading:1416950730094542881> Searching For {user}'s Roblox Profile!")
 
     url = "https://users.roblox.com/v1/usernames/users"
     # print(f"Fetching Data From {url}")
@@ -577,7 +577,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 RobloxJoinDate_DiscordTimestamp = isotodiscordtimestamp(JoinDate, "F")
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching user data for ID {UserID}: {e}")
-                await interaction.response.send_message("Error retrieving description")
+                await interaction.edit_original_response("Error retrieving description")
                 return
 
             if Display == user:
@@ -598,7 +598,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching ropro data for ID {UserID}: {e}")
-                await interaction.response.send_message(f"Error retrieving Discord User from {url}")
+                await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
                 return
 
             profileurl = f"https://www.roblox.com/users/{UserID}/profile"
@@ -643,11 +643,11 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     print(data)
                 else:
                     print(f"Error fetching avatar headshot: {e}")
-                    await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
+                    await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
                     return
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching avatar headshot: {e}")
-                await interaction.response.send_message(f"Failed To Retrieve {user}'s Headshot!")
+                await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
                 return
 
             # Get avatar bust
@@ -661,22 +661,22 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     embed.set_thumbnail(url=AvatarBust)
                     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     print(data)
-                    await interaction.response.send_message(embed=embed, view=view)
+                    await interaction.edit_original_response(embed=embed, view=view)
                     return
                 else:
                     print(f"Error fetching avatar bust: {e}")
-                    await interaction.response.send_message(f"Failed To Retrieve {user}'s Avatar!")
+                    await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                     return
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching avatar Avatar: {e}")
-                await interaction.response.send_message(f"Failed To Retrieve {user}'s Avatar!")
+                await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                 return
         else:
             print(f"{user} not found.")
-            await interaction.response.send_message(f"{user} not found.")
+            await interaction.edit_original_response(f"{user} not found.")
     except requests.exceptions.RequestException as e:
         print(f"An error occurred during the API request: {e}")
-        await interaction.response.send_message(f"An error occurred during the API request: {e}")
+        await interaction.edit_original_response(f"An error occurred during the API request: {e}")
         return
 
 # === Flask Runner in Thread ===

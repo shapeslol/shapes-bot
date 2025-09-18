@@ -471,6 +471,10 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 #print(f"Relative time: {discord_time_relative}")
 
 # === Commands ===
+@bot.tree.context_menu(name="menutest")
+async def menutest(interaction: discord.Interaction, member: discord.Member):
+    await interaction.response.send_message(f"Hello, {member.display_name}!")
+
 @bot.tree.command(name="status", description=f"Get the {MainURL} status")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)

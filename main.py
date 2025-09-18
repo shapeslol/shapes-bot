@@ -475,29 +475,11 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 async def menutest(interaction: discord.Interaction, member: discord.Member):
     await interaction.response.send_message(f"Hello, {member.display_name}!")
 
-@bot.tree.context_menu(name="status", description=f"Get the {MainURL} status")
+@bot.tree.context_menu(name="status")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message(f"[shapes.lol Status Page](https://spookbio.statuspage.io)")
 
-@bot.tree.context_menu(name="stop", description="Stop the bot.")
-async def stop(interaction: discord.Interaction):
-    if interaction.user.name == {owner} or {co_owner}:
-        await interaction.response.send_message(":white_check_mark: Shutdown Successfully!", ephemeral=True)
-        await bot.close()
-        print("Bot Stopped.")
-        sys.exit("Bot Stopped.")
-    else:
-        await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
-
-@bot.tree.context_menu(name="restart", description="Restart the bot.")
-async def restart(interaction: discord.Interaction):
-    if interaction.user.name == {owner} or {co_owner}:
-        await interaction.response.send_message(":white_check_mark: Restarted Successfully!!", ephemeral=True)
-        restartbot()
-    else:
-        await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
-
-@bot.tree.context_menu(name="spookpfp", description="Get a pfp from a user's spook.bio profile.")
+@bot.tree.context_menu(name="spookpfp")
 async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
     url = f"https://spook.bio/u/{username}/pfp.jpg"
     response = requests.get(url)
@@ -508,7 +490,7 @@ async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
         await interaction.response.send_message(f":x: {response.status_code} Not Found :x:", ephemeral=True)
         print(f"Error fetching data: {response.status_code}")
 
-@bot.tree.context_menu(name="discord2spook", description="Get a spook.bio profile from a discord user.")
+@bot.tree.context_menu(name="discord2spook")
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
     url = f"https://prp.bio/discord/{user.name}"
     print(url)
@@ -524,7 +506,7 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
 
-@bot.tree.context_menu(name="robloxinfo", description="Get a Roblox user's profile information.")
+@bot.tree.context_menu(name="robloxinfo")
 async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     
     print(f"Searching For {user}'s profile")

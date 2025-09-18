@@ -393,7 +393,7 @@ async def update_guild_cache():
         await bot.tree.sync()
         cached_guilds = list(bot.guilds)
         print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
-        await bot.change_presence(activity=discord.CustomActivity(name="spook.bio/discord", emoji=":link:"))
+        await bot.change_presence(activity=discord.CustomActivity(name=":link: spook.bio/discord"))
         await asyncio.sleep(5)
         if len(bot.guilds) == 1:
             print(bot.guilds[0].name)
@@ -412,7 +412,7 @@ async def on_ready():
     bot_ready = True
     await bot.tree.sync()
     print(f"Logged in as {bot.user}")
-    await bot.change_presence(activity=discord.CustomActivity(name="spook.bio/discord", emoji="🔗"))
+    await bot.change_presence(activity=discord.CustomActivity(name="🔗 spook.bio/discord"))
     if len(bot.guilds) == 1:
         print(bot.guilds[0].name)
         #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
@@ -423,13 +423,6 @@ async def on_ready():
     # Start the cache updater task
     MyBot(command_prefix="/", intents=discord.Intents.all())
     bot.loop.create_task(update_guild_cache())
-
-@bot.event
-async def on_member_join(member):
-    role = discord.utils.get(member.guild.roles, name="Member")
-    await member.add_roles(role)
-    print(f"Gave {member.name} The Member Role!")
-
 
 def restartbot():
     print("Bot Restarting.")
@@ -506,10 +499,10 @@ async def restart(interaction: discord.Interaction):
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
-@bot.tree.command(name="pfp", description="Get a pfp from a user's spook.bio profile.")
+@bot.tree.command(name="spookpfp", description="Get a pfp from a user's spook.bio profile.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def pfp(interaction: discord.Interaction, username: str = "phis"):
+async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
     url = f"https://spook.bio/u/{username}/pfp.jpg"
     response = requests.get(url)
     if response.status_code == 200:
@@ -545,7 +538,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     print(f"Searching For {user}'s profile")
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-                title=f"{discord.Interaction.user.name} Searching For {user}'s Roblox Profile!",
+                title=f"{interaction.user.name} Searching For {user}'s Roblox Profile!",
                 emoji="<:loading:1416950730094542881>",
                 color=discord.Color.blue()
             )

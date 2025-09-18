@@ -538,7 +538,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     print(f"Searching For {user}'s profile")
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-                title=f"<:loading:1416950730094542881> {interaction.user.name} Searching For {user}'s Roblox Profile!",
+                title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}'s Roblox Profile!",
                 color=discord.Color.blue()
             )
     await interaction.followup.send(embed=thinkingembed)
@@ -618,13 +618,14 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
             embed = discord.Embed(
                 title=Username,
+                url=profileurl,
                 description=Description,
                 color=discord.Color.blue()
             )
             if Discord != "":
-                embed.add_field(name="Discord (RoPro)", value=Discord, inline=False)
+                embed.add_field(name="Discord (RoPro)", value=f"```{Discord}```", inline=False)
             
-            embed.add_field(name="UserName", value=user, inline=False)
+            embed.add_field(name="Username", value=user, inline=False)
             embed.add_field(name="UserID", value=UserID, inline=False)
             embed.add_field(name="Join Date", value=RobloxJoinDate_DiscordTimestamp, inline=False)
 

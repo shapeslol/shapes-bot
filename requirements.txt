@@ -1,3 +1,5 @@
 discord.py
 Flask
 requests
+pytz
+aiohttp

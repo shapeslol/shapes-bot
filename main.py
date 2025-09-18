@@ -476,19 +476,8 @@ async def menutest(interaction: discord.Interaction, member: discord.Member):
     await interaction.response.send_message(f"Hello, {member.display_name}!")
 
 @bot.tree.context_menu(name="status")
-async def ping(interaction: discord.Interaction):
+async def status(interaction: discord.Interaction, member: discord.Member):
     await interaction.response.send_message(f"[shapes.lol Status Page](https://spookbio.statuspage.io)")
-
-@bot.tree.context_menu(name="spookpfp")
-async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
-    url = f"https://spook.bio/u/{username}/pfp.jpg"
-    response = requests.get(url)
-    if response.status_code == 200:
-        await interaction.response.send_message(url, ephemeral=False)
-        print("Fetched data successfully!")
-    else:
-        await interaction.response.send_message(f":x: {response.status_code} Not Found :x:", ephemeral=True)
-        print(f"Error fetching data: {response.status_code}")
 
 @bot.tree.context_menu(name="discord2spook")
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
@@ -505,151 +494,6 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
             return
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
-
-@bot.tree.context_menu(name="robloxinfo")
-async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
-    
-    print(f"Searching For {user}'s profile")
-    await interaction.response.defer(thinking=True)
-    thinkingembed = discord.Embed(
-                title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}'s Roblox Profile!",
-                color=discord.Color.blue()
-            )
-    await interaction.followup.send(embed=thinkingembed)
-
-    url = "https://users.roblox.com/v1/usernames/users"
-    # print(f"Fetching Data From {url}")
-    
-    request_payload = {
-        "usernames": [user],
-        "excludeBannedUsers": False
-    }
-
-    try:
-        response = requests.post(url, json=request_payload)
-        response.raise_for_status()
-        data = response.json()
-        if data.get("data") and len(data["data"]) > 0:
-            userinfo = data["data"][0]
-            UserID = userinfo["id"]
-            Display = userinfo["displayName"]
-            print(f"UserInfo: {userinfo}")
-
-            url = f"https://users.roblox.com/v1/users/{UserID}"
-            try:
-                response = requests.get(url)
-                response.raise_for_status()
-                playerdata = response.json()
-                print(playerdata)
-                Description = playerdata["description"]
-                Banned = playerdata["isBanned"]
-                user = playerdata["name"]
-                JoinDate = playerdata["created"]
-                RobloxJoinDate_DiscordTimestamp = isotodiscordtimestamp(JoinDate, "F")
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching user data for ID {UserID}: {e}")
-                await interaction.edit_original_response("Error retrieving description")
-                return
-
-            if Display == user:
-                Username = Display
-            else:
-                Username = f"{Display} (@{user})"
-
-            if Banned:
-                Username = f":warning: [Account Deleted] {Username}"
-
-            url = f"https://api.ropro.io/getUserInfoTest.php?userid={UserID}"
-            try:
-                response = requests.get(url)
-                response.raise_for_status()
-                RoProData = response.json()
-                print(RoProData)
-                Discord = RoProData["discord"]
-            
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching ropro data for ID {UserID}: {e}")
-                await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
-                return
-
-            profileurl = f"https://www.roblox.com/users/{UserID}/profile"
-            rolimonsurl = f"https://rolimons.com/player/{UserID}"
-
-            # --- Create link buttons ---
-            view = discord.ui.View()
-            view.add_item(discord.ui.Button(
-                label="View Profile",
-                style=discord.ButtonStyle.link,
-                emoji="<:RobloxLogo:1416951004607418398>",
-                url=profileurl
-            ))
-            view.add_item(discord.ui.Button(
-                label="View Profile On Rolimons",
-                style=discord.ButtonStyle.link,
-                emoji="<:RolimonsLogo:1417258794974711901>",
-                url=rolimonsurl
-            ))
-
-            embed = discord.Embed(
-                title=Username,
-                url=profileurl,
-                description=Description,
-                color=discord.Color.blue()
-            )
-            if Discord != "":
-                embed.add_field(name="Discord (RoPro)", value=f"```{Discord}```", inline=False)
-            
-            embed.add_field(name="Username", value=user, inline=False)
-            embed.add_field(name="UserID", value=UserID, inline=False)
-            embed.add_field(name="Join Date", value=RobloxJoinDate_DiscordTimestamp, inline=False)
-
-            # Get avatar headshot
-            url = f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={UserID}&size=420x420&format=Png&is=false"
-            try:
-                response = requests.get(url)
-                response.raise_for_status()
-                data = response.json()
-                if data and data.get("data") and len(data["data"]) > 0:
-                    HeadShot = data["data"][0].get("imageUrl")
-                    embed.set_author(name=user, url=profileurl, icon_url=HeadShot)
-                    print(data)
-                else:
-                    print(f"Error fetching avatar headshot: {e}")
-                    await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
-                    return
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching avatar headshot: {e}")
-                await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
-                return
-
-            # Get avatar bust
-            url = f"https://thumbnails.roblox.com/v1/users/avatar-bust?userIds={UserID}&size=150x150&format=Png&isCircular=false"
-            try:
-                response = requests.get(url)
-                response.raise_for_status()
-                data = response.json()
-                if data and data.get("data") and len(data["data"]) > 0:
-                    AvatarBust = data["data"][0].get("imageUrl")
-                    embed.set_thumbnail(url=AvatarBust)
-                    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-                    print(data)
-                    await interaction.edit_original_response(embed=embed, view=view)
-                    return
-                else:
-                    print(f"Error fetching avatar bust: {e}")
-                    await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
-                    return
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching avatar Avatar: {e}")
-                await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
-                return
-        else:
-            print(f"{user} not found.")
-            await interaction.edit_original_response(f"{user} not found.")
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred during the API request: {e}")
-        await interaction.edit_original_response(f"An error occurred during the API request: {e}")
-        return
 
 # === Bot Commands ===
 @bot.tree.command(name="status", description=f"Get the {MainURL} status")
@@ -755,7 +599,11 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 RobloxJoinDate_DiscordTimestamp = isotodiscordtimestamp(JoinDate, "F")
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching user data for ID {UserID}: {e}")
-                await interaction.edit_original_response("Error retrieving description")
+                failedembed = discord.Embed(
+                    title=f":x: An error occurred while fetching data for user ID: {UserID}. Please try again later.",
+                    color=discord.Color.red()
+                )
+                await interaction.edit_original_response(failedembed)
                 return
 
             if Display == user:
@@ -775,8 +623,13 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 Discord = RoProData["discord"]
             
             except requests.exceptions.RequestException as e:
-                print(f"Error fetching ropro data for ID {UserID}: {e}")
-                await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
+                print(f"Error fetching RoPro data for ID {UserID}: {e}")
+                failedembed2 = discord.Embed(
+                    title=f"Error retrieving Discord User from {url}",
+                    color=discord.Color.red()
+                )
+                await interaction.edit_original_response(failedembed2)
+                # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
                 return
 
             profileurl = f"https://www.roblox.com/users/{UserID}/profile"
@@ -804,7 +657,11 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 color=discord.Color.blue()
             )
             if Discord != "":
-                embed.add_field(name="Discord (RoPro)", value=f"```{Discord}```", inline=False)
+                embed.add_field(
+                    name="Discord (RoPro)",
+                    value=f"```txt{Discord}```",
+                    inline=False
+                )
             
             embed.add_field(name="Username", value=user, inline=False)
             embed.add_field(name="UserID", value=UserID, inline=False)
@@ -822,11 +679,21 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     print(data)
                 else:
                     print(f"Error fetching avatar headshot: {e}")
-                    await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
+                    failedembed3 = discord.Embed(
+                        title=f"Failed To Retrieve {user}'s Headshot!",
+                        color=discord.Color.red()
+                )
+                    await interaction.edit_original_response(failedembed3)
+                    #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
                     return
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching avatar headshot: {e}")
-                await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
+                failedembed4 = discord.Embed(
+                    title=f"Failed To Retrieve {user}'s Headshot!",
+                    color=discord.Color.red()
+                )
+                await interaction.edit_original_response(failedembed4)
+                #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
                 return
 
             # Get avatar bust
@@ -844,18 +711,38 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     return
                 else:
                     print(f"Error fetching avatar bust: {e}")
-                    await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
+                    failedembed5 = discord.Embed(
+                        title=f"Failed To Retrieve {user}'s avatar bust!",
+                        color=discord.Color.red()
+                )
+                    await interaction.edit_original_response(failedembed5)
+                    #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                     return
             except requests.exceptions.RequestException as e:
-                print(f"Error fetching avatar Avatar: {e}")
-                await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
+                print(f"Error fetching avatar bust: {e}")
+                failedembed6 = discord.Embed(
+                    title=f"Failed To Retrieve {user}'s avatar bust!",
+                    color=discord.Color.red()
+                )
+                await interaction.edit_original_response(failedembed6)
+                #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                 return
         else:
             print(f"{user} not found.")
-            await interaction.edit_original_response(f"{user} not found.")
+            failedembed7 = discord.Embed(
+                title=f":warning: {user} not found.",
+                color=discord.Color.yellow()
+            )
+            await interaction.edit_original_response(failedembed7)
+            #await interaction.edit_original_response(f"{user} not found.")
     except requests.exceptions.RequestException as e:
         print(f"An error occurred during the API request: {e}")
-        await interaction.edit_original_response(f"An error occurred during the API request: {e}")
+        failedembed8 = discord.Embed(
+            title=f":warning: {user} not found.",
+            color=discord.Color.yellow()
+        )
+        await interaction.edit_original_response(failedembed8)
+        #await interaction.edit_original_response(f"An error occurred during the API request: {e}")
         return
 
 # === Flask Runner in Thread ===

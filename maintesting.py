@@ -548,6 +548,11 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
     url = "https://users.roblox.com/v1/usernames/users"
     # print(f"Fetching Data From {url}")
+    
+    request_payload = {
+        "usernames": [user],
+        "excludeBannedUsers": False
+    }
 
     try:
         response = requests.post(url, json=request_payload)

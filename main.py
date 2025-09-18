@@ -472,14 +472,14 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 
 # === User Menu Commands ===
 @bot.tree.context_menu(name="menutest")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def menutest(interaction: discord.Interaction, member: discord.Member):
     await interaction.response.send_message(f"Hello, {member.display_name}!")
 
-@bot.tree.context_menu(name="status")
-async def status(interaction: discord.Interaction, member: discord.Member):
-    await interaction.response.send_message(f"[shapes.lol Status Page](https://spookbio.statuspage.io)")
-
 @bot.tree.context_menu(name="discord2spook")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
     url = f"https://prp.bio/discord/{user.name}"
     print(url)

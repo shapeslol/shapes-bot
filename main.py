@@ -393,14 +393,14 @@ async def update_guild_cache():
         await bot.tree.sync()
         cached_guilds = list(bot.guilds)
         print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
-        await bot.change_presence(activity=discord.CustomActivity(name="spook.bio/discord", emoji="🔗"))
+        await bot.change_presence(activity=discord.CustomActivity(name="spook.bio/discord", emoji=":link:"))
         await asyncio.sleep(5)
         if len(bot.guilds) == 1:
             print(bot.guilds[0].name)
-            await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
+            #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
         else:
             print(f"Watching {len(bot.guilds)} Servers")
-            await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
+            #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
         cached_guilds = []
         await asyncio.sleep(30)
@@ -415,10 +415,10 @@ async def on_ready():
     await bot.change_presence(activity=discord.CustomActivity(name="spook.bio/discord", emoji="🔗"))
     if len(bot.guilds) == 1:
         print(bot.guilds[0].name)
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
+        #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
     else:
         print(f"Watching {len(bot.guilds)} Servers")
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
+        #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
     # Start the cache updater task
     MyBot(command_prefix="/", intents=discord.Intents.all())

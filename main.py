@@ -393,14 +393,14 @@ async def update_guild_cache():
         await bot.tree.sync()
         cached_guilds = list(bot.guilds)
         print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
-        await bot.change_presence(activity=discord.CustomActivity(name=f"{MainURL}/discord", emoji="🔗"))
+        await bot.change_presence(activity=discord.CustomActivity(name="spook.bio/discord", emoji="🔗"))
         await asyncio.sleep(5)
         if len(bot.guilds) == 1:
             print(bot.guilds[0].name)
-            # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
+            await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
         else:
             print(f"Watching {len(bot.guilds)} Servers")
-            # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
+            await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
         cached_guilds = []
         await asyncio.sleep(30)
@@ -412,13 +412,13 @@ async def on_ready():
     bot_ready = True
     await bot.tree.sync()
     print(f"Logged in as {bot.user}")
-    await bot.change_presence(activity=discord.CustomActivity(name=f"{MainURL}/discord", emoji="🔗"))
+    await bot.change_presence(activity=discord.CustomActivity(name="spook.bio/discord", emoji="🔗"))
     if len(bot.guilds) == 1:
         print(bot.guilds[0].name)
-        # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
+        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
     else:
         print(f"Watching {len(bot.guilds)} Servers")
-        # await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
+        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
     # Start the cache updater task
     MyBot(command_prefix="/", intents=discord.Intents.all())
@@ -482,7 +482,7 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(f"[{MainURL} Status Page](https://spookbio.statuspage.io)")
+    await interaction.response.send_message(f"[shapes.lol Status Page](https://spookbio.statuspage.io)")
 
 @bot.tree.command(name="stop", description="Stop the bot.")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -544,7 +544,12 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     
     print(f"Searching For {user}'s profile")
     await interaction.response.defer(thinking=True)
-    await interaction.followup.send(f"<:loading:1416950730094542881> Searching For {user}'s Roblox Profile!")
+    thinkingembed = discord.Embed(
+                title=discord.interaction.user.name "Searching For {user}'s Roblox Profile!",
+                emoji=<:loading:1416950730094542881>,
+                color=discord.Color.blue()
+            )
+    await interaction.followup.send(embed=thinkingembed)
 
     url = "https://users.roblox.com/v1/usernames/users"
     # print(f"Fetching Data From {url}")

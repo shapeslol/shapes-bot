@@ -538,8 +538,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     print(f"Searching For {user}'s profile")
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-                title=f"{interaction.user.name} Searching For {user}'s Roblox Profile!",
-                emoji="<:loading:1416950730094542881>",
+                title=f"<:loading:1416950730094542881>" {interaction.user.name} Searching For {user}'s Roblox Profile!",
                 color=discord.Color.blue()
             )
     await interaction.followup.send(embed=thinkingembed)

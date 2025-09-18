@@ -637,11 +637,12 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
             # --- Create link buttons ---
             view = discord.ui.View()
-            view.add_item(discord.ui.Button(
-                label="View Profile",
-                style=discord.ButtonStyle.link,
-                emoji="<:RobloxLogo:1416951004607418398>",
-                url=profileurl
+            if not Banned:
+                view.add_item(discord.ui.Button(
+                    label="View Profile",
+                    style=discord.ButtonStyle.link,
+                    emoji="<:RobloxLogo:1416951004607418398>",
+                    url=profileurl
             ))
             view.add_item(discord.ui.Button(
                 label="View Profile On Rolimons",
@@ -735,6 +736,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             )
             await interaction.edit_original_response(failedembed7)
             #await interaction.edit_original_response(f"{user} not found.")
+            return
     except requests.exceptions.RequestException as e:
         print(f"An error occurred during the API request: {e}")
         failedembed8 = discord.Embed(

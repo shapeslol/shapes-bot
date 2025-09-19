@@ -720,14 +720,14 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     except requests.exceptions.RequestException as e:
         results = f"An error occurred while searching: {e}"
 
-    failedembed = discord.Embed(
+    failedembed9 = discord.Embed(
         title=f"Google Search Results for: {query}",
         url=search_url,
         description=results,
         color=discord.Color.red()
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-    await interaction.edit_original_response(embed=failedembed)
+    await interaction.edit_original_response(embed=failedembed9)
     return
 
 

@@ -649,6 +649,63 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
                 # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
                 return
 
+@bot.tree.command(name="google", description="Search Something On Google.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
+    await interaction.response.defer(thinking=True)
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}!",
+        color=discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+
+    url = f"https://www.google.com/search?q={query}"
+
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        results = response.json().get("items", [])
+        
+        if not results:
+            noresults_embed = discord.Embed(
+                title="No Results Found",
+                description=f"No results found for '{query}'.",
+                color=discord.Color.red()
+            )
+            await interaction.edit_original_response(embed=noresults_embed)
+            return
+
+        embed = discord.Embed(
+            title=f"Google Search Results for '{query}'",
+            color=discord.Color.blue()
+        )
+
+        for result in results[:5]:  # Limit to first 5 results
+            title = result.get("title")
+            link = result.get("link")
+            snippet = result.get("snippet")
+            embed.add_field(name=title, value=f"{snippet}\n[Link]({link})", inline=False)
+
+        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=embed)
+
+    except requests.exceptions.RequestException as e:
+        error_embed = discord.Embed(
+            title="Error",
+            description=f"An error occurred while searching: {e}",
+            color=discord.Color.red()
+        )
+        await interaction.edit_original_response(embed=error_embed)
+
+
+@bot.tree.command(name="invite", description="Get the bot's invite link.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def invite(interaction: discord.Interaction):
+    invite_url = discord.utils.oauth_url(bot.user.id, permissions=discord.Permissions(permissions=8), scopes=("bot", "applications.commands"))
+    await interaction.response.send_message(f"Invite me to your server or add me to your apps using this link: {invite_url}", ephemeral=False)
+
 @bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)

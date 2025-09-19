@@ -712,7 +712,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
             embed = discord.Embed(
                 title=f"Google Search Results for: {query}",
                 url=search_url,
-                description=results
+                description=results,
                 color=discord.Color.blue()
             )
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")

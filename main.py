@@ -660,7 +660,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     )
     await interaction.followup.send(embed=thinkingembed)
 
-    url = f"https://www.google.com/search?q={query}"
+    url = f"https://google.com/search?q={query}"
 
     try:
         response = requests.get(url)
@@ -680,12 +680,11 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
             title=f"Google Search Results for '{query}'",
             color=discord.Color.blue()
         )
-
-        for result in results[:5]:  # Limit to first 5 results
+        for result in results[:3]:  # Limit to top 3 results
             title = result.get("title")
             link = result.get("link")
             snippet = result.get("snippet")
-            embed.add_field(name=title, value=f"{snippet}\n[Link]({link})", inline=False)
+            embed.add_field(name=title, value=f"[Link]({link})\n{snippet}", inline=False)
 
         embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=embed)
@@ -703,7 +702,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def invite(interaction: discord.Interaction):
-    invite_url = discord.utils.oauth_url(bot.user.id, permissions=discord.Permissions(permissions=8), scopes=("bot", "applications.commands"))
+    invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}"
     await interaction.response.send_message(f"Invite me to your server or add me to your apps using this link: {invite_url}", ephemeral=False)
 
 @bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.")

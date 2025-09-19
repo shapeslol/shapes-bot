@@ -26,7 +26,9 @@ intents.message_content = True
 owner = "sl.ip"
 co_owner = "<@481295611417853982>"
 MainURL = "https://shapes.lol"
+GoogleSearchURL = "https://cse.google.com/cse?cx=621a38269031b4e89&q="
 
+# get the bot token from TOKEN.txt
 try:
     with open('TOKEN.txt', 'r') as f:
         token = f.read()
@@ -34,6 +36,16 @@ except FileNotFoundError:
     print("Error: The file 'TOKEN' was not found.")
 except Exception as e:
     print(f"An error occurred: {e}")
+
+# get the google API key from GoogleToken.txt
+try:
+    with open('GoogleToken.txt', 'r') as f:
+        GoogleAPIKey = f.read()
+except FileNotFoundError:
+    print("Error: The file 'GoogleToken' was not found.")
+except Exception as e:
+    print(f"An error occurred: {e}")
+
 # === Flask App Setup ===
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecret")
@@ -72,7 +84,7 @@ HTML_TEMPLATE = """
     <p>Connected to {{ guilds|length }} {{ 'server' if guilds|length == 1 else 'servers' }}</p>
     
     <!-- Presence Button -->
-    <a href="https://dsc.gg/spookbio" target="_blank" rel="noopener" class="presence-button">
+    <a href="https://shapes.lol/discord" target="_blank" rel="noopener" class="presence-button">
         Join Our Server
     </a>
     
@@ -559,7 +571,7 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def ping(interaction: discord.Interaction):
-    latency = bot.latency
+    latency = bot.latency * 1000
     connection = "Good" if latency < 200 else "Average" if latency < 400 else "Poor"
     embed = discord.Embed(
         title="Bot Server Stats"
@@ -568,8 +580,8 @@ async def ping(interaction: discord.Interaction):
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.response.send_message(embed=embed)
-    await asyncio.sleep(5)
-    updatedlatency = bot.latency
+    await asyncio.sleep(10)
+    updatedlatency = bot.latency * 1000
     updatedconnection = "Good" if updatedlatency < 200 else "Average" if updatedlatency < 400 else "Poor"
     embed = discord.Embed(
         title="Bot Server Stats"
@@ -677,46 +689,46 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     )
     await interaction.followup.send(embed=thinkingembed)
 
-    url = f"https://cse.google.com/cse?cx=572192fe1bba14cf2&q={query}"
+    search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
     try:
-        response = requests.get(url)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}
+        response = requests.get(search_url, headers=headers)
         response.raise_for_status()
-        data = response.json()
+        html_content = response.text
 
-        # Get all the search results
-        await interaction.edit_original_response(content=data, embed=None)
-        await asyncio.sleep(4)
-        search_results = data.get("items", [])
-        if search_results:
-            first_result = search_results[0]
-            title = first_result.get("title", "No Title")
-            link = first_result.get("link", "No Link")
-            snippet = first_result.get("snippet", "No Description")
-
+        # Simple parsing to extract titles and snippets
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html_content, 'html.parser')
+        search_results = soup.find_all('div', class_='tF2Cxc')
+        results = ""
+        for result in search_results[:5]:  # Limit to top 5 results
+            title = result.find('h3').text if result.find('h3') else 'No title'
+            snippet = result.find('span', class_='aCOpRe').text if result.find('span', class_='aCOpRe') else 'No snippet'
+            link = result.find('a')['href'] if result.find('a') else 'No link'
+            results += f"**[{title}]({link})**\n{snippet}\n\n"
+        if not results:
+            results = "No results found."
             embed = discord.Embed(
-                title=title,
-                url=link,
-                description=snippet,
+                title=f"Google Search Results for: {query}",
+                url=search_url,
+                description=results
                 color=discord.Color.blue()
             )
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=embed)
-        else:
-            noresults_embed = discord.Embed(
-                title="No Results Found",
-                description=f"No results found for '{query}'.",
-                color=discord.Color.red()
-            )
-            await interaction.edit_original_response(embed=noresults_embed, content=None)
-            return
-
+            await interaction.edit_original_response(embed=failedembed)
     except requests.exceptions.RequestException as e:
-        error_embed = discord.Embed(
-            title="Error",
-            description=f"An error occurred while searching: {e}",
-            color=discord.Color.red()
-        )
-        await interaction.edit_original_response(embed=error_embed, content=None)
+        results = f"An error occurred while searching: {e}"
+
+    failedembed = discord.Embed(
+        title=f"Google Search Results for: {query}",
+        url=search_url,
+        description=results
+        color=discord.Color.red()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.edit_original_response(embed=failedembed)
+    return
 
 
 @bot.tree.command(name="invite", description="Get the bot's invite link.")

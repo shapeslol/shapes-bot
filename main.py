@@ -621,10 +621,22 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
         print(RoProData)
         Discord = RoProData["discord"]    
         if Discord != "":
-            await interaction.edit_original_response(f"{user}'s Discord (RoPro): ```{Discord}```")
+            embed = discord.Embed(
+                title=f"{user}'s Discord Username",
+                description=f"```{Discord}```",
+                color=discord.Color.blue()
+            )
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed)
+            #await interaction.edit_original_response(f"{user}'s Discord (RoPro): ```{Discord}```")
             return
         else:
-            await interaction.edit_original_response(f"{user} does not have a Discord linked to their profile!")
+            embed = discord.Embed(
+                title=f":x: {user} does not have Discord linked to their profile! :x:",
+                color=discord.Color.red()
+            )            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed)
+            #await interaction.edit_original_response(f"{user} does not have Discord linked to their profile!")
             return    
     except requests.exceptions.RequestException as e:
                 print(f"Error fetching RoPro data for ID {UserID}: {e}")
@@ -632,7 +644,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
                     title=f"Error retrieving Discord User from {user}",
                     color=discord.Color.red()
                 )
-                await interaction.edit_original_response(failedembed2)
+                await interaction.edit_original_response(embed=failedembed2)
                 # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
                 return
 
@@ -684,7 +696,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     title=f":x: An error occurred while fetching data for user ID: {UserID}. Please try again later.",
                     color=discord.Color.red()
                 )
-                await interaction.edit_original_response(failedembed)
+                await interaction.edit_original_response(embed=failedembed)
                 return
 
             if Display == user:
@@ -709,7 +721,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     title=f"Error retrieving Discord User from {url}",
                     color=discord.Color.red()
                 )
-                await interaction.edit_original_response(failedembed2)
+                await interaction.edit_original_response(embed=failedembed2)
                 # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
                 return
 
@@ -765,7 +777,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                         title=f"Failed To Retrieve {user}'s Headshot!",
                         color=discord.Color.red()
                 )
-                    await interaction.edit_original_response(failedembed3)
+                    await interaction.edit_original_response(embed=failedembed3)
                     #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
                     return
             except requests.exceptions.RequestException as e:
@@ -774,7 +786,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     title=f"Failed To Retrieve {user}'s Headshot!",
                     color=discord.Color.red()
                 )
-                await interaction.edit_original_response(failedembed4)
+                await interaction.edit_original_response(embed=failedembed4)
                 #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
                 return
 
@@ -797,7 +809,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                         title=f"Failed To Retrieve {user}'s avatar bust!",
                         color=discord.Color.red()
                 )
-                    await interaction.edit_original_response(failedembed5)
+                    await interaction.edit_original_response(embed=failedembed5)
                     #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                     return
             except requests.exceptions.RequestException as e:
@@ -806,7 +818,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     title=f"Failed To Retrieve {user}'s avatar bust!",
                     color=discord.Color.red()
                 )
-                await interaction.edit_original_response(failedembed6)
+                await interaction.edit_original_response(embed=failedembed6)
                 #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                 return
         else:
@@ -815,7 +827,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 title=f":warning: {user} not found.",
                 color=discord.Color.yellow()
             )
-            await interaction.edit_original_response(failedembed7)
+            await interaction.edit_original_response(embed=failedembed7)
             #await interaction.edit_original_response(f"{user} not found.")
             return
     except requests.exceptions.RequestException as e:
@@ -824,7 +836,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             title=f":warning: {user} not found.",
             color=discord.Color.yellow()
         )
-        await interaction.edit_original_response(failedembed8)
+        await interaction.edit_original_response(embed=failedembed8)
         #await interaction.edit_original_response(f"An error occurred during the API request: {e}")
         return
 

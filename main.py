@@ -670,6 +670,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
         data = response.json()
 
         # Get all the search results
+        await interaction.edit_original_response(content=data, embed=None)
         search_results = data.get("items", [])
         if search_results:
             first_result = search_results[0]

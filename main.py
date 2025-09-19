@@ -688,15 +688,15 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
         color=discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
-    query = query.replace(" ", "+")
-    url = f"https://www.googleapis.com/customsearch/v1?key={GoogleAPIKey}&cx=621a38269031b4e89&q={query}"
+    
+    # replace spaces with + in query for google search link
+    properquery = query.replace(" ", "+")
+    
+    url = f"https://www.googleapis.com/customsearch/v1?key={GoogleAPIKey}&cx=621a38269031b4e89&q={properquery}"
     try:
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
-        # replace spaces with + in query for google search link
-        properquery = query.replace(" ", "+")
-        query = query.replace("+", " ")
 
         # Get First 5 results
         if "items" in data and len(data["items"]) > 0:
@@ -707,24 +707,28 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
             print(f"First Result: {title} - {link}")
             second_result = data["items"][1]
             second_result_title = second_result.get("title", "No Title")
+            second_result_snippet = second_result.get("snippet", "No Description")
             second_result_link = second_result.get("link", "No Link")
             print(f"Second Result: {second_result_title} - {second_result_link}")
             third_result = data["items"][2]
             third_result_title = third_result.get("title", "No Title")
+            third_result_snippet = third_result.get("snippet", "No Description")
             third_result_link = third_result.get("link", "No Link")
             print(f"Third Result: {third_result_title} - {third_result_link}")
             fourth_result = data["items"][3]
             fourth_result_title = fourth_result.get("title", "No Title")
+            fourth_result_snippet = fourth_result.get("snippet", "No Description")
             fourth_result_link = fourth_result.get("link", "No Link")
             print(f"Fourth Result: {fourth_result_title} - {fourth_result_link}")
             fifth_result = data["items"][4]
             fifth_result_title = fifth_result.get("title", "No Title")
+            fifth_result_snippet = fifth_result.get("snippet", "No Description")
             fifth_result_link = fifth_result.get("link", "No Link")
             print(f"Fifth Result: {fifth_result_title} - {fifth_result_link}")
             
             embed = discord.Embed(
-                title=f"Google Search Results For {query}",
-                description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n**3. [{third_result_title}]({third_result_link})**\n**4. [{fourth_result_title}]({fourth_result_link})**\n**5. [{fifth_result_title}]({fifth_result_link})**\n\n[View More Results On Google](https://google.com/search?q={properquery})",
+                title=f"Google Results For {query}",
+                description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n{second_result_snippet}\n\n**3. [{third_result_title}]({third_result_link})**\n{third_result_snippet}\n\n**4. [{fourth_result_title}]({fourth_result_link})**\n{fourth_result_snippet}\n\n**5. [{fifth_result_title}]({fifth_result_link})**\n{fifth_result_snippet}\n\n[Search For More Results](https://google.com/search?q={properquery})",
                 color=discord.Color.blue()
             )
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
@@ -732,7 +736,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
         else:
             noresultembed = discord.Embed(
                 title=":x: No results found! :x:",
-                description=f"No Results for {query} | [Search on Google Yourself For More Results](https://google.com/search{query})",
+                description=f"No Results for {query} | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
                 color=discord.Color.red()
             )
             noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")

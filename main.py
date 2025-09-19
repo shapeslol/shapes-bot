@@ -667,7 +667,32 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     try:
         response = requests.get(url)
         response.raise_for_status()
-        await interaction.edit_original_response(content=response.url, embed=None)
+        data = response.json()
+
+        # Get all the search results
+        search_results = data.get("items", [])
+        if search_results:
+            first_result = search_results[0]
+            title = first_result.get("title", "No Title")
+            link = first_result.get("link", "No Link")
+            snippet = first_result.get("snippet", "No Description")
+
+            embed = discord.Embed(
+                title=title,
+                url=link,
+                description=snippet,
+                color=discord.Color.blue()
+            )
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed)
+        else:
+            noresults_embed = discord.Embed(
+                title="No Results Found",
+                description=f"No results found for '{query}'.",
+                color=discord.Color.red()
+            )
+            await interaction.edit_original_response(embed=noresults_embed, content=None)
+            return
 
     except requests.exceptions.RequestException as e:
         error_embed = discord.Embed(

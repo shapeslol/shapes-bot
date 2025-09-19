@@ -664,7 +664,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     try:
         response = requests.get(url)
         response.raise_for_status()
-        await interaction.edit_original_response(response)
+        await interaction.edit_original_response(content=response)
 
     except requests.exceptions.RequestException as e:
         error_embed = discord.Embed(

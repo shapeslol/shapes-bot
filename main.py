@@ -511,13 +511,8 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
 @bot.tree.context_menu(name="google")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def google(interaction: discord.Interaction, query: discord.Message = "site:shapes.lol"):
+async def google(interaction: discord.Interaction, query: discord.Message = "shapes.lol"):
     await interaction.response.defer(thinking=True)
-    thinkingembed = discord.Embed(
-        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}!",
-        color=discord.Color.blue()
-    )
-    await interaction.followup.send(embed=thinkingembed)
     
     # replace spaces with + in query for google search link
     properquery = query.replace(" ", "+")

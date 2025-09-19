@@ -559,11 +559,11 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def ping(interaction: discord.Interaction):
-    latency = bot.latency * 1000  # Convert to milliseconds
-    await interaction.response.send_message(f"Latency: {latency:.2f}ms")
-    await asyncio.sleep(2)
-    newlatency = bot.latency * 1000  # Convert to milliseconds
-    await interaction.edit_original_response(content=f"Old Latency: {latency:.2f}ms (Edit Latency: {newlatency:.2f}ms)")
+    latency = bot.latency
+    await interaction.response.send_message(f"Pong! Latency: {latency*1000:.2f}ms", ephemeral=False)
+    editlatency = bot.latency
+    await asyncio.sleep(4)
+    await interaction.edit_original_response(content=f"Pong! Latency: {editlatency*1000:.2f}ms")
 
 @bot.tree.command(name="roblox2discord", description="Get a roblox user's Discord from their username.")
 @app_commands.allowed_installs(guilds=True, users=True)

@@ -559,11 +559,25 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def ping(interaction: discord.Interaction):
-    latency = bot.latency
-    await interaction.response.send_message(f"Pong! Latency: {latency*1000:.2f}ms", ephemeral=False)
-    editlatency = bot.latency
-    await asyncio.sleep(4)
-    await interaction.edit_original_response(content=f"Pong! Latency: {editlatency*1000:.2f}ms")
+    latency = bot.latency * 1000  # Convert to milliseconds
+    connection = "Good" if latency < 200 else "Average" if latency < 400 else "Poor"
+    embed = discord.Embed(
+        title="Bot Server Stats"
+        , description=f"Latency: `{latency:.2f}ms` ({connection} Connection)"
+        , color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.response.send_message(embed=embed)
+    await asyncio.sleep(5)
+    updatedlatency = bot.latency * 1000
+    updatedconnection = "Good" if updatedlatency < 200 else "Average" if updatedlatency < 400 else "Poor"
+    embed = discord.Embed(
+        title="Bot Server Stats"
+        , description=f"OriginalLatency: `{latency:.2f}ms` ({connection} Connection) EditLatency: `{updatedlatency:.2f}ms` ({updatedconnection} Connection)"
+        , color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.edit_original_response(embed=embed, content=None)
 
 @bot.tree.command(name="roblox2discord", description="Get a roblox user's Discord from their username.")
 @app_commands.allowed_installs(guilds=True, users=True)

@@ -634,7 +634,8 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
             embed = discord.Embed(
                 title=f":x: {user} does not have Discord linked to their profile! :x:",
                 color=discord.Color.red()
-            )            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            )
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=embed)
             #await interaction.edit_original_response(f"{user} does not have Discord linked to their profile!")
             return    

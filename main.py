@@ -563,7 +563,7 @@ async def ping(interaction: discord.Interaction):
     await interaction.response.send_message(f"Latency: {latency:.2f}ms")
     await asyncio.sleep(2)
     newlatency = bot.latency * 1000  # Convert to milliseconds
-    await interaction.edit_original_response(f"Old Latency: {latency:.2f}ms (Edit Latency: {newlatency:.2f}ms)")
+    await interaction.edit_original_response(content=f"Old Latency: {latency:.2f}ms (Edit Latency: {newlatency:.2f}ms)")
 
 @bot.tree.command(name="roblox2discord", description="Get a roblox user's Discord from their username.")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -671,6 +671,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
 
         # Get all the search results
         await interaction.edit_original_response(content=data, embed=None)
+        await asyncio.sleep(4)
         search_results = data.get("items", [])
         if search_results:
             first_result = search_results[0]

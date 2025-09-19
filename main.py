@@ -562,7 +562,7 @@ async def ping(interaction: discord.Interaction):
     latency = bot.latency * 1000  # Convert to milliseconds
     await interaction.response.send_message(f"Pong! Latency: {latency:.2f}ms")
 
-@bot.tree.command(name="roblox2discord", description="Get the bot's invite link.")
+@bot.tree.command(name="roblox2discord", description="Get a roblox user's Discord from their username.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox"):

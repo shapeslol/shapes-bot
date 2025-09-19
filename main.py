@@ -555,6 +555,87 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
 
+@bot.tree.command(name="ping", description="Check the bot's latency.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def ping(interaction: discord.Interaction):
+    latency = bot.latency * 1000  # Convert to milliseconds
+    await interaction.response.send_message(f"Pong! Latency: {latency:.2f}ms")
+
+@bot.tree.command(name="roblox2discord", description="Get the bot's invite link.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox"):
+
+    print(f"Searching For {user}")
+    await interaction.response.defer(thinking=True)
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}!",
+        color=discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+
+    url = "https://users.roblox.com/v1/usernames/users"
+    # print(f"Fetching Data From {url}")
+    
+    request_payload = {
+        "usernames": [user],
+        "excludeBannedUsers": True
+    }
+
+    try:
+        response = requests.post(url, json=request_payload)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("data") and len(data["data"]) > 0:
+            userinfo = data["data"][0]
+            UserID = userinfo["id"]
+            Display = userinfo["displayName"]
+            user = userinfo["name"]
+            print(f"UserInfo: {userinfo}")
+
+        else:
+            print(f"{user} not found.")
+            failedembed7 = discord.Embed(
+                title=f":warning: {user} not found.",
+                color=discord.Color.yellow()
+            )
+            await interaction.edit_original_response(failedembed7)
+            return
+
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred during the API request: {e}")
+        failedembed8 = discord.Embed(
+            title=f":warning: {user} not found.",
+            color=discord.Color.yellow()
+        )
+        await interaction.edit_original_response(failedembed8)
+        return
+
+    url = f"https://api.ropro.io/getUserInfoTest.php?userid={UserID}"
+
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        RoProData = response.json()
+        print(RoProData)
+        Discord = RoProData["discord"]    
+        if Discord != "":
+            await interaction.edit_original_response(f"{user}'s Discord (RoPro): ```{Discord}```")
+            return
+        else:
+            await interaction.edit_original_response(f"{user} does not have a Discord linked to their profile!")
+            return    
+    except requests.exceptions.RequestException as e:
+                print(f"Error fetching RoPro data for ID {UserID}: {e}")
+                failedembed2 = discord.Embed(
+                    title=f"Error retrieving Discord User from {user}",
+                    color=discord.Color.red()
+                )
+                await interaction.edit_original_response(failedembed2)
+                # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
+                return
+
 @bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)

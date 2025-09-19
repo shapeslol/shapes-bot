@@ -482,7 +482,7 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 #print(f"Long date/time: {discord_time_long}")
 #print(f"Relative time: {discord_time_relative}")
 
-# === User Menu Commands ===
+# === User Commands ===
 @bot.tree.context_menu(name="menutest")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -506,6 +506,79 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
             return
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
+
+# === Message Commands ===
+@bot.tree.command(name="google", type=app_commands.CommandType.message, description="Search Something On Google.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def google(interaction: discord.Interaction, query: discord.Message = "site:shapes.lol"):
+    await interaction.response.defer(thinking=True)
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}!",
+        color=discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
+    # replace spaces with + in query for google search link
+    properquery = query.replace(" ", "+")
+    
+    url = f"https://www.googleapis.com/customsearch/v1?key={GoogleAPIKey}&cx={searchengine}&q={properquery}"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+
+        # Get First 5 results
+        if "items" in data and len(data["items"]) > 0:
+            first_result = data["items"][0]
+            title = first_result.get("title", "No Title")
+            snippet = first_result.get("snippet", "No Description")
+            link = first_result.get("link", "No Link")
+            print(f"First Result: {title} - {link}")
+            second_result = data["items"][1]
+            second_result_title = second_result.get("title", "No Title")
+            second_result_snippet = second_result.get("snippet", "No Description")
+            second_result_link = second_result.get("link", "No Link")
+            print(f"Second Result: {second_result_title} - {second_result_link}")
+            third_result = data["items"][2]
+            third_result_title = third_result.get("title", "No Title")
+            third_result_snippet = third_result.get("snippet", "No Description")
+            third_result_link = third_result.get("link", "No Link")
+            print(f"Third Result: {third_result_title} - {third_result_link}")
+            fourth_result = data["items"][3]
+            fourth_result_title = fourth_result.get("title", "No Title")
+            fourth_result_snippet = fourth_result.get("snippet", "No Description")
+            fourth_result_link = fourth_result.get("link", "No Link")
+            print(f"Fourth Result: {fourth_result_title} - {fourth_result_link}")
+            fifth_result = data["items"][4]
+            fifth_result_title = fifth_result.get("title", "No Title")
+            fifth_result_snippet = fifth_result.get("snippet", "No Description")
+            fifth_result_link = fifth_result.get("link", "No Link")
+            print(f"Fifth Result: {fifth_result_title} - {fifth_result_link}")
+            
+            embed = discord.Embed(
+                title=f"Google Results For {query}",
+                description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n{second_result_snippet}\n\n**3. [{third_result_title}]({third_result_link})**\n{third_result_snippet}\n\n**4. [{fourth_result_title}]({fourth_result_link})**\n{fourth_result_snippet}\n\n**5. [{fifth_result_title}]({fifth_result_link})**\n{fifth_result_snippet}\n\n[Search For More Results](https://google.com/search?q={properquery})",
+                color=discord.Color.blue()
+            )
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed)
+        else:
+            noresultembed = discord.Embed(
+                title=":x: No results found! :x:",
+                description=f"No Results for {query} | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
+                color=discord.Color.red()
+            )
+            noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=noresultembed)
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred during the API request: {e}")
+        errorembed = discord.Embed(
+            title=":x: An error occurred while searching Google. Please try again later. :x:",
+            color=discord.Color.red()
+        )
+        errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=errorembed)
 
 # === Bot Commands ===
 @bot.tree.command(name="status", description=f"Get the {MainURL} status")

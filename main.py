@@ -688,7 +688,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
         color=discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
-
+    query = query.replace(" ", "+")
     url = f"https://www.googleapis.com/customsearch/v1?key={GoogleAPIKey}&cx=621a38269031b4e89&q={query}"
     try:
         response = requests.get(url)
@@ -696,7 +696,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
         data = response.json()
         # replace spaces with + in query for google search link
         properquery = query.replace(" ", "+")
-        query = query.replace(" ", "+")
+        query = query.replace("+", " ")
 
         # Get First 5 results
         if "items" in data and len(data["items"]) > 0:

@@ -26,7 +26,7 @@ intents.message_content = True
 owner = "sl.ip"
 co_owner = "<@481295611417853982>"
 MainURL = "https://shapes.lol"
-GoogleSearchURL = "https://cse.google.com/cse?cx=621a38269031b4e89&q="
+searchengine = "621a38269031b4e89" # PLEASE USE YOUR OWN SERACH ENGINE ID FROM https://cse.google.com/
 
 # get the bot token from TOKEN.txt
 try:
@@ -692,7 +692,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     # replace spaces with + in query for google search link
     properquery = query.replace(" ", "+")
     
-    url = f"https://www.googleapis.com/customsearch/v1?key={GoogleAPIKey}&cx=621a38269031b4e89&q={properquery}"
+    url = f"https://www.googleapis.com/customsearch/v1?key={GoogleAPIKey}&cx={searchengine}&q={properquery}"
     try:
         response = requests.get(url)
         response.raise_for_status()

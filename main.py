@@ -689,47 +689,41 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     )
     await interaction.followup.send(embed=thinkingembed)
 
-    search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
+    url = f"https://www.googleapis.com/customsearch/v1?key={GoogleAPIKey}&cx=621a38269031b4e89&q={query}"
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}
-        response = requests.get(search_url, headers=headers)
+        response = requests.get(url)
         response.raise_for_status()
-        html_content = response.text
+        data = response.json()
+        if "items" in data and len(data["items"]) > 0:
+            first_result = data["items"][0]
+            title = first_result.get("title", "No Title")
+            snippet = first_result.get("snippet", "No Description")
+            link = first_result.get("link", "No Link")
 
-        # Simple parsing to extract titles and snippets
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(html_content, 'html.parser')
-        search_results = soup.find_all('div', class_='tF2Cxc')
-        results = ""
-        for result in search_results[:5]:  # Limit to top 5 results
-            title = result.find('h3').text if result.find('h3') else 'No title'
-            snippet = result.find('span', class_='aCOpRe').text if result.find('span', class_='aCOpRe') else 'No snippet'
-            link = result.find('a')['href'] if result.find('a') else 'No link'
-            results += f"**[{title}]({link})**\n{snippet}\n\n"
-        if not results:
-            results = "No results found."
             embed = discord.Embed(
-                title=f"Google Search Results for: {query}",
-                url=search_url,
-                description=results,
+                title=title,
+                description=snippet,
+                url=link,
                 color=discord.Color.blue()
             )
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=embed)
+        else:
+            noresultembed = discord.Embed(
+                title=":x: No results found! :x:",
+                description=f"No Results for {query} | [Search on Google Yourself For More Results](https://google.com/search{query})",
+                color=discord.Color.red()
+            )
+            noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=noresultembed)
     except requests.exceptions.RequestException as e:
-        results = f"An error occurred while searching: {e}"
-
-    failedembed = discord.Embed(
-        title=f"Google Search Results for: {query}",
-        url=search_url,
-        description=results,
-        color=discord.Color.red()
-    )
-    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-    await interaction.edit_original_response(embed=failedembed)
-    return
-
+        print(f"An error occurred during the API request: {e}")
+        errorembed = discord.Embed(
+            title=":x: An error occurred while searching Google. Please try again later. :x:",
+            color=discord.Color.red()
+        )
+        errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=errorembed)
 
 @bot.tree.command(name="invite", description="Get the bot's invite link.")
 @app_commands.allowed_installs(guilds=True, users=True)

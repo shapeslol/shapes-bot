@@ -559,7 +559,7 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def ping(interaction: discord.Interaction):
-    latency = bot.latency * 1000  # Convert to milliseconds
+    latency = bot.latency
     connection = "Good" if latency < 200 else "Average" if latency < 400 else "Poor"
     embed = discord.Embed(
         title="Bot Server Stats"
@@ -569,7 +569,7 @@ async def ping(interaction: discord.Interaction):
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.response.send_message(embed=embed)
     await asyncio.sleep(5)
-    updatedlatency = bot.latency * 1000
+    updatedlatency = bot.latency
     updatedconnection = "Good" if updatedlatency < 200 else "Average" if updatedlatency < 400 else "Poor"
     embed = discord.Embed(
         title="Bot Server Stats"

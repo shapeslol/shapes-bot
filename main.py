@@ -661,33 +661,10 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     await interaction.followup.send(embed=thinkingembed)
 
     url = f"https://google.com/search?q={query}"
-
     try:
         response = requests.get(url)
         response.raise_for_status()
-        results = response.json().get("items", [])
-        
-        if not results:
-            noresults_embed = discord.Embed(
-                title="No Results Found",
-                description=f"No results found for '{query}'.",
-                color=discord.Color.red()
-            )
-            await interaction.edit_original_response(embed=noresults_embed)
-            return
-
-        embed = discord.Embed(
-            title=f"Google Search Results for '{query}'",
-            color=discord.Color.blue()
-        )
-        for result in results[:3]:  # Limit to top 3 results
-            title = result.get("title")
-            link = result.get("link")
-            snippet = result.get("snippet")
-            embed.add_field(name=title, value=f"[Link]({link})\n{snippet}", inline=False)
-
-        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=embed)
+        await interaction.edit_original_response(response)
 
     except requests.exceptions.RequestException as e:
         error_embed = discord.Embed(

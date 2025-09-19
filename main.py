@@ -508,7 +508,7 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
         print(f"Error fetching data: {response.status_code}")
 
 # === Message Commands ===
-@bot.tree.context_menu(name="google", type=discord.AppCommandType.message)
+@app_commands.context_menu(name="google", type=discord.AppCommandType.message)
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def google(interaction: discord.Interaction, query: discord.Message = "site:shapes.lol"):

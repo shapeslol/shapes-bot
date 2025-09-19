@@ -506,7 +506,7 @@ async def ping(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def stop(interaction: discord.Interaction):
-    if interaction.user.name == {owner} or {co_owner}:
+    if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip":
         await interaction.response.send_message(":white_check_mark: Shutdown Successfully!", ephemeral=False)
         await bot.close()
         print("Bot Stopped.")
@@ -518,7 +518,7 @@ async def stop(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def restart(interaction: discord.Interaction):
-    if interaction.user.name == {owner} or {co_owner}:
+    if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip":
         await interaction.response.send_message(":white_check_mark: Restarted Successfully!!", ephemeral=False)
         restartbot()
     else:
@@ -560,7 +560,10 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def ping(interaction: discord.Interaction):
     latency = bot.latency * 1000  # Convert to milliseconds
-    await interaction.response.send_message(f"Pong! Latency: {latency:.2f}ms")
+    await interaction.response.send_message(f"Latency: {latency:.2f}ms")
+    await asyncio.sleep(2)
+    newlatency = bot.latency * 1000  # Convert to milliseconds
+    await interaction.edit_original_response(f"Old Latency: {latency:.2f}ms (Edit Latency: {newlatency:.2f}ms)")
 
 @bot.tree.command(name="roblox2discord", description="Get a roblox user's Discord from their username.")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -660,11 +663,11 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     )
     await interaction.followup.send(embed=thinkingembed)
 
-    url = f"https://google.com/search?q={query}"
+    url = f"https://cse.google.com/cse?cx=572192fe1bba14cf2&q={query}"
     try:
         response = requests.get(url)
         response.raise_for_status()
-        await interaction.edit_original_response(content=response)
+        await interaction.edit_original_response(content=response.url, embed=None)
 
     except requests.exceptions.RequestException as e:
         error_embed = discord.Embed(
@@ -672,7 +675,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
             description=f"An error occurred while searching: {e}",
             color=discord.Color.red()
         )
-        await interaction.edit_original_response(embed=error_embed)
+        await interaction.edit_original_response(embed=error_embed, content=None)
 
 
 @bot.tree.command(name="invite", description="Get the bot's invite link.")

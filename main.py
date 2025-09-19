@@ -600,7 +600,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
                 title=f":warning: {user} not found.",
                 color=discord.Color.yellow()
             )
-            await interaction.edit_original_response(failedembed7)
+            await interaction.edit_original_response(embed=failedembed7)
             return
 
     except requests.exceptions.RequestException as e:
@@ -609,7 +609,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
             title=f":warning: {user} not found.",
             color=discord.Color.yellow()
         )
-        await interaction.edit_original_response(failedembed8)
+        await interaction.edit_original_response(embed=failedembed8)
         return
 
     url = f"https://api.ropro.io/getUserInfoTest.php?userid={UserID}"

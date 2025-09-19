@@ -694,6 +694,9 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
+        # replace spaces with + in query for google search link
+        properquery = query.replace(" ", "+")
+        query = query.replace(" ", "+")
 
         # Get First 5 results
         if "items" in data and len(data["items"]) > 0:
@@ -718,9 +721,10 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
             fifth_result_title = fifth_result.get("title", "No Title")
             fifth_result_link = fifth_result.get("link", "No Link")
             print(f"Fifth Result: {fifth_result_title} - {fifth_result_link}")
+            
             embed = discord.Embed(
                 title=f"Google Search Results For {query}",
-                description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n**3. [{third_result_title}]({third_result_link})**\n**4. [{fourth_result_title}]({fourth_result_link})**\n**5. [{fifth_result_title}]({fifth_result_link})**\n\n[View More Results On Google](https://google.com/search?q={query})",
+                description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n**3. [{third_result_title}]({third_result_link})**\n**4. [{fourth_result_title}]({fourth_result_link})**\n**5. [{fifth_result_title}]({fifth_result_link})**\n\n[View More Results On Google](https://google.com/search?q={properquery})",
                 color=discord.Color.blue()
             )
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")

@@ -694,16 +694,33 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
+
+        # Get First 5 results
         if "items" in data and len(data["items"]) > 0:
             first_result = data["items"][0]
             title = first_result.get("title", "No Title")
             snippet = first_result.get("snippet", "No Description")
             link = first_result.get("link", "No Link")
-
+            print(f"First Result: {title} - {link}")
+            second_result = data["items"][1]
+            second_result_title = second_result.get("title", "No Title")
+            second_result_link = second_result.get("link", "No Link")
+            print(f"Second Result: {second_result_title} - {second_result_link}")
+            third_result = data["items"][2]
+            third_result_title = third_result.get("title", "No Title")
+            third_result_link = third_result.get("link", "No Link")
+            print(f"Third Result: {third_result_title} - {third_result_link}")
+            fourth_result = data["items"][3]
+            fourth_result_title = fourth_result.get("title", "No Title")
+            fourth_result_link = fourth_result.get("link", "No Link")
+            print(f"Fourth Result: {fourth_result_title} - {fourth_result_link}")
+            fifth_result = data["items"][4]
+            fifth_result_title = fifth_result.get("title", "No Title")
+            fifth_result_link = fifth_result.get("link", "No Link")
+            print(f"Fifth Result: {fifth_result_title} - {fifth_result_link}")
             embed = discord.Embed(
-                title=title,
-                description=snippet,
-                url=link,
+                title=f"Google Search Results For {query}",
+                description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n**3. [{third_result_title}]({third_result_link})**\n**4. [{fourth_result_title}]({fourth_result_link})**\n**5. [{fifth_result_title}]({fifth_result_link})**\n\n[View More Results On Google](https://google.com/search?q={query})",
                 color=discord.Color.blue()
             )
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")

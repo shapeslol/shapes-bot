@@ -4,3 +4,4 @@ requests
 pytz
 aiohttp
 bs4
+pickledb

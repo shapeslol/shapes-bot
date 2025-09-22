@@ -26,7 +26,9 @@ intents.message_content = True
 owner = "sl.ip"
 co_owner = "<@481295611417853982>"
 MainURL = "https://shapes.lol"
+searchengine = "621a38269031b4e89" # PLEASE USE YOUR OWN SERACH ENGINE ID FROM https://cse.google.com/
 
+# get the bot token from TOKEN.txt
 try:
     with open('TOKEN.txt', 'r') as f:
         token = f.read()
@@ -34,6 +36,16 @@ except FileNotFoundError:
     print("Error: The file 'TOKEN' was not found.")
 except Exception as e:
     print(f"An error occurred: {e}")
+
+# get the google API key from GoogleToken.txt
+try:
+    with open('GoogleToken.txt', 'r') as f:
+        GoogleAPIKey = f.read()
+except FileNotFoundError:
+    print("Error: The file 'GoogleToken' was not found.")
+except Exception as e:
+    print(f"An error occurred: {e}")
+
 # === Flask App Setup ===
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecret")
@@ -72,7 +84,7 @@ HTML_TEMPLATE = """
     <p>Connected to {{ guilds|length }} {{ 'server' if guilds|length == 1 else 'servers' }}</p>
     
     <!-- Presence Button -->
-    <a href="https://dsc.gg/spookbio" target="_blank" rel="noopener" class="presence-button">
+    <a href="https://shapes.lol/discord" target="_blank" rel="noopener" class="presence-button">
         Join Our Server
     </a>
     
@@ -470,7 +482,7 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 #print(f"Long date/time: {discord_time_long}")
 #print(f"Relative time: {discord_time_relative}")
 
-# === User Menu Commands ===
+# === User Commands ===
 @bot.tree.context_menu(name="menutest")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -495,6 +507,79 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
 
+# === Message Commands ===
+@bot.tree.context_menu(name="google")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def google(interaction: discord.Interaction, message: discord.Message = "shapes.lol"):
+    await interaction.response.defer(thinking=True)
+    query = message.content
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}!",
+        color=discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    # replace spaces with + in query for google search link
+    properquery = query.replace(" ", "+")
+    
+    url = f"https://www.googleapis.com/customsearch/v1?key={GoogleAPIKey}&cx={searchengine}&q={properquery}"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+
+        # Get First 5 results
+        if "items" in data and len(data["items"]) > 0:
+            first_result = data["items"][0]
+            title = first_result.get("title", "No Title")
+            snippet = first_result.get("snippet", "No Description")
+            link = first_result.get("link", "No Link")
+            print(f"First Result: {title} - {link}")
+            second_result = data["items"][1]
+            second_result_title = second_result.get("title", "No Title")
+            second_result_snippet = second_result.get("snippet", "No Description")
+            second_result_link = second_result.get("link", "No Link")
+            print(f"Second Result: {second_result_title} - {second_result_link}")
+            third_result = data["items"][2]
+            third_result_title = third_result.get("title", "No Title")
+            third_result_snippet = third_result.get("snippet", "No Description")
+            third_result_link = third_result.get("link", "No Link")
+            print(f"Third Result: {third_result_title} - {third_result_link}")
+            fourth_result = data["items"][3]
+            fourth_result_title = fourth_result.get("title", "No Title")
+            fourth_result_snippet = fourth_result.get("snippet", "No Description")
+            fourth_result_link = fourth_result.get("link", "No Link")
+            print(f"Fourth Result: {fourth_result_title} - {fourth_result_link}")
+            fifth_result = data["items"][4]
+            fifth_result_title = fifth_result.get("title", "No Title")
+            fifth_result_snippet = fifth_result.get("snippet", "No Description")
+            fifth_result_link = fifth_result.get("link", "No Link")
+            print(f"Fifth Result: {fifth_result_title} - {fifth_result_link}")
+            
+            embed = discord.Embed(
+                title=f"Google Results For {query}",
+                description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n{second_result_snippet}\n\n**3. [{third_result_title}]({third_result_link})**\n{third_result_snippet}\n\n**4. [{fourth_result_title}]({fourth_result_link})**\n{fourth_result_snippet}\n\n**5. [{fifth_result_title}]({fifth_result_link})**\n{fifth_result_snippet}\n\n[Search For More Results](https://google.com/search?q={properquery})",
+                color=discord.Color.blue()
+            )
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed)
+        else:
+            noresultembed = discord.Embed(
+                title=":x: No results found! :x:",
+                description=f"No Results for {query} | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
+                color=discord.Color.red()
+            )
+            noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=noresultembed)
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred during the API request: {e}")
+        errorembed = discord.Embed(
+            title=":x: An error occurred while searching Google. Please try again later. :x:",
+            color=discord.Color.red()
+        )
+        errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=errorembed)
+
 # === Bot Commands ===
 @bot.tree.command(name="status", description=f"Get the {MainURL} status")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -506,7 +591,7 @@ async def ping(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def stop(interaction: discord.Interaction):
-    if interaction.user.name == {owner} or {co_owner}:
+    if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip":
         await interaction.response.send_message(":white_check_mark: Shutdown Successfully!", ephemeral=False)
         await bot.close()
         print("Bot Stopped.")
@@ -518,7 +603,7 @@ async def stop(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def restart(interaction: discord.Interaction):
-    if interaction.user.name == {owner} or {co_owner}:
+    if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip":
         await interaction.response.send_message(":white_check_mark: Restarted Successfully!!", ephemeral=False)
         restartbot()
     else:
@@ -554,6 +639,196 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
             return
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
+
+@bot.tree.command(name="ping", description="Check the bot's latency.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def ping(interaction: discord.Interaction):
+    latency = bot.latency * 1000
+    connection = "Good" if latency < 200 else "Average" if latency < 400 else "Poor"
+    embed = discord.Embed(
+        title="Bot Server Stats"
+        , description=f"Latency: `{latency:.2f}ms` ({connection} Connection)"
+        , color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.response.send_message(embed=embed)
+    await asyncio.sleep(10)
+    updatedlatency = bot.latency * 1000
+    updatedconnection = "Good" if updatedlatency < 200 else "Average" if updatedlatency < 400 else "Poor"
+    embed = discord.Embed(
+        title="Bot Server Stats"
+        , description=f"OriginalLatency: `{latency:.2f}ms` ({connection} Connection) EditLatency: `{updatedlatency:.2f}ms` ({updatedconnection} Connection)"
+        , color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.edit_original_response(embed=embed, content=None)
+
+@bot.tree.command(name="roblox2discord", description="Get a roblox user's Discord from their username.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox"):
+
+    print(f"Searching For {user}")
+    await interaction.response.defer(thinking=True)
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}!",
+        color=discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+
+    url = "https://users.roblox.com/v1/usernames/users"
+    # print(f"Fetching Data From {url}")
+    
+    request_payload = {
+        "usernames": [user],
+        "excludeBannedUsers": True
+    }
+
+    try:
+        response = requests.post(url, json=request_payload)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("data") and len(data["data"]) > 0:
+            userinfo = data["data"][0]
+            UserID = userinfo["id"]
+            Display = userinfo["displayName"]
+            user = userinfo["name"]
+            print(f"UserInfo: {userinfo}")
+
+        else:
+            print(f"{user} not found.")
+            failedembed7 = discord.Embed(
+                title=f":warning: {user} not found.",
+                color=discord.Color.yellow()
+            )
+            await interaction.edit_original_response(embed=failedembed7)
+            return
+
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred during the API request: {e}")
+        failedembed8 = discord.Embed(
+            title=f":warning: {user} not found.",
+            color=discord.Color.yellow()
+        )
+        await interaction.edit_original_response(embed=failedembed8)
+        return
+
+    url = f"https://api.ropro.io/getUserInfoTest.php?userid={UserID}"
+
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        RoProData = response.json()
+        print(RoProData)
+        Discord = RoProData["discord"]    
+        if Discord != "":
+            embed = discord.Embed(
+                title=f"{user}'s Discord Username",
+                description=f"```{Discord}```",
+                color=discord.Color.blue()
+            )
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed)
+            #await interaction.edit_original_response(f"{user}'s Discord (RoPro): ```{Discord}```")
+            return
+        else:
+            embed = discord.Embed(
+                title=f":x: {user} does not have Discord linked to their profile! :x:",
+                color=discord.Color.red()
+            )
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed)
+            #await interaction.edit_original_response(f"{user} does not have Discord linked to their profile!")
+            return    
+    except requests.exceptions.RequestException as e:
+                print(f"Error fetching RoPro data for ID {UserID}: {e}")
+                failedembed2 = discord.Embed(
+                    title=f"Error retrieving Discord User from {user}",
+                    color=discord.Color.red()
+                )
+                await interaction.edit_original_response(embed=failedembed2)
+                # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
+                return
+
+@bot.tree.command(name="google", description="Search Something On Google.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
+    await interaction.response.defer(thinking=True)
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}!",
+        color=discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
+    # replace spaces with + in query for google search link
+    properquery = query.replace(" ", "+")
+    
+    url = f"https://www.googleapis.com/customsearch/v1?key={GoogleAPIKey}&cx={searchengine}&q={properquery}"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+
+        # Get First 5 results
+        if "items" in data and len(data["items"]) > 0:
+            first_result = data["items"][0]
+            title = first_result.get("title", "No Title")
+            snippet = first_result.get("snippet", "No Description")
+            link = first_result.get("link", "No Link")
+            print(f"First Result: {title} - {link}")
+            second_result = data["items"][1]
+            second_result_title = second_result.get("title", "No Title")
+            second_result_snippet = second_result.get("snippet", "No Description")
+            second_result_link = second_result.get("link", "No Link")
+            print(f"Second Result: {second_result_title} - {second_result_link}")
+            third_result = data["items"][2]
+            third_result_title = third_result.get("title", "No Title")
+            third_result_snippet = third_result.get("snippet", "No Description")
+            third_result_link = third_result.get("link", "No Link")
+            print(f"Third Result: {third_result_title} - {third_result_link}")
+            fourth_result = data["items"][3]
+            fourth_result_title = fourth_result.get("title", "No Title")
+            fourth_result_snippet = fourth_result.get("snippet", "No Description")
+            fourth_result_link = fourth_result.get("link", "No Link")
+            print(f"Fourth Result: {fourth_result_title} - {fourth_result_link}")
+            fifth_result = data["items"][4]
+            fifth_result_title = fifth_result.get("title", "No Title")
+            fifth_result_snippet = fifth_result.get("snippet", "No Description")
+            fifth_result_link = fifth_result.get("link", "No Link")
+            print(f"Fifth Result: {fifth_result_title} - {fifth_result_link}")
+            
+            embed = discord.Embed(
+                title=f"Google Results For {query}",
+                description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n{second_result_snippet}\n\n**3. [{third_result_title}]({third_result_link})**\n{third_result_snippet}\n\n**4. [{fourth_result_title}]({fourth_result_link})**\n{fourth_result_snippet}\n\n**5. [{fifth_result_title}]({fifth_result_link})**\n{fifth_result_snippet}\n\n[Search For More Results](https://google.com/search?q={properquery})",
+                color=discord.Color.blue()
+            )
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed)
+        else:
+            noresultembed = discord.Embed(
+                title=":x: No results found! :x:",
+                description=f"No Results for {query} | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
+                color=discord.Color.red()
+            )
+            noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=noresultembed)
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred during the API request: {e}")
+        errorembed = discord.Embed(
+            title=":x: An error occurred while searching Google. Please try again later. :x:",
+            color=discord.Color.red()
+        )
+        errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=errorembed)
+
+@bot.tree.command(name="invite", description="Get the bot's invite link.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def invite(interaction: discord.Interaction):
+    invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}"
+    await interaction.response.send_message(f"Invite me to your server or add me to your apps using this link: {invite_url}", ephemeral=False)
 
 @bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -603,7 +878,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     title=f":x: An error occurred while fetching data for user ID: {UserID}. Please try again later.",
                     color=discord.Color.red()
                 )
-                await interaction.edit_original_response(failedembed)
+                await interaction.edit_original_response(embed=failedembed)
                 return
 
             if Display == user:
@@ -628,7 +903,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     title=f"Error retrieving Discord User from {url}",
                     color=discord.Color.red()
                 )
-                await interaction.edit_original_response(failedembed2)
+                await interaction.edit_original_response(embed=failedembed2)
                 # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
                 return
 
@@ -637,11 +912,12 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
             # --- Create link buttons ---
             view = discord.ui.View()
-            view.add_item(discord.ui.Button(
-                label="View Profile",
-                style=discord.ButtonStyle.link,
-                emoji="<:RobloxLogo:1416951004607418398>",
-                url=profileurl
+            if not Banned:
+                view.add_item(discord.ui.Button(
+                    label="View Profile",
+                    style=discord.ButtonStyle.link,
+                    emoji="<:RobloxLogo:1416951004607418398>",
+                    url=profileurl
             ))
             view.add_item(discord.ui.Button(
                 label="View Profile On Rolimons",
@@ -683,7 +959,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                         title=f"Failed To Retrieve {user}'s Headshot!",
                         color=discord.Color.red()
                 )
-                    await interaction.edit_original_response(failedembed3)
+                    await interaction.edit_original_response(embed=failedembed3)
                     #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
                     return
             except requests.exceptions.RequestException as e:
@@ -692,7 +968,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     title=f"Failed To Retrieve {user}'s Headshot!",
                     color=discord.Color.red()
                 )
-                await interaction.edit_original_response(failedembed4)
+                await interaction.edit_original_response(embed=failedembed4)
                 #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
                 return
 
@@ -715,7 +991,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                         title=f"Failed To Retrieve {user}'s avatar bust!",
                         color=discord.Color.red()
                 )
-                    await interaction.edit_original_response(failedembed5)
+                    await interaction.edit_original_response(embed=failedembed5)
                     #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                     return
             except requests.exceptions.RequestException as e:
@@ -724,7 +1000,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     title=f"Failed To Retrieve {user}'s avatar bust!",
                     color=discord.Color.red()
                 )
-                await interaction.edit_original_response(failedembed6)
+                await interaction.edit_original_response(embed=failedembed6)
                 #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                 return
         else:
@@ -733,15 +1009,16 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 title=f":warning: {user} not found.",
                 color=discord.Color.yellow()
             )
-            await interaction.edit_original_response(failedembed7)
+            await interaction.edit_original_response(embed=failedembed7)
             #await interaction.edit_original_response(f"{user} not found.")
+            return
     except requests.exceptions.RequestException as e:
         print(f"An error occurred during the API request: {e}")
         failedembed8 = discord.Embed(
             title=f":warning: {user} not found.",
             color=discord.Color.yellow()
         )
-        await interaction.edit_original_response(failedembed8)
+        await interaction.edit_original_response(embed=failedembed8)
         #await interaction.edit_original_response(f"An error occurred during the API request: {e}")
         return
 

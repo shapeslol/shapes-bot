@@ -20,8 +20,8 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 # === Hardcoded Admin Key (change this!) ===
 ADMIN_KEY = "lc1220"
 #=== Database Setup ===
-countingdb = pickledb.load('counting.db', True)
-embeddb = pickledb.load('embed.db', True)
+countingDB = pickledb.load('counting.db', True)
+embedDB = pickledb.load('embed.db', True)
 # === Discord Bot Setup ===
 intents = discord.Intents.default()
 intents.guilds = True

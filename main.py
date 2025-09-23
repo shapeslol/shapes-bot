@@ -19,9 +19,11 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 
 # === Hardcoded Admin Key (change this!) ===
 ADMIN_KEY = "lc1220"
+
 #=== Database Setup ===
 countingDB = pickledb.load('counting.db', True)
 embedDB = pickledb.load('embed.db', True)
+
 # === Discord Bot Setup ===
 intents = discord.Intents.default()
 intents.guilds = True
@@ -584,6 +586,42 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
         await interaction.edit_original_response(embed=errorembed)
 
 # === Bot Commands ===
+@bot.tree.command(name="settings", description="Your Settings For Shapes")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def settings(interaction: discord.Interaction):
+    class SettingsView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=None)  # No timeout
+
+        @discord.ui.button(label="Toggle Embed Color", style=discord.ButtonStyle.primary, custom_id="toggle_embed_color")
+        async def toggle_embed_color(self, interaction: discord.Interaction, button: discord.ui.Button):
+            current_color = embedDB.get("embedcolor")
+            if current_color:
+                embedDB.set("embedcolor", discord.Color.blue())
+                await interaction.response.send_message("Embed color reset to default.", ephemeral=True)
+            else:
+                embedDB.set("embedcolor", discord.Color.blue())  # Example color
+                await interaction.response.send_message("Embed color set to blue.", ephemeral=True)
+
+        @discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting")
+        async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
+            current_setting = countingDB.get("enabled")
+            if current_setting:
+                countingDB.set("enabled", False)
+                await interaction.response.send_message("Counting feature disabled.", ephemeral=True)
+            else:
+                countingDB.set("enabled", True)
+                await interaction.response.send_message("Counting feature enabled.", ephemeral=True)
+    embed = discord.Embed(
+        title="Settings",
+        description="Choose a button below to toggle a setting.",
+        color=embedDB.get("embedcolor") if embedDB.get("embedcolor") else discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.response.send_message(embed=embed, view=SettingsView())
+
+
 @bot.tree.command(name="status", description=f"Get the {MainURL} status")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -652,7 +690,7 @@ async def ping(interaction: discord.Interaction):
     embed = discord.Embed(
         title="Bot Server Stats"
         , description=f"Latency: `{latency:.2f}ms` ({connection} Connection)"
-        , color=discord.Color.blue()
+        , color=embedDB.get("embedcolor") if embedDB.get("embedcolor") else discord.Color.blue()
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.response.send_message(embed=embed)
@@ -662,7 +700,7 @@ async def ping(interaction: discord.Interaction):
     embed = discord.Embed(
         title="Bot Server Stats"
         , description=f"OriginalLatency: `{latency:.2f}ms` ({connection} Connection) EditLatency: `{updatedlatency:.2f}ms` ({updatedconnection} Connection)"
-        , color=discord.Color.blue()
+        , color=embedDB.get("embedcolor") if embedDB.get("embedcolor") else discord.Color.blue()
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.edit_original_response(embed=embed, content=None)
@@ -676,7 +714,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
         title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}!",
-        color=discord.Color.blue()
+        color=embedDB.get("embedcolor") if embedDB.get("embedcolor") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
 
@@ -729,7 +767,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
             embed = discord.Embed(
                 title=f"{user}'s Discord Username",
                 description=f"```{Discord}```",
-                color=discord.Color.blue()
+                color=embedDB.get("embedcolor") if embedDB.get("embedcolor") else discord.Color.blue()
             )
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=embed)
@@ -761,7 +799,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
         title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}!",
-        color=discord.Color.blue()
+        color=embedDB.get("embedcolor") if embedDB.get("embedcolor") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
     
@@ -805,7 +843,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
             embed = discord.Embed(
                 title=f"Google Results For {query}",
                 description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n{second_result_snippet}\n\n**3. [{third_result_title}]({third_result_link})**\n{third_result_snippet}\n\n**4. [{fourth_result_title}]({fourth_result_link})**\n{fourth_result_snippet}\n\n**5. [{fifth_result_title}]({fifth_result_link})**\n{fifth_result_snippet}\n\n[Search For More Results](https://google.com/search?q={properquery})",
-                color=discord.Color.blue()
+                color=embedDB.get("embedcolor") if embedDB.get("embedcolor") else discord.Color.blue()
             )
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=embed)
@@ -842,7 +880,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
                 title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}'s Roblox Profile!",
-                color=discord.Color.blue()
+                color=embedDB.get("embedcolor") if embedDB.get("embedcolor") else discord.Color.blue()
             )
     await interaction.followup.send(embed=thinkingembed)
 
@@ -933,7 +971,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 title=Username,
                 url=profileurl,
                 description=Description,
-                color=discord.Color.blue()
+                color=embedDB.get("embedcolor") if embedDB.get("embedcolor") else discord.Color.blue()
             )
             if Discord != "":
                 embed.add_field(

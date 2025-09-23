@@ -623,6 +623,7 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def settings(interaction: discord.Interaction):
+    view = discord.ui.View()
     color_select = discord.ui.Select(
         options=[discord.SelectOption(label="Blue", description="A nice blue color", value=str(discord.Color.blue().value), emoji="🔵"),
         discord.SelectOption(label="Red", description="A vibrant red color", value=str(discord.Color.red().value), emoji="🔴"),
@@ -640,19 +641,22 @@ async def settings(interaction: discord.Interaction):
             discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷"),
         ]
     )
-    async def color_select_callback(interaction: discord.Interaction):
-        selected_color_value = int(color_select.values[0])
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(self.color_select)
+    async def on_submit(self, interaction: discord.Interaction):
+        selected_color_value = int(self.color_select.values[0])
         embedDB.set(f"{interaction.user.id}", selected_color_value)
         embed = discord.Embed(
             title="Embed Color Changed!",
-            description=f"Your embed color has been changed successfully to {selected_color_value}!",
+            description=f"Your embed color has been successfully changed to {selected_color_value}!",
             color=selected_color_value
         )
         embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.response.send_message(embed=embed, ephemeral=True)
-    view = discord.ui.View()
+    
     view.add_item(color_select)
-    view.timeout = None  # No timeout
+
     class SettingsView(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=None)  # No timeout

@@ -672,10 +672,11 @@ async def settings(interaction: discord.Interaction):
     )
     async def on_submit(interaction: discord.Interaction):
         selected_color_value = int(color_select.values[0])
+        selected_color_name = color_select.values[0]
         embedDB.set(f"{interaction.user.id}", selected_color_value)
         embed = discord.Embed(
             title="Embed Color Changed!",
-            description=f"Your embed color has been changed successfully to {selected_color_value}!",
+            description=f"Your embed color has been changed successfully to {selected_color_name}!",
             color=selected_color_value
         )
         embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")

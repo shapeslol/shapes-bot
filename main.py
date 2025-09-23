@@ -8,7 +8,7 @@ import asyncio
 import discord
 import aiohttp
 import pytz
-from pickledb import pickledb
+import PickleDB
 from datetime import datetime, timezone
 from discord import app_commands
 import requests

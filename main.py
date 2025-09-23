@@ -640,7 +640,7 @@ async def settings(interaction: discord.Interaction):
             discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷"),
         ]
     )
-    view = View()
+    view = discord.ui.View()
     view.add_item(color_select)
     class SettingsView(discord.ui.View):
         def __init__(self):

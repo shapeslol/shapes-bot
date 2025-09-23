@@ -487,6 +487,11 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 #print(f"Long date/time: {discord_time_long}")
 #print(f"Relative time: {discord_time_relative}")
 
+
+# set default embed color if not set
+if not embedDB.get("embedcolor"):
+    embedDB.set("embedcolor", discord.Color.blue()) # default to blue
+
 # === User Commands ===
 @bot.tree.context_menu(name="menutest")
 @app_commands.allowed_installs(guilds=True, users=True)

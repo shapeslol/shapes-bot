@@ -487,7 +487,7 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 #print(f"Long date/time: {discord_time_long}")
 #print(f"Relative time: {discord_time_relative}")
 
-class EmbedColorSelection(discord.ui.Select, title="Test Modal"):
+class EmbedColorSelection(discord.ui.Modal, title="Test Modal"):
     modal_choices = [discord.Color.blue(), discord.Color.red(), discord.Color.green(), discord.Color.purple(), discord.Color.orange(), discord.Color.gold(), discord.Color.teal(), discord.Color.dark_blue(), discord.Color.dark_red(), discord.Color.dark_green(), discord.Color.dark_purple(), discord.Color.dark_orange(), discord.Color.dark_gold(), discord.Color.dark_teal()]
     color_select = discord.ui.Select(
         options=[discord.SelectOption(label="Blue", description="A nice blue color", value=str(discord.Color.blue().value), emoji="🔵"),

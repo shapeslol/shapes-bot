@@ -670,7 +670,7 @@ async def settings(interaction: discord.Interaction):
             discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷", default=defaults[13]),
         ]
     )
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(interaction: discord.Interaction):
         selected_color_value = int(color_select.values[0])
         embedDB.set(f"{interaction.user.id}", selected_color_value)
         embed = discord.Embed(

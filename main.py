@@ -8,7 +8,7 @@ import asyncio
 import discord
 import aiohttp
 import pytz
-import pickledb
+from pickledb import PickleDB
 from datetime import datetime, timezone
 from discord import app_commands
 import requests
@@ -21,8 +21,8 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 ADMIN_KEY = "lc1220"
 
 #=== Database Setup ===
-countingDB = pickledb.load('counting.db', True)
-embedDB = pickledb.load('embed.db', True)
+countingDB = PickleDB('counting.db', True)
+embedDB = PickleDB('embed.db', True)
 
 # === Discord Bot Setup ===
 intents = discord.Intents.default()

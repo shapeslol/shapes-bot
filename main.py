@@ -488,32 +488,26 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 #print(f"Relative time: {discord_time_relative}")
 
 class EmbedColorModal(discord.ui.Modal, title="Test Modal"):
-        item1 = discord.ui.TextInput(
-            label="Item 1",
-            placeholder="first item...",
-            style=discord.TextStyle.short,
-            required=True,
-        )
-        item2 = discord.ui.TextInput(
-            label="Item 2",
-            placeholder="second item...",
-            style=discord.TextStyle.short,
-            required=True,
-        )
-        item3 = discord.ui.TextInput(
-            label="Item 3",
-            placeholder="third item...",
-            style=discord.TextStyle.short,
-            required=True,
-        )
+    choices = [discord.Color.blue(), discord.Color.red(), discord.Color.green(), discord.Color.purple(), discord.Color.orange(), discord.Color.gold(), discord.Color.teal(), discord.Color.dark_blue(), discord.Color.dark_red(), discord.Color.dark_green(), discord.Color.dark_purple(), discord.Color.dark_orange(), discord.Color.dark_gold(), discord.Color.dark_teal()]
+    color_names = ["Blue", "Red", "Green", "Purple", "Orange", "Gold", "Teal", "Dark Blue", "Dark Red", "Dark Green", "Dark Purple", "Dark Orange", "Dark Gold", "Dark Teal"]
+    color_dict = dict(zip(color_names, choices))
+    color_options = [discord.SelectOption(label=name, value=str(color.value)) for name, color in color_dict.items()]
+    color_select = discord.ui.Select(placeholder="Choose your embed color", options=color_options)
+    def __init__(self):
+        super().__init__()
+        self.add_item(self.color_select)
 
-        async def on_submit(self, interaction: discord.Interaction):
-            # Process the submitted items here
-            items = [self.item1.value, self.item2.value, self.item3.value]
-            await interaction.response.send_message(f"{interaction.user.mention} submitted the list: {', '.join(items)}", ephemeral=True)
-        async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-            # Handle any errors that occur during submission
-            await interaction.response.send_message(f"An error occurred: {error}", ephemeral=True)
+    async def on_submit(self, interaction: discord.Interaction):
+        selected_color_value = int(self.color_select.values[0])
+        selected_color = discord.Color(selected_color_value)
+        embedDB.set(f"{interaction.user.id}_embedcolor", selected_color)
+        embed = discord.Embed(
+            title="Embed Color Changed!",
+            description=f"Your embed color has been changed to {selected_color}.",
+            color=selected_color
+        )
+        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # === User Commands ===
 @bot.tree.context_menu(name="sayhitouser")

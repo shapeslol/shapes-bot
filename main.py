@@ -629,9 +629,10 @@ async def settings(interaction: discord.Interaction):
         def __init__(self):
             super().__init__(timeout=None)  # No timeout
 
-        @discord.ui.button(label="Change Embed Color", style=discord.ButtonStyle.primary, custom_id="change_embed_color")
+        @discord.ui.button(label="Change Embed Color", style=discord.ButtonStyle.primary, custom_id="change_embed_color", emoji="🎨")
         async def change_embed_color(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await interaction.response.send_modal(EmbedColorModal())
+            await interaction.response.send_message("Select your new embed color from the menu", view=EmbedColorModal(), ephemeral=True)
+            #await interaction.response.send_modal(EmbedColorModal())
 
         #@discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting")
         #async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -644,7 +645,7 @@ async def settings(interaction: discord.Interaction):
         #        await interaction.response.send_message("Counting feature enabled.", ephemeral=True)
     embed = discord.Embed(
         title="Settings",
-        description="Choose a button below to manage a setting.",
+        description="Choose a setting below to modify it.",
         color=embedDB.get(f"{interaction.user.id}_embedcolor") if embedDB.get(f"{interaction.user.id}_embedcolor") else discord.Color.blue()
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")

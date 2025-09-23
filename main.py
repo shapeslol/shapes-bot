@@ -631,7 +631,7 @@ async def settings(interaction: discord.Interaction):
 
         @discord.ui.button(label="Change Embed Color", style=discord.ButtonStyle.primary, custom_id="change_embed_color")
         async def change_embed_color(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await interaction.response.send_modal(EmbedColorModal)
+            await interaction.response.send_modal(EmbedColorModal())
 
         #@discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting")
         #async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):

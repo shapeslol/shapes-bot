@@ -865,7 +865,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
             embed = discord.Embed(
                 title=f"Google Results For {query}",
                 description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n{second_result_snippet}\n\n**3. [{third_result_title}]({third_result_link})**\n{third_result_snippet}\n\n**4. [{fourth_result_title}]({fourth_result_link})**\n{fourth_result_snippet}\n\n**5. [{fifth_result_title}]({fifth_result_link})**\n{fifth_result_snippet}\n\n[Search For More Results](https://google.com/search?q={properquery})",
-                color=color=embedDB.get(f"{interaction.user.id}_embedcolor") if embedDB.get(f"{interaction.user.id}_embedcolor") else discord.Color.blue()
+                color=embedDB.get(f"{interaction.user.id}_embedcolor") if embedDB.get(f"{interaction.user.id}_embedcolor") else discord.Color.blue()
             )
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=embed)

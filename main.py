@@ -21,8 +21,8 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 ADMIN_KEY = "lc1220"
 
 #=== Database Setup ===
-countingDB = PickleDB('counting.db', True)
-embedDB = PickleDB('embed.db', True)
+countingDB = PickleDB('counting.db')
+embedDB = PickleDB('embed.db')
 
 # === Discord Bot Setup ===
 intents = discord.Intents.default()

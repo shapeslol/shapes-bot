@@ -488,23 +488,36 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 #print(f"Relative time: {discord_time_relative}")
 
 class EmbedColorModal(discord.ui.Modal, title="Test Modal"):
-    choices = [discord.Color.blue(), discord.Color.red(), discord.Color.green(), discord.Color.purple(), discord.Color.orange(), discord.Color.gold(), discord.Color.teal(), discord.Color.dark_blue(), discord.Color.dark_red(), discord.Color.dark_green(), discord.Color.dark_purple(), discord.Color.dark_orange(), discord.Color.dark_gold(), discord.Color.dark_teal()]
-    color_names = ["Blue", "Red", "Green", "Purple", "Orange", "Gold", "Teal", "Dark Blue", "Dark Red", "Dark Green", "Dark Purple", "Dark Orange", "Dark Gold", "Dark Teal"]
-    color_dict = dict(zip(color_names, choices))
-    color_options = [discord.SelectOption(label=name, value=str(color.value)) for name, color in color_dict.items()]
-    color_select = discord.ui.Select(placeholder="Choose your embed color", options=color_options)
+    modal_choices = [discord.Color.blue(), discord.Color.red(), discord.Color.green(), discord.Color.purple(), discord.Color.orange(), discord.Color.gold(), discord.Color.teal(), discord.Color.dark_blue(), discord.Color.dark_red(), discord.Color.dark_green(), discord.Color.dark_purple(), discord.Color.dark_orange(), discord.Color.dark_gold(), discord.Color.dark_teal()]
+    color_select = discord.ui.Select(
+        placeholder="Choose your embed color...",
+        options=[
+            discord.SelectOption(label="Blue", description="A nice blue color", value=str(discord.Color.blue().value), emoji="🔵"),
+            discord.SelectOption(label="Red", description="A vibrant red color", value=str(discord.Color.red().value), emoji="🔴"),
+            discord.SelectOption(label="Green", description="A refreshing green color", value=str(discord.Color.green().value), emoji="🟢"),
+            discord.SelectOption(label="Purple", description="A royal purple color", value=str(discord.Color.purple().value), emoji="🟣"),
+            discord.SelectOption(label="Orange", description="A bright orange color", value=str(discord.Color.orange().value), emoji="🟠"),
+            discord.SelectOption(label="Gold", description="A shiny gold color", value=str(discord.Color.gold().value), emoji="🟡"),
+            discord.SelectOption(label="Teal", description="A cool teal color", value=str(discord.Color.teal().value), emoji="🔷"),
+            discord.SelectOption(label="Dark Blue", description="A deep dark blue color", value=str(discord.Color.dark_blue().value), emoji="🔷"),
+            discord.SelectOption(label="Dark Red", description="A deep dark red color", value=str(discord.Color.dark_red().value), emoji="🔴"),
+            discord.SelectOption(label="Dark Green", description="A deep dark green color", value=str(discord.Color.dark_green().value), emoji="🟢"),
+            discord.SelectOption(label="Dark Purple", description="A deep dark purple color", value=str(discord.Color.dark_purple().value), emoji="🟣"),
+            discord.SelectOption(label="Dark Orange", description="A deep dark orange color", value=str(discord.Color.dark_orange().value), emoji="🟠"),
+            discord.SelectOption(label="Dark Gold", description="A deep dark gold color", value=str(discord.Color.dark_gold().value), emoji="🟡"),
+            discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷"),
+        ]
+    )
     def __init__(self):
         super().__init__()
         self.add_item(self.color_select)
-
     async def on_submit(self, interaction: discord.Interaction):
         selected_color_value = int(self.color_select.values[0])
-        selected_color = discord.Color(selected_color_value)
-        embedDB.set(f"{interaction.user.id}_embedcolor", selected_color)
+        embedDB.set(f"{interaction.user.id}_embedcolor", selected_color_value)
         embed = discord.Embed(
             title="Embed Color Changed!",
-            description=f"Your embed color has been changed to {selected_color}.",
-            color=selected_color
+            description=f"Your embed color has been changed successfully to {selected_color_value}!",
+            color=selected_color_value
         )
         embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -618,7 +631,7 @@ async def settings(interaction: discord.Interaction):
 
         @discord.ui.button(label="Change Embed Color", style=discord.ButtonStyle.primary, custom_id="change_embed_color")
         async def change_embed_color(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await interaction.response.send_modal(EmbedColorModal())
+            await interaction.response.send_modal(modal=EmbedColorModal)
 
         #@discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting")
         #async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):

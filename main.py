@@ -648,7 +648,7 @@ async def settings(interaction: discord.Interaction):
 
         @discord.ui.button(label="Change Embed Color", style=discord.ButtonStyle.primary, custom_id="change_embed_color", emoji="🎨")
         async def change_embed_color(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await interaction.response.edit_original_response(content="Select your new embed color from the menu", view=view)
+            await interaction.edit_original_response(content="Select your new embed color from the menu", view=view)
             #await interaction.response.send_modal(EmbedColorModal())
         #@discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting")
         #async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):

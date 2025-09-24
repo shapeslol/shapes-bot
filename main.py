@@ -536,6 +536,7 @@ class EmbedColorSelection(discord.ui.Modal, title="Test Modal"):
     async def on_submit(self, interaction: discord.Interaction):
         selected_color_value = int(self.color_select.values[0])
         embedDB.set(f"{interaction.user.id}", selected_color_value)
+        embedDB.asave()
         embed = discord.Embed(
             title="Embed Color Changed!",
             description=f"Your embed color has been changed successfully to {selected_color_value}!",

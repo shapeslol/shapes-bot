@@ -497,8 +497,9 @@ async def on_ready():
 
 def restartbot():
     print("Bot Restarting.")
-    os.execv(sys.executable, ["python3 backup.py"])
-    os.kill(os.getpid(), signal.SIGINT)
+    await bot.close()
+    await asyncio.sleep(2)
+    bot.run(token)
 
 
 def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str:
@@ -778,7 +779,6 @@ async def stop(interaction: discord.Interaction):
     if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip":
         await interaction.response.send_message(":white_check_mark: Shutdown Successfully!", ephemeral=False)
         await bot.close()
-        print("Bot Stopped.")
         sys.exit("Bot Stopped.")
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)

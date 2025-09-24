@@ -405,18 +405,18 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 #tree = app_commands.CommandTree(bot)
 
 # == save databases if bot closes/goes offline == #
-async def update_db_on_close():
-    while True:
-        time.sleep(2)
-        if bot.is_closed():
-            countingDB.save()
-            embedDB.save()
-            usersDB.save()
-            print(f"Saved EmbedDB {embedDB.all()}")
-            print(f"Saved CountingDB {countingDB.all()}")
-            print(f"Saved UsersDB {usersDB.all()}")
-            print("Bot Closed, Shutting Down Flask Server.")
-            os._exit(0)
+# async def update_db_on_close():
+    #while True:
+        #time.sleep(2)
+        #if bot.is_closed():
+            #countingDB.save()
+            #embedDB.save()
+            #usersDB.save()
+            #print(f"Saved EmbedDB {embedDB.all()}")
+            #print(f"Saved CountingDB {countingDB.all()}")
+            #print(f"Saved UsersDB {usersDB.all()}")
+            #print("Bot Closed, Shutting Down Flask Server.")
+            #os._exit(0)
 
 # == update databases every 4 seconds == #
 async def update_db():

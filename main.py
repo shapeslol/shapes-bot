@@ -1200,7 +1200,7 @@ if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
     bot.run(token)
 
-while true:
+while True:
     time.sleep(1)
     if bot.is_closed():
         countingDB.save()

@@ -404,47 +404,6 @@ class MyBot(Bot):
 bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 #tree = app_commands.CommandTree(bot)
 
-# == update databases every second == #
-while not bot.is_closed():
-    time.sleep(1)
-    countingDB.save()
-    embedDB.save()
-    usersDB.save()
-    print(f"EmbedDB = {embedDB.all()}")
-    print(f"CountingDB = {countingDB.all()}")
-    print(f"UsersDB = {usersDB.all()}")
-    for embed in embedDB.all():
-        print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
-    for user in bot.users:
-        if not embedDB.get(f"{user.id}"):
-            embedDB.set(f"{user.id}", discord.Color.blue())
-            embedDB.save()
-        if not usersDB.get(f"{user.id}"):
-            usersDB.set(f"{user.id}", user.name)
-            usersDB.save()
-        else:
-            continue
-    
-    for guild in bot.guilds:
-        if not countingDB.get(f"{guild.id}"):
-            countingDB.set(f"{guild.id}", {"channel": None, "number": 0, "enabled": False})
-            countingDB.save()
-        else:
-            continue 
-
-while true:
-    time.sleep(1)
-    if bot.is_closed():
-        countingDB.save()
-        embedDB.save()
-        usersDB.save()
-        print(f"Saved EmbedDB {embedDB.all()}")
-        print(f"Saved CountingDB {countingDB.all()}")
-        print(f"Saved UsersDB {usersDB.all()}")
-        print("Bot Closed, Shutting Down Flask Server.")
-        os._exit(0)
-        break
-
 # === Background task to update cached guilds every 30 seconds ===
 async def update_guild_cache():
     
@@ -1212,3 +1171,45 @@ def run_flask():
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
     bot.run(token)
+
+# == update databases every 4 seconds == #
+async def update_db():
+    while not bot.is_closed():
+        time.sleep(4)
+        countingDB.save()
+        embedDB.save()
+        usersDB.save()
+        print(f"EmbedDB = {embedDB.all()}")
+        print(f"CountingDB = {countingDB.all()}")
+        print(f"UsersDB = {usersDB.all()}")
+        for embed in embedDB.all():
+            print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
+        for user in bot.users:
+            if not embedDB.get(f"{user.id}"):
+                embedDB.set(f"{user.id}", discord.Color.blue())
+                embedDB.save()
+            if not usersDB.get(f"{user.id}"):
+                usersDB.set(f"{user.id}", user.name)
+                usersDB.save()
+            else:
+                continue
+    
+        for guild in bot.guilds:
+            if not countingDB.get(f"{guild.id}"):
+                countingDB.set(f"{guild.id}", {"channel": None, "number": 0, "enabled": False})
+                countingDB.save()
+            else:
+                continue
+
+while true:
+    time.sleep(1)
+    if bot.is_closed():
+        countingDB.save()
+        embedDB.save()
+        usersDB.save()
+        print(f"Saved EmbedDB {embedDB.all()}")
+        print(f"Saved CountingDB {countingDB.all()}")
+        print(f"Saved UsersDB {usersDB.all()}")
+        print("Bot Closed, Shutting Down Flask Server.")
+        os._exit(0)
+        break

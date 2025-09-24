@@ -421,8 +421,7 @@ async def update_db_on_close():
 # == update databases every 4 seconds == #
 async def update_db():
     while True:
-        time.sleep(1)
-        if bot.is_closed():
+        if not bot.is_closed():
             countingDB.save()
             embedDB.save()
             usersDB.save()
@@ -445,6 +444,9 @@ async def update_db():
                 if not countingDB.get(f"{guild.id}"):
                     countingDB.set(f"{guild.id}", {"channel": None, "number": 1, "enabled": False})
                     countingDB.save()
+
+        await asyncio.sleep(4)
+
 
 # === Background task to update cached guilds every 30 seconds ===
 async def update_guild_cache():

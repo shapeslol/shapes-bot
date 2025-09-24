@@ -548,7 +548,7 @@ async def sayhitouser(interaction: discord.Interaction, member: discord.Member):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
-    url = f"https://prp.bio/discord/{user.name}"
+    url = f"https://api.prp.bio/discord/{user.name}"
     print(url)
     response = requests.get(url)
     print(response.text)
@@ -755,7 +755,7 @@ async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
-    url = f"https://prp.bio/discord/{user.name}"
+    url = f"https://api.prp.bio/discord/{user.name}"
     print(url)
     response = requests.get(url)
     print(response.text)

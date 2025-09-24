@@ -497,8 +497,8 @@ async def on_ready():
 
 def restartbot():
     print("Bot Restarting.")
-    await bot.close()
-    await asyncio.sleep(2)
+    bot.close()
+    asyncio.sleep(2)
     bot.run(token)
 
 

@@ -406,12 +406,13 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 
 # == update databases every second == #
 while not bot.is_closed():
+    await asyncio.sleep(1)
     countingDB.save()
     embedDB.save()
     usersDB.save()
     print(f"EmbedDB = {embedDB.all()}")
     print(f"CountingDB = {countingDB.all()}")
-    print(f"UsersDB = {usersDB.all()}")
+    print(f"UsersDB = {usersDB.all()}")z
     for embed in embedDB.all():
         print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
     for user in bot.users:
@@ -430,7 +431,6 @@ while not bot.is_closed():
             countingDB.save()
         else:
             continue 
-    await asyncio.sleep(1)
 
 while true:
     time.sleep(1)

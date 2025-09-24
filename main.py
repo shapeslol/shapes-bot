@@ -406,7 +406,7 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 
 # == update databases every second == #
 while not bot.is_closed():
-    await asyncio.sleep(1)
+    time.sleep(1)
     countingDB.save()
     embedDB.save()
     usersDB.save()

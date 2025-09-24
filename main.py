@@ -412,7 +412,7 @@ while not bot.is_closed():
     usersDB.save()
     print(f"EmbedDB = {embedDB.all()}")
     print(f"CountingDB = {countingDB.all()}")
-    print(f"UsersDB = {usersDB.all()}")z
+    print(f"UsersDB = {usersDB.all()}")
     for embed in embedDB.all():
         print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
     for user in bot.users:

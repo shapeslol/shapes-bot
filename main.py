@@ -435,8 +435,8 @@ async def update_db():
                 embedDB.set(f"{user.id}", discord.Color.blue())
                 embedDB.save()
                 if not usersDB.get(f"{user.id}"):
-                usersDB.set(f"{user.id}", user.name)
-                usersDB.save()
+                    usersDB.set(f"{user.id}", user.name)
+                    usersDB.save()
                 else:
                     continue
     

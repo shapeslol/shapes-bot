@@ -435,10 +435,10 @@ async def update_db():
                 print(f"CountingDB Key: {info}, Value: {countingDB.get(info)}")
             for users in usersDB.all():
                 print(f"UsersDB Key: {users}, Value: {usersDB.get(users)}")
-            for user in bot.users:
-                if not usersDB.get(f"{user.id}"):
-                    usersDB.set(f"{user.id}", user.name)
-                    usersDB.save()
+            #for user in bot.users:
+                #if not usersDB.get(f"{user.id}"):
+                    #usersDB.set(f"{user.id}", user.name)
+                    #usersDB.save()
     
             for guild in bot.guilds:
                 if not countingDB.get(f"{guild.id}"):

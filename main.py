@@ -21,8 +21,8 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 ADMIN_KEY = "lc1220"
 
 #=== Database Setup ===
-countingDB = PickleDB('countingDATA.json')
-embedDB = PickleDB('embedData.json')
+countingDB = AsyncPickleDB('counting.db')
+embedDB = AsyncPickleDB('embed.db')
 
 # === Discord Bot Setup ===
 intents = discord.Intents.default()
@@ -403,8 +403,15 @@ class MyBot(Bot):
 bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 #tree = app_commands.CommandTree(bot)
 
-# === Background task to update cached guilds every 2 minutes ===
+# === Background task to update cached guilds every 30 seconds ===
 async def update_guild_cache():
+    # == Save Databases == #
+    embedDB.asave()
+    countingDB.asave()
+
+    print(f"EmbedDB = {embedDB.aall()}")
+    print(f"CountingDB = {countingDB.aall()}")
+
     global cached_guilds
     while True:
         await bot.tree.sync()

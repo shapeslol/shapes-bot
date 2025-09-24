@@ -421,6 +421,7 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 # == update databases every 4 seconds == #
 async def update_db():
     while True:
+        await asyncio.sleep(4)
         if not bot.is_closed():
             countingDB.save()
             embedDB.save()
@@ -439,8 +440,15 @@ async def update_db():
                 if not countingDB.get(f"{guild.id}"):
                     countingDB.set(f"{guild.id}", {"channel": None, "number": 1, "enabled": False})
                     countingDB.save()
-
-        await asyncio.sleep(4)
+        if bot.is_closed():
+            countingDB.save()
+            embedDB.save()
+            usersDB.save()
+            print(f"Saved EmbedDB {embedDB.all()}")
+            print(f"Saved CountingDB {countingDB.all()}")
+            print(f"Saved UsersDB {usersDB.all()}")
+            print("Bot Closed, Shutting Down Flask Server.")
+            os._exit(0)
 
 
 # === Background task to update cached guilds every 30 seconds ===

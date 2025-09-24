@@ -426,11 +426,15 @@ async def update_db():
             countingDB.save()
             embedDB.save()
             usersDB.save()
-            print(f"EmbedDB = {embedDB.all()}")
-            print(f"CountingDB = {countingDB.all()}")
-            print(f"UsersDB = {usersDB.all()}")
+            #print(f"EmbedDB = {embedDB.all()}")
+            #print(f"CountingDB = {countingDB.all()}")
+            #print(f"UsersDB = {usersDB.all()}")
             for embed in embedDB.all():
                 print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
+            for info in countingDB.all():
+                print(f"CountingDB Key: {info}, Value: {countingDB.get(info)}")
+            for users in usersDB.all():
+                print(f"UsersDB Key: {users}, Value: {usersDB.get(users)}")
             for user in bot.users:
                 if not usersDB.get(f"{user.id}"):
                     usersDB.set(f"{user.id}", user.name)
@@ -489,7 +493,7 @@ async def on_ready():
     MyBot(command_prefix="/", intents=discord.Intents.all())
     bot.loop.create_task(update_guild_cache())
     bot.loop.create_task(update_db())
-    bot.loop.create_task(update_db_on_close())
+    #bot.loop.create_task(update_db_on_close())
 
 def restartbot():
     print("Bot Restarting.")

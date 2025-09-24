@@ -432,13 +432,11 @@ async def update_db():
                 print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
             for user in bot.users:
                 if not embedDB.get(f"{user.id}"):
-                embedDB.set(f"{user.id}", discord.Color.blue())
-                embedDB.save()
+                    embedDB.set(f"{user.id}", discord.Color.blue())
+                    embedDB.save()
                 if not usersDB.get(f"{user.id}"):
                     usersDB.set(f"{user.id}", user.name)
                     usersDB.save()
-                else:
-                    continue
     
             for guild in bot.guilds:
                 if not countingDB.get(f"{guild.id}"):

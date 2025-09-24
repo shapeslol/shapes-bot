@@ -21,8 +21,8 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 ADMIN_KEY = "lc1220"
 
 #=== Database Setup ===
-countingDB = AsyncPickleDB('counting.db')
-embedDB = AsyncPickleDB('embed.db')
+countingDB = PickleDB('counting.db')
+embedDB = PickleDB('embed.db')
 
 # === Discord Bot Setup ===
 intents = discord.Intents.default()
@@ -406,11 +406,11 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 # === Background task to update cached guilds every 30 seconds ===
 async def update_guild_cache():
     # == Save Databases == #
-    embedDB.asave()
-    countingDB.asave()
+    embedDB.save()
+    countingDB.save()
 
-    print(f"EmbedDB = {embedDB.aall()}")
-    print(f"CountingDB = {countingDB.aall()}")
+    print(f"EmbedDB = {embedDB.all()}")
+    print(f"CountingDB = {countingDB.all()}")
 
     global cached_guilds
     while True:
@@ -536,7 +536,7 @@ class EmbedColorSelection(discord.ui.Modal, title="Test Modal"):
     async def on_submit(self, interaction: discord.Interaction):
         selected_color_value = int(self.color_select.values[0])
         embedDB.set(f"{interaction.user.id}", selected_color_value)
-        embedDB.asave()
+        embedDB.save()
         embed = discord.Embed(
             title="Embed Color Changed!",
             description=f"Your embed color has been changed successfully to {selected_color_value}!",

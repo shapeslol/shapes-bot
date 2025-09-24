@@ -405,17 +405,18 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 
 # === Background task to update cached guilds every 30 seconds ===
 async def update_guild_cache():
-    # == Save Databases == #
-    embedDB.save()
-    countingDB.save()
-
-    print(f"EmbedDB = {embedDB.all()}")
-    print(f"CountingDB = {countingDB.all()}")
+    
 
     global cached_guilds
     while True:
         await bot.tree.sync()
         cached_guilds = list(bot.guilds)
+        # == Save Databases == #
+        embedDB.save()
+        countingDB.save()
+
+        print(f"EmbedDB = {embedDB.all()}")
+        print(f"CountingDB = {countingDB.all()}")
         print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
         await bot.change_presence(activity=discord.CustomActivity(name="🔗 spook.bio/discord"))
         await asyncio.sleep(5)

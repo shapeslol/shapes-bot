@@ -39,18 +39,18 @@ try:
     with open('TOKEN.txt', 'r') as f:
         token = f.read()
 except FileNotFoundError:
-    #print("Error: The file 'TOKEN' was not found.")
+    print("Error: The file 'TOKEN' was not found.")
 except Exception as e:
-    #print(f"An error occurred: {e}")
+    print(f"An error occurred: {e}")
 
 # get the google API key from GoogleToken.txt
 try:
     with open('GoogleToken.txt', 'r') as f:
         GoogleAPIKey = f.read()
 except FileNotFoundError:
-    #print("Error: The file 'GoogleToken' was not found.")
+    print("Error: The file 'GoogleToken' was not found.")
 except Exception as e:
-    #print(f"An error occurred: {e}")
+    print(f"An error occurred: {e}")
 
 # === Flask App Setup ===
 app = Flask(__name__)
@@ -266,7 +266,7 @@ def send_message():
             try:
                 bot.loop.create_task(channel.send(message))
             except Exception as e:
-                #print(f"Failed to send message: {e}")
+                print(f"Failed to send message: {e}")
 
     return redirect(url_for("dashboard"))
 
@@ -412,10 +412,10 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
             #countingDB.save()
             #embedDB.save()
             #usersDB.save()
-            ##print(f"Saved EmbedDB {embedDB.all()}")
-            ##print(f"Saved CountingDB {countingDB.all()}")
-            ##print(f"Saved UsersDB {usersDB.all()}")
-            ##print("Bot Closed, Shutting Down Flask Server.")
+            #print(f"Saved EmbedDB {embedDB.all()}")
+            #print(f"Saved CountingDB {countingDB.all()}")
+            #print(f"Saved UsersDB {usersDB.all()}")
+            #print("Bot Closed, Shutting Down Flask Server.")
             #os._exit(0)
 
 # == update databases every 4 seconds == #
@@ -426,9 +426,9 @@ async def update_db():
             countingDB.save()
             embedDB.save()
             usersDB.save()
-            ##print(f"EmbedDB = {embedDB.all()}")
-            ##print(f"CountingDB = {countingDB.all()}")
-            ##print(f"UsersDB = {usersDB.all()}")
+            #print(f"EmbedDB = {embedDB.all()}")
+            #print(f"CountingDB = {countingDB.all()}")
+            #print(f"UsersDB = {usersDB.all()}")
             for embed in embedDB.all():
                 #print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
             for info in countingDB.all():
@@ -448,10 +448,10 @@ async def update_db():
             countingDB.save()
             embedDB.save()
             usersDB.save()
-            #print(f"Saved EmbedDB {embedDB.all()}")
-            #print(f"Saved CountingDB {countingDB.all()}")
-            #print(f"Saved UsersDB {usersDB.all()}")
-            #print("Bot Closed, Shutting Down Flask Server.")
+            print(f"Saved EmbedDB {embedDB.all()}")
+            print(f"Saved CountingDB {countingDB.all()}")
+            print(f"Saved UsersDB {usersDB.all()}")
+            print("Bot Closed, Shutting Down Flask Server.")
             os._exit(0)
 
 
@@ -461,14 +461,14 @@ async def update_guild_cache():
     while True:
         await bot.tree.sync()
         cached_guilds = list(bot.guilds)
-        #print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
+        print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
         await bot.change_presence(activity=discord.CustomActivity(name="🔗 spook.bio/discord"))
         await asyncio.sleep(5)
         if len(bot.guilds) == 1:
-            #print(bot.guilds[0].name)
+            print(bot.guilds[0].name)
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
         else:
-            #print(f"Watching {len(bot.guilds)} Servers")
+            print(f"Watching {len(bot.guilds)} Servers")
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
         cached_guilds = []
@@ -482,26 +482,26 @@ async def on_message(message):
         return
 
     if message.guild and message.author == "lcjunior1220":  # This checks if the message was sent in a guild
-        #print(f"Message '{message.content}' was sent in guild: {message.guild.name} (ID: {message.guild.id})")
+        print(f"Message '{message.content}' was sent in guild: {message.guild.name} (ID: {message.guild.id})")
         # You can add further logic here, e.g., checking specific guild IDs
         # if message.guild.id == YOUR_GUILD_ID:
         #     await message.channel.send("This message is from a specific guild!")
     else:
         if message.author == "lcjunior1220":
-            #print(f"Message '{message.content}' was sent in a DM.")
+            print(f"Message '{message.content}' was sent in a DM.")
 
 @bot.event
 async def on_ready():
     global bot_ready
     bot_ready = True
     await bot.tree.sync()
-    #print(f"Logged in as {bot.user}")
+    print(f"Logged in as {bot.user}")
     await bot.change_presence(activity=discord.CustomActivity(name="🔗 spook.bio/discord"))
     if len(bot.guilds) == 1:
-        #print(bot.guilds[0].name)
+        print(bot.guilds[0].name)
         #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
     else:
-        #print(f"Watching {len(bot.guilds)} Servers")
+        print(f"Watching {len(bot.guilds)} Servers")
         #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
     # Start the cache updater task
@@ -511,7 +511,7 @@ async def on_ready():
     #bot.loop.create_task(update_db_on_close())
 
 def restartbot():
-    #print("Bot Restarting.")
+    print("Bot Restarting.")
     bot.close()
     asyncio.sleep(2)
     bot.run(token)
@@ -553,9 +553,9 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 #discord_time_short = iso_to_discord_time(iso_time_utc, "f")
 #discord_time_relative = iso_to_discord_time(iso_time_utc, "R")
 
-##print(f"Short date/time: {discord_time_short}")
-##print(f"Long date/time: {discord_time_long}")
-##print(f"Relative time: {discord_time_relative}")
+#print(f"Short date/time: {discord_time_short}")
+#print(f"Long date/time: {discord_time_long}")
+#print(f"Relative time: {discord_time_relative}")
 
 DiscordColors = [
     discord.Color.blue(),
@@ -620,18 +620,18 @@ async def sayhitouser(interaction: discord.Interaction, member: discord.Member):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
     url = f"https://api.prp.bio/discord/{user.name}"
-    #print(url)
+    print(url)
     response = requests.get(url)
-    #print(response.text)
+    print(response.text)
     if response.status_code == 200:
         await interaction.response.send_message(f"{user.mention}'s [spook.bio Profile]({response.text})", ephemeral=False)
-        #print(f"Fetched {response.text} successfully!")
+        print(f"Fetched {response.text} successfully!")
     else:
         if interaction.user.name == user.name:
             await interaction.response.send_message(f":x: You don't have a spook.bio profile linked to your account {user.mention}! :x: To link your profile to your account please DM {owner} or {co_owner}")
             return
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
-        #print(f"Error fetching data: {response.status_code}")
+        print(f"Error fetching data: {response.status_code}")
 
 # === Message Commands ===
 @bot.tree.context_menu(name="google")
@@ -660,27 +660,27 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
             title = first_result.get("title", "No Title")
             snippet = first_result.get("snippet", "No Description")
             link = first_result.get("link", "No Link")
-            #print(f"First Result: {title} - {link}")
+            print(f"First Result: {title} - {link}")
             second_result = data["items"][1]
             second_result_title = second_result.get("title", "No Title")
             second_result_snippet = second_result.get("snippet", "No Description")
             second_result_link = second_result.get("link", "No Link")
-            #print(f"Second Result: {second_result_title} - {second_result_link}")
+            print(f"Second Result: {second_result_title} - {second_result_link}")
             third_result = data["items"][2]
             third_result_title = third_result.get("title", "No Title")
             third_result_snippet = third_result.get("snippet", "No Description")
             third_result_link = third_result.get("link", "No Link")
-            #print(f"Third Result: {third_result_title} - {third_result_link}")
+            print(f"Third Result: {third_result_title} - {third_result_link}")
             fourth_result = data["items"][3]
             fourth_result_title = fourth_result.get("title", "No Title")
             fourth_result_snippet = fourth_result.get("snippet", "No Description")
             fourth_result_link = fourth_result.get("link", "No Link")
-            #print(f"Fourth Result: {fourth_result_title} - {fourth_result_link}")
+            print(f"Fourth Result: {fourth_result_title} - {fourth_result_link}")
             fifth_result = data["items"][4]
             fifth_result_title = fifth_result.get("title", "No Title")
             fifth_result_snippet = fifth_result.get("snippet", "No Description")
             fifth_result_link = fifth_result.get("link", "No Link")
-            #print(f"Fifth Result: {fifth_result_title} - {fifth_result_link}")
+            print(f"Fifth Result: {fifth_result_title} - {fifth_result_link}")
             
             embed = discord.Embed(
                 title=f"Google Results For {query}",
@@ -698,7 +698,7 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
             noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=noresultembed)
     except requests.exceptions.RequestException as e:
-        #print(f"An error occurred during the API request: {e}")
+        print(f"An error occurred during the API request: {e}")
         errorembed = discord.Embed(
             title=":x: An error occurred while searching Google. Please try again later. :x:",
             color=discord.Color.red()
@@ -816,28 +816,28 @@ async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
     response = requests.get(url)
     if response.status_code == 200:
         await interaction.response.send_message(url, ephemeral=False)
-        #print("Fetched data successfully!")
+        print("Fetched data successfully!")
     else:
         await interaction.response.send_message(f":x: {response.status_code} Not Found :x:", ephemeral=True)
-        #print(f"Error fetching data: {response.status_code}")
+        print(f"Error fetching data: {response.status_code}")
 
 @bot.tree.command(name="discord2spook", description="Get a spook.bio profile from a discord user.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
     url = f"https://api.prp.bio/discord/{user.name}"
-    #print(url)
+    print(url)
     response = requests.get(url)
-    #print(response.text)
+    print(response.text)
     if response.status_code == 200:
         await interaction.response.send_message(f"{user.mention}'s [spook.bio Profile]({response.text})", ephemeral=False)
-        #print(f"Fetched {response.text} successfully!")
+        print(f"Fetched {response.text} successfully!")
     else:
         if interaction.user.name == user.name:
             await interaction.response.send_message(f":x: You don't have a spook.bio profile linked to your account {user.mention}! :x: To link your profile to your account please DM {owner} or {co_owner}")
             return
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
-        #print(f"Error fetching data: {response.status_code}")
+        print(f"Error fetching data: {response.status_code}")
 
 @bot.tree.command(name="ping", description="Check the bot's latency.")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -868,7 +868,7 @@ async def ping(interaction: discord.Interaction):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox"):
 
-    #print(f"Searching For {user}")
+    print(f"Searching For {user}")
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
         title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}!",
@@ -877,7 +877,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
     await interaction.followup.send(embed=thinkingembed)
 
     url = "https://users.roblox.com/v1/usernames/users"
-    # #print(f"Fetching Data From {url}")
+    # print(f"Fetching Data From {url}")
     
     request_payload = {
         "usernames": [user],
@@ -893,10 +893,10 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
             UserID = userinfo["id"]
             Display = userinfo["displayName"]
             user = userinfo["name"]
-            #print(f"UserInfo: {userinfo}")
+            print(f"UserInfo: {userinfo}")
 
         else:
-            #print(f"{user} not found.")
+            print(f"{user} not found.")
             failedembed7 = discord.Embed(
                 title=f":warning: {user} not found.",
                 color=discord.Color.yellow()
@@ -905,7 +905,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
             return
 
     except requests.exceptions.RequestException as e:
-        #print(f"An error occurred during the API request: {e}")
+        print(f"An error occurred during the API request: {e}")
         failedembed8 = discord.Embed(
             title=f":warning: {user} not found.",
             color=discord.Color.yellow()
@@ -919,7 +919,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
         response = requests.get(url)
         response.raise_for_status()
         RoProData = response.json()
-        #print(RoProData)
+        print(RoProData)
         Discord = RoProData["discord"]    
         if Discord != "":
             embed = discord.Embed(
@@ -941,7 +941,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
             #await interaction.edit_original_response(f"{user} does not have Discord linked to their profile!")
             return    
     except requests.exceptions.RequestException as e:
-                #print(f"Error fetching RoPro data for ID {UserID}: {e}")
+                print(f"Error fetching RoPro data for ID {UserID}: {e}")
                 failedembed2 = discord.Embed(
                     title=f"Error retrieving Discord User from {user}",
                     color=discord.Color.red()
@@ -976,27 +976,27 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
             title = first_result.get("title", "No Title")
             snippet = first_result.get("snippet", "No Description")
             link = first_result.get("link", "No Link")
-            #print(f"First Result: {title} - {link}")
+            print(f"First Result: {title} - {link}")
             second_result = data["items"][1]
             second_result_title = second_result.get("title", "No Title")
             second_result_snippet = second_result.get("snippet", "No Description")
             second_result_link = second_result.get("link", "No Link")
-            #print(f"Second Result: {second_result_title} - {second_result_link}")
+            print(f"Second Result: {second_result_title} - {second_result_link}")
             third_result = data["items"][2]
             third_result_title = third_result.get("title", "No Title")
             third_result_snippet = third_result.get("snippet", "No Description")
             third_result_link = third_result.get("link", "No Link")
-            #print(f"Third Result: {third_result_title} - {third_result_link}")
+            print(f"Third Result: {third_result_title} - {third_result_link}")
             fourth_result = data["items"][3]
             fourth_result_title = fourth_result.get("title", "No Title")
             fourth_result_snippet = fourth_result.get("snippet", "No Description")
             fourth_result_link = fourth_result.get("link", "No Link")
-            #print(f"Fourth Result: {fourth_result_title} - {fourth_result_link}")
+            print(f"Fourth Result: {fourth_result_title} - {fourth_result_link}")
             fifth_result = data["items"][4]
             fifth_result_title = fifth_result.get("title", "No Title")
             fifth_result_snippet = fifth_result.get("snippet", "No Description")
             fifth_result_link = fifth_result.get("link", "No Link")
-            #print(f"Fifth Result: {fifth_result_title} - {fifth_result_link}")
+            print(f"Fifth Result: {fifth_result_title} - {fifth_result_link}")
             
             embed = discord.Embed(
                 title=f"Google Results For {query}",
@@ -1014,7 +1014,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
             noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=noresultembed)
     except requests.exceptions.RequestException as e:
-        #print(f"An error occurred during the API request: {e}")
+        print(f"An error occurred during the API request: {e}")
         errorembed = discord.Embed(
             title=":x: An error occurred while searching Google. Please try again later. :x:",
             color=discord.Color.red()
@@ -1040,7 +1040,7 @@ async def invite(interaction: discord.Interaction):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     
-    #print(f"Searching For {user}'s profile")
+    print(f"Searching For {user}'s profile")
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
                 title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}'s Roblox Profile!",
@@ -1049,7 +1049,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     await interaction.followup.send(embed=thinkingembed)
 
     url = "https://users.roblox.com/v1/usernames/users"
-    # #print(f"Fetching Data From {url}")
+    # print(f"Fetching Data From {url}")
     
     request_payload = {
         "usernames": [user],
@@ -1064,21 +1064,21 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             userinfo = data["data"][0]
             UserID = userinfo["id"]
             Display = userinfo["displayName"]
-            #print(f"UserInfo: {userinfo}")
+            print(f"UserInfo: {userinfo}")
 
             url = f"https://users.roblox.com/v1/users/{UserID}"
             try:
                 response = requests.get(url)
                 response.raise_for_status()
                 playerdata = response.json()
-                #print(playerdata)
+                print(playerdata)
                 Description = playerdata["description"]
                 Banned = playerdata["isBanned"]
                 user = playerdata["name"]
                 JoinDate = playerdata["created"]
                 RobloxJoinDate_DiscordTimestamp = isotodiscordtimestamp(JoinDate, "F")
             except requests.exceptions.RequestException as e:
-                #print(f"Error fetching user data for ID {UserID}: {e}")
+                print(f"Error fetching user data for ID {UserID}: {e}")
                 failedembed = discord.Embed(
                     title=f":x: An error occurred while fetching data for user ID: {UserID}. Please try again later.",
                     color=discord.Color.red()
@@ -1099,11 +1099,11 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 response = requests.get(url)
                 response.raise_for_status()
                 RoProData = response.json()
-                #print(RoProData)
+                print(RoProData)
                 Discord = RoProData["discord"]
             
             except requests.exceptions.RequestException as e:
-                #print(f"Error fetching RoPro data for ID {UserID}: {e}")
+                print(f"Error fetching RoPro data for ID {UserID}: {e}")
                 failedembed2 = discord.Embed(
                     title=f"Error retrieving Discord User from {url}",
                     color=discord.Color.red()
@@ -1157,9 +1157,9 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 if data and data.get("data") and len(data["data"]) > 0:
                     HeadShot = data["data"][0].get("imageUrl")
                     embed.set_author(name=user, url=profileurl, icon_url=HeadShot)
-                    #print(data)
+                    print(data)
                 else:
-                    #print(f"Error fetching avatar headshot: {e}")
+                    print(f"Error fetching avatar headshot: {e}")
                     failedembed3 = discord.Embed(
                         title=f"Failed To Retrieve {user}'s Headshot!",
                         color=discord.Color.red()
@@ -1168,7 +1168,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
                     return
             except requests.exceptions.RequestException as e:
-                #print(f"Error fetching avatar headshot: {e}")
+                print(f"Error fetching avatar headshot: {e}")
                 failedembed4 = discord.Embed(
                     title=f"Failed To Retrieve {user}'s Headshot!",
                     color=discord.Color.red()
@@ -1187,11 +1187,11 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     AvatarBust = data["data"][0].get("imageUrl")
                     embed.set_thumbnail(url=AvatarBust)
                     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-                    #print(data)
+                    print(data)
                     await interaction.edit_original_response(embed=embed, view=view)
                     return
                 else:
-                    #print(f"Error fetching avatar bust: {e}")
+                    print(f"Error fetching avatar bust: {e}")
                     failedembed5 = discord.Embed(
                         title=f"Failed To Retrieve {user}'s avatar bust!",
                         color=discord.Color.red()
@@ -1200,7 +1200,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                     return
             except requests.exceptions.RequestException as e:
-                #print(f"Error fetching avatar bust: {e}")
+                print(f"Error fetching avatar bust: {e}")
                 failedembed6 = discord.Embed(
                     title=f"Failed To Retrieve {user}'s avatar bust!",
                     color=discord.Color.red()
@@ -1209,7 +1209,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                 return
         else:
-            #print(f"{user} not found.")
+            print(f"{user} not found.")
             failedembed7 = discord.Embed(
                 title=f":warning: {user} not found.",
                 color=discord.Color.yellow()
@@ -1218,7 +1218,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             #await interaction.edit_original_response(f"{user} not found.")
             return
     except requests.exceptions.RequestException as e:
-        #print(f"An error occurred during the API request: {e}")
+        print(f"An error occurred during the API request: {e}")
         failedembed8 = discord.Embed(
             title=f":warning: {user} not found.",
             color=discord.Color.yellow()
@@ -1230,7 +1230,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 # === Flask Runner in Thread ===
 def run_flask():
     port = int(os.environ.get("PORT", 5000))
-    #print(f"Starting Flask on port {port}")
+    print(f"Starting Flask on port {port}")
     app.run(host="0.0.0.0", port=port)
 
 # === Run Bot + Flask Webserver ===

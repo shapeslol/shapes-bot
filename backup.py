@@ -8,6 +8,7 @@ import asyncio
 import discord
 import aiohttp
 import pytz
+from pickledb import PickleDB
 from datetime import datetime, timezone
 from discord import app_commands
 import requests
@@ -18,6 +19,11 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 
 # === Hardcoded Admin Key (change this!) ===
 ADMIN_KEY = "lc1220"
+
+#=== Database Setup ===
+countingDB = PickleDB('counting.db')
+embedDB = PickleDB('embed.db')
+usersDB = PickleDB('users.db')
 
 # === Discord Bot Setup ===
 intents = discord.Intents.default()
@@ -398,7 +404,58 @@ class MyBot(Bot):
 bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 #tree = app_commands.CommandTree(bot)
 
-# === Background task to update cached guilds every 2 minutes ===
+# == save databases if bot closes/goes offline == #
+# async def update_db_on_close():
+    #while True:
+        #time.sleep(2)
+        #if bot.is_closed():
+            #countingDB.save()
+            #embedDB.save()
+            #usersDB.save()
+            #print(f"Saved EmbedDB {embedDB.all()}")
+            #print(f"Saved CountingDB {countingDB.all()}")
+            #print(f"Saved UsersDB {usersDB.all()}")
+            #print("Bot Closed, Shutting Down Flask Server.")
+            #os._exit(0)
+
+# == update databases every 4 seconds == #
+async def update_db():
+    while True:
+        await asyncio.sleep(4)
+        if not bot.is_closed():
+            countingDB.save()
+            embedDB.save()
+            usersDB.save()
+            #print(f"EmbedDB = {embedDB.all()}")
+            #print(f"CountingDB = {countingDB.all()}")
+            #print(f"UsersDB = {usersDB.all()}")
+            for embed in embedDB.all():
+                print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
+            for info in countingDB.all():
+                print(f"CountingDB Key: {info}, Value: {countingDB.get(info)}")
+            for users in usersDB.all():
+                print(f"UsersDB Key: {users}, Value: {usersDB.get(users)}")
+            #for user in bot.users:
+                #if not usersDB.get(f"{user.id}"):
+                    #usersDB.set(f"{user.id}", user.name)
+                    #usersDB.save()
+    
+            for guild in bot.guilds:
+                if not countingDB.get(f"{guild.id}"):
+                    countingDB.set(f"{guild.id}", {"channel": None, "number": 1, "enabled": False})
+                    countingDB.save()
+        if bot.is_closed():
+            countingDB.save()
+            embedDB.save()
+            usersDB.save()
+            print(f"Saved EmbedDB {embedDB.all()}")
+            print(f"Saved CountingDB {countingDB.all()}")
+            print(f"Saved UsersDB {usersDB.all()}")
+            print("Bot Closed, Shutting Down Flask Server.")
+            os._exit(0)
+
+
+# === Background task to update cached guilds every 30 seconds ===
 async def update_guild_cache():
     global cached_guilds
     while True:
@@ -419,6 +476,21 @@ async def update_guild_cache():
 
 # === Bot Events ===
 @bot.event
+async def on_message(message):
+    # Ignore messages sent by the bot itself
+    if message.author == bot.user:
+        return
+
+    if message.guild and message.content == "server_test":  # This checks if the message was sent in a guild
+        print(f"Message '{message.content}' was sent in guild: {message.guild.name} (ID: {message.guild.id})")
+        # You can add further logic here, e.g., checking specific guild IDs
+        # if message.guild.id == YOUR_GUILD_ID:
+        #     await message.channel.send("This message is from a specific guild!")
+    else:
+        if message.content == "server_test":
+            print(f"Message '{message.content}' was sent in a DM.")
+
+@bot.event
 async def on_ready():
     global bot_ready
     bot_ready = True
@@ -435,11 +507,14 @@ async def on_ready():
     # Start the cache updater task
     MyBot(command_prefix="/", intents=discord.Intents.all())
     bot.loop.create_task(update_guild_cache())
+    bot.loop.create_task(update_db())
+    #bot.loop.create_task(update_db_on_close())
 
 def restartbot():
     print("Bot Restarting.")
-    os.execv(sys.executable, ["python3 main.py =)"])
-    os.kill(os.getpid(), signal.SIGINT)
+    bot.close()
+    asyncio.sleep(2)
+    bot.run(token)
 
 
 def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str:
@@ -482,18 +557,69 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
 #print(f"Long date/time: {discord_time_long}")
 #print(f"Relative time: {discord_time_relative}")
 
+DiscordColors = [
+    discord.Color.blue(),
+    discord.Color.red(),
+    discord.Color.green(),
+    discord.Color.purple(),
+    discord.Color.orange(),
+    discord.Color.gold(),
+    discord.Color.teal(),
+    discord.Color.dark_blue(),
+    discord.Color.dark_red(),
+    discord.Color.dark_green(),
+    discord.Color.dark_purple(),
+    discord.Color.dark_orange(),
+    discord.Color.dark_gold(),
+    discord.Color.dark_teal()
+]
+
+class EmbedColorSelection(discord.ui.Modal, title="Test Modal"):
+    modal_choices = [discord.Color.blue(), discord.Color.red(), discord.Color.green(), discord.Color.purple(), discord.Color.orange(), discord.Color.gold(), discord.Color.teal(), discord.Color.dark_blue(), discord.Color.dark_red(), discord.Color.dark_green(), discord.Color.dark_purple(), discord.Color.dark_orange(), discord.Color.dark_gold(), discord.Color.dark_teal()]
+    color_select = discord.ui.Select(
+        options=[discord.SelectOption(label="Blue", description="A nice blue color", value=str(discord.Color.blue().value), emoji="🔵"),
+        discord.SelectOption(label="Red", description="A vibrant red color", value=str(discord.Color.red().value), emoji="🔴"),
+            discord.SelectOption(label="Green", description="A refreshing green color", value=str(discord.Color.green().value), emoji="🟢"),
+            discord.SelectOption(label="Purple", description="A royal purple color", value=str(discord.Color.purple().value), emoji="🟣"),
+            discord.SelectOption(label="Orange", description="A bright orange color", value=str(discord.Color.orange().value), emoji="🟠"),
+            discord.SelectOption(label="Gold", description="A shiny gold color", value=str(discord.Color.gold().value), emoji="🟡"),
+            discord.SelectOption(label="Teal", description="A cool teal color", value=str(discord.Color.teal().value), emoji="🔷"),
+            discord.SelectOption(label="Dark Blue", description="A deep dark blue color", value=str(discord.Color.dark_blue().value), emoji="🔷"),
+            discord.SelectOption(label="Dark Red", description="A deep dark red color", value=str(discord.Color.dark_red().value), emoji="🔴"),
+            discord.SelectOption(label="Dark Green", description="A deep dark green color", value=str(discord.Color.dark_green().value), emoji="🟢"),
+            discord.SelectOption(label="Dark Purple", description="A deep dark purple color", value=str(discord.Color.dark_purple().value), emoji="🟣"),
+            discord.SelectOption(label="Dark Orange", description="A deep dark orange color", value=str(discord.Color.dark_orange().value), emoji="🟠"),
+            discord.SelectOption(label="Dark Gold", description="A deep dark gold color", value=str(discord.Color.dark_gold().value), emoji="🟡"),
+            discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷"),
+        ]
+    )
+    def __init__(self):
+        super().__init__()
+        self.add_item(self.color_select)
+    async def on_submit(self, interaction: discord.Interaction):
+        selected_color_value = int(self.color_select.values[0])
+        embedDB.set(f"{interaction.user.id}", selected_color_value)
+        embedDB.save()
+        embed = discord.Embed(
+            title="Embed Color Changed!",
+            description=f"Your embed color has been changed successfully to {selected_color_value}!",
+            color=selected_color_value
+        )
+        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
 # === User Commands ===
-@bot.tree.context_menu(name="menutest")
+@bot.tree.context_menu(name="sayhitouser")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def menutest(interaction: discord.Interaction, member: discord.Member):
-    await interaction.response.send_message(f"Hello, {member.display_name}!")
+async def sayhitouser(interaction: discord.Interaction, member: discord.Member):
+    await interaction.response.send_message(f"Hello, {member.mention}!")
 
 @bot.tree.context_menu(name="discord2spook")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
-    url = f"https://prp.bio/discord/{user.name}"
+    url = f"https://api.prp.bio/discord/{user.name}"
     print(url)
     response = requests.get(url)
     print(response.text)
@@ -516,7 +642,7 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
     query = message.content
     thinkingembed = discord.Embed(
         title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}!",
-        color=discord.Color.blue()
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
     # replace spaces with + in query for google search link
@@ -559,7 +685,7 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
             embed = discord.Embed(
                 title=f"Google Results For {query}",
                 description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n{second_result_snippet}\n\n**3. [{third_result_title}]({third_result_link})**\n{third_result_snippet}\n\n**4. [{fourth_result_title}]({fourth_result_link})**\n{fourth_result_snippet}\n\n**5. [{fifth_result_title}]({fifth_result_link})**\n{fifth_result_snippet}\n\n[Search For More Results](https://google.com/search?q={properquery})",
-                color=discord.Color.blue()
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=embed)
@@ -581,6 +707,80 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
         await interaction.edit_original_response(embed=errorembed)
 
 # === Bot Commands ===
+@bot.tree.command(name="settings", description="Your Settings For Shapes")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def settings(interaction: discord.Interaction):
+    current = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    # loop through the colors to figure out which one is the current one and set the default value on the selectoption as True
+    defaults = []
+    for color in DiscordColors:
+        if color.value == current:
+            defaults.append(True)
+        else:
+            defaults.append(False)
+
+
+    view = discord.ui.View()
+    color_select = discord.ui.Select(
+        placeholder="Select your embed color",
+        options=[
+            discord.SelectOption(label="Blue", description="A nice blue color", value=str(discord.Color.blue().value), emoji="🔵", default=defaults[0]),
+            discord.SelectOption(label="Red", description="A vibrant red color", value=str(discord.Color.red().value), emoji="🔴", default=defaults[1]),
+            discord.SelectOption(label="Green", description="A refreshing green color", value=str(discord.Color.green().value), emoji="🟢", default=defaults[2]),
+            discord.SelectOption(label="Purple", description="A royal purple color", value=str(discord.Color.purple().value), emoji="🟣", default=defaults[3]),
+            discord.SelectOption(label="Orange", description="A bright orange color", value=str(discord.Color.orange().value), emoji="🟠", default=defaults[4]),
+            discord.SelectOption(label="Gold", description="A shiny gold color", value=str(discord.Color.gold().value), emoji="🟡", default=defaults[5]),
+            discord.SelectOption(label="Teal", description="A cool teal color", value=str(discord.Color.teal().value), emoji="🔷", default=defaults[6]),
+            discord.SelectOption(label="Dark Blue", description="A deep dark blue color", value=str(discord.Color.dark_blue().value), emoji="🔷", default=defaults[7]),
+            discord.SelectOption(label="Dark Red", description="A deep dark red color", value=str(discord.Color.dark_red().value), emoji="🔴", default=defaults[8]),
+            discord.SelectOption(label="Dark Green", description="A deep dark green color", value=str(discord.Color.dark_green().value), emoji="🟢", default=defaults[9]),
+            discord.SelectOption(label="Dark Purple", description="A deep dark purple color", value=str(discord.Color.dark_purple().value), emoji="🟣", default=defaults[10]),
+            discord.SelectOption(label="Dark Orange", description="A deep dark orange color", value=str(discord.Color.dark_orange().value), emoji="🟠", default=defaults[11]),
+            discord.SelectOption(label="Dark Gold", description="A deep dark gold color", value=str(discord.Color.dark_gold().value), emoji="🟡", default=defaults[12]),
+            discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷", default=defaults[13]),
+        ]
+    )
+    async def on_submit(interaction: discord.Interaction):
+        selected_color_value = int(color_select.values[0])
+        selected_color_name = color_select.values[0]
+        embedDB.set(f"{interaction.user.id}", selected_color_value)
+        embed = discord.Embed(
+            title="Embed Color Changed!",
+            description=f"Your embed color has been changed successfully to {selected_color_name}!",
+            color=selected_color_value
+        )
+        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    color_select.callback = on_submit
+    view.add_item(color_select)
+
+    class SettingsView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=None)  # No timeout
+
+        @discord.ui.button(label="Change Embed Color", style=discord.ButtonStyle.primary, custom_id="change_embed_color", emoji="🎨")
+        async def change_embed_color(self, interaction: discord.Interaction, button: discord.ui.Button):
+            await interaction.response.send_message(content="Select an embed color from the menu", view=view, ephemeral=True)
+            #await interaction.response.send_modal(EmbedColorModal())
+        #@discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting")
+        #async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
+        #    current_setting = countingDB.get("enabled")
+        #    if current_setting:
+        #        countingDB.set("enabled", False)
+        #        await interaction.response.send_message("Counting feature disabled.", ephemeral=True)
+        #    else:
+        #        countingDB.set("enabled", True)
+        #        await interaction.response.send_message("Counting feature enabled.", ephemeral=True)
+    embed = discord.Embed(
+        title="Settings",
+        description="Choose a setting below to modify it.",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.response.send_message(embed=embed, view=SettingsView(), ephemeral=True)
+
+
 @bot.tree.command(name="status", description=f"Get the {MainURL} status")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -594,7 +794,6 @@ async def stop(interaction: discord.Interaction):
     if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip":
         await interaction.response.send_message(":white_check_mark: Shutdown Successfully!", ephemeral=False)
         await bot.close()
-        print("Bot Stopped.")
         sys.exit("Bot Stopped.")
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
@@ -626,7 +825,7 @@ async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
-    url = f"https://prp.bio/discord/{user.name}"
+    url = f"https://api.prp.bio/discord/{user.name}"
     print(url)
     response = requests.get(url)
     print(response.text)
@@ -649,7 +848,7 @@ async def ping(interaction: discord.Interaction):
     embed = discord.Embed(
         title="Bot Server Stats"
         , description=f"Latency: `{latency:.2f}ms` ({connection} Connection)"
-        , color=discord.Color.blue()
+        , color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.response.send_message(embed=embed)
@@ -658,8 +857,8 @@ async def ping(interaction: discord.Interaction):
     updatedconnection = "Good" if updatedlatency < 200 else "Average" if updatedlatency < 400 else "Poor"
     embed = discord.Embed(
         title="Bot Server Stats"
-        , description=f"OriginalLatency: `{latency:.2f}ms` ({connection} Connection) EditLatency: `{updatedlatency:.2f}ms` ({updatedconnection} Connection)"
-        , color=discord.Color.blue()
+        , description=f"OriginalLatency: `{latency:.2f}ms` ({connection} Connection)\nEditLatency: `{updatedlatency:.2f}ms` ({updatedconnection} Connection)"
+        , color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.edit_original_response(embed=embed, content=None)
@@ -673,7 +872,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
         title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}!",
-        color=discord.Color.blue()
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
 
@@ -726,7 +925,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
             embed = discord.Embed(
                 title=f"{user}'s Discord Username",
                 description=f"```{Discord}```",
-                color=discord.Color.blue()
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=embed)
@@ -758,7 +957,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
         title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}!",
-        color=discord.Color.blue()
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
     
@@ -802,7 +1001,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
             embed = discord.Embed(
                 title=f"Google Results For {query}",
                 description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n{second_result_snippet}\n\n**3. [{third_result_title}]({third_result_link})**\n{third_result_snippet}\n\n**4. [{fourth_result_title}]({fourth_result_link})**\n{fourth_result_snippet}\n\n**5. [{fifth_result_title}]({fifth_result_link})**\n{fifth_result_snippet}\n\n[Search For More Results](https://google.com/search?q={properquery})",
-                color=discord.Color.blue()
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=embed)
@@ -828,7 +1027,13 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def invite(interaction: discord.Interaction):
     invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}"
-    await interaction.response.send_message(f"Invite me to your server or add me to your apps using this link: {invite_url}", ephemeral=False)
+    embed = discord.Embed(
+        description=f"[Click Here To Add Shapes To Your Server or Apps]({invite_url})",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.response.send_message(embed=embed, ephemeral=False)
+    #await interaction.response.send_message(f"Invite me to your server or add me to your apps using this link: {invite_url}", ephemeral=False)
 
 @bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -839,7 +1044,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
                 title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}'s Roblox Profile!",
-                color=discord.Color.blue()
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
     await interaction.followup.send(embed=thinkingembed)
 
@@ -930,12 +1135,12 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 title=Username,
                 url=profileurl,
                 description=Description,
-                color=discord.Color.blue()
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
             if Discord != "":
                 embed.add_field(
                     name="Discord (RoPro)",
-                    value=f"```{Discord}```",
+                    value=f"```\n{Discord}\n```",
                     inline=False
                 )
             

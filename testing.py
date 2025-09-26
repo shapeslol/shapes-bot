@@ -467,13 +467,16 @@ async def update_guild_cache():
 # === Bot Events ===
 @bot.event
 async def on_message(message):
-    if message.guild:  # This checks if the message was sent in a guild
-        print(f"Message '{message.content}' was sent in guild: {message.guild.name} (ID: {message.guild.id})")
-        # You can add further logic here, e.g., checking specific guild IDs
-        # if message.guild.id == YOUR_GUILD_ID:
-        #     await message.channel.send("This message is from a specific guild!")
-    else:
-        print(f"Message '{message.content}' was sent in a DM.")
+    # Ignore messages sent by the bot to prevent infinite loops
+    if message.author == bot.user:
+        return
+
+    # Print the content of the message
+    print(f'Message from {message.author} in #{message.channel}: {message.content}')
+
+    # You can add logic here to process the message, e.g., respond to commands
+    if message.content.lower() == 'hello':
+        await message.channel.send(f'Hello, {message.author.mention}!')
 
 @bot.event
 async def on_ready():

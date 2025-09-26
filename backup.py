@@ -481,13 +481,13 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    if message.guild and message.content == "server_test":  # This checks if the message was sent in a guild
+    if message.guild and message.author == "lcjunior1220":  # This checks if the message was sent in a guild
         print(f"Message '{message.content}' was sent in guild: {message.guild.name} (ID: {message.guild.id})")
         # You can add further logic here, e.g., checking specific guild IDs
         # if message.guild.id == YOUR_GUILD_ID:
         #     await message.channel.send("This message is from a specific guild!")
     else:
-        if message.content == "server_test":
+        if message.author == "lcjunior1220":
             print(f"Message '{message.content}' was sent in a DM.")
 
 @bot.event

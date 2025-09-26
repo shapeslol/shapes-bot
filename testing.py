@@ -421,7 +421,7 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 # == update databases every 4 seconds == #
 async def update_db():
     while True:
-        await asyncio.sleep(4)
+        await asyncio.sleep(1)
         if not bot.is_closed():
             countingDB.save()
             embedDB.save()
@@ -473,10 +473,16 @@ async def on_message(message):
 
     # Print the content of the message
     print(f'Message from {message.author} in #{message.channel}: {message.content}')
-
-    # You can add logic here to process the message, e.g., respond to commands
-    if message.content.lower() == 'hello':
-        await message.channel.send(f'Hello, {message.author.mention}!')
+    if message.guild:
+        server = message.guild
+        if message.content.lower() == 'hello' and message.channel.id == countingDB.get(server.id)'channel':
+            await message.channel.send(f'Hello, {message.author.mention}!')
+    else:
+        invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}"
+        invite_embed = discord.Embed(
+            description=f"[Click Here To Add Shapes To Your Server or Apps]({invite_url})",
+            color=embedDB.get(f"{message.author.id}") if embedDB.get(f"{message.author.id}") else discord.Color.blue()
+        )
 
 @bot.event
 async def on_ready():
@@ -501,7 +507,7 @@ async def on_ready():
 def restartbot():
     print("Bot Restarting.")
     bot.close()
-    asyncio.sleep(2)
+    time.sleep(10)
     bot.run(token)
 
 
@@ -796,6 +802,79 @@ async def restart(interaction: discord.Interaction):
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
+@bot.tree.command(name="settings", description="Your Settings For Shapes")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def settings(interaction: discord.Interaction):
+    current = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    # loop through the colors to figure out which one is the current one and set the default value on the selectoption as True
+    defaults = []
+    for color in DiscordColors:
+        if color.value == current:
+            defaults.append(True)
+        else:
+            defaults.append(False)
+
+
+    view = discord.ui.View()
+    color_select = discord.ui.Select(
+        placeholder="Select your embed color",
+        options=[
+            discord.SelectOption(label="Blue", description="A nice blue color", value=str(discord.Color.blue().value), emoji="🔵", default=defaults[0]),
+            discord.SelectOption(label="Red", description="A vibrant red color", value=str(discord.Color.red().value), emoji="🔴", default=defaults[1]),
+            discord.SelectOption(label="Green", description="A refreshing green color", value=str(discord.Color.green().value), emoji="🟢", default=defaults[2]),
+            discord.SelectOption(label="Purple", description="A royal purple color", value=str(discord.Color.purple().value), emoji="🟣", default=defaults[3]),
+            discord.SelectOption(label="Orange", description="A bright orange color", value=str(discord.Color.orange().value), emoji="🟠", default=defaults[4]),
+            discord.SelectOption(label="Gold", description="A shiny gold color", value=str(discord.Color.gold().value), emoji="🟡", default=defaults[5]),
+            discord.SelectOption(label="Teal", description="A cool teal color", value=str(discord.Color.teal().value), emoji="🔷", default=defaults[6]),
+            discord.SelectOption(label="Dark Blue", description="A deep dark blue color", value=str(discord.Color.dark_blue().value), emoji="🔷", default=defaults[7]),
+            discord.SelectOption(label="Dark Red", description="A deep dark red color", value=str(discord.Color.dark_red().value), emoji="🔴", default=defaults[8]),
+            discord.SelectOption(label="Dark Green", description="A deep dark green color", value=str(discord.Color.dark_green().value), emoji="🟢", default=defaults[9]),
+            discord.SelectOption(label="Dark Purple", description="A deep dark purple color", value=str(discord.Color.dark_purple().value), emoji="🟣", default=defaults[10]),
+            discord.SelectOption(label="Dark Orange", description="A deep dark orange color", value=str(discord.Color.dark_orange().value), emoji="🟠", default=defaults[11]),
+            discord.SelectOption(label="Dark Gold", description="A deep dark gold color", value=str(discord.Color.dark_gold().value), emoji="🟡", default=defaults[12]),
+            discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷", default=defaults[13]),
+        ]
+    )
+    async def on_submit(interaction: discord.Interaction):
+        selected_color_value = int(color_select.values[0])
+        selected_color_name = color_select.values[0]
+        embedDB.set(f"{interaction.user.id}", selected_color_value)
+        embed = discord.Embed(
+            title="Embed Color Changed!",
+            description=f"Your embed color has been changed successfully to {selected_color_name}!",
+            color=selected_color_value
+        )
+        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    color_select.callback = on_submit
+    view.add_item(color_select)
+
+    class SettingsView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=None)  # No timeout
+
+        @discord.ui.button(label="Change Counting Channel", style=discord.ButtonStyle.primary, custom_id="change_counting_channel", emoji=)
+        async def change_embed_color(self, interaction: discord.Interaction, button: discord.ui.Button):
+            await interaction.response.send_message(content="Select a channel for counting", view=view, ephemeral=True)
+            #await interaction.response.send_modal(EmbedColorModal())
+        #@discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting")
+        #async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
+        #    current_setting = countingDB.get("enabled")
+        #    if current_setting:
+        #        countingDB.set("enabled", False)
+        #        await interaction.response.send_message("Counting feature disabled.", ephemeral=True)
+        #    else:
+        #        countingDB.set("enabled", True)
+        #        await interaction.response.send_message("Counting feature enabled.", ephemeral=True)
+    embed = discord.Embed(
+        title="Counting Settings",
+        description="Choose a setting below to modify it.",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.response.send_message(embed=embed, view=SettingsView(), ephemeral=True)
+
 @bot.tree.command(name="spookpfp", description="Get a pfp from a user's spook.bio profile.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1015,12 +1094,12 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def invite(interaction: discord.Interaction):
     invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}"
-    embed = discord.Embed(
+    invite_embed = discord.Embed(
         description=f"[Click Here To Add Shapes To Your Server or Apps]({invite_url})",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-    await interaction.response.send_message(embed=embed, ephemeral=False)
+    await interaction.response.send_message(embed=invite_embed, ephemeral=False)
     #await interaction.response.send_message(f"Invite me to your server or add me to your apps using this link: {invite_url}", ephemeral=False)
 
 @bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.")

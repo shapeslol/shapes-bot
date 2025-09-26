@@ -429,16 +429,6 @@ async def update_db():
             #print(f"EmbedDB = {embedDB.all()}")
             #print(f"CountingDB = {countingDB.all()}")
             #print(f"UsersDB = {usersDB.all()}")
-            for embed in embedDB.all():
-                #print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
-            for info in countingDB.all():
-                #print(f"CountingDB Key: {info}, Value: {countingDB.get(info)}")
-            for users in usersDB.all():
-                #print(f"UsersDB Key: {users}, Value: {usersDB.get(users)}")
-            #for user in bot.users:
-                #if not usersDB.get(f"{user.id}"):
-                    #usersDB.set(f"{user.id}", user.name)
-                    #usersDB.save()
     
             for guild in bot.guilds:
                 if not countingDB.get(f"{guild.id}"):

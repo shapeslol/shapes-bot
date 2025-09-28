@@ -829,6 +829,8 @@ async def counting(interaction: discord.Interaction):
     counting_json = countingDB.get(server.id)
     countingDATA = str(counting_json)
     print(countingDATA)
+    await interaction.response.send_message(f"COMING SOON!")
+    return
     countingData = json.loads(countingDATA)
     channels = server.channels
 

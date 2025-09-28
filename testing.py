@@ -827,8 +827,9 @@ async def counting(interaction: discord.Interaction):
     server = interaction.guild
     print(server.id)
     counting_json = countingDB.get(server.id)
-    print(str(counting_json))
-    countingData = json.loads(str(counting_json))
+    countingDATA = str(counting_json)
+    print(countingDATA)
+    countingData = json.loads(countingDATA)
     channels = server.channels
 
     view = discord.ui.View()

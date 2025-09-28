@@ -476,6 +476,7 @@ async def on_message(message):
     if message.guild:
         server = message.guild
         countingjson = countingDB.get(server.id)
+        return
         counting_data = json.loads(str(countingjson))
         number = counting_data['number']
         enabled = counting_data['enabled']

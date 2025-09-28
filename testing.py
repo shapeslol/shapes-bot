@@ -475,8 +475,23 @@ async def on_message(message):
     print(f'Message from {message.author} in #{message.channel}: {message.content}')
     if message.guild:
         server = message.guild
-        if message.content.lower() == 'hello' and message.channel.id == countingDB.get(server.id)'channel':
-            await message.channel.send(f'Hello, {message.author.mention}!')
+        countingjson = countingDB.get(server.id)
+        counting_data = json.loads(countingjson)
+        number = counting_data['number']
+        enabled = counting_data['enabled']
+        channel = counting_data['channel']
+        next_number = number + 1
+        if message.content.lower() == next_number and message.channel.id == channel and enabled == True:
+            await message.add_reaction('👍')
+        else:
+            if counting_warnings[server.id] < 3:
+                await message.channel.send(f":x: The next number is {next_number}")
+            if counting_warnings[server.id] >= 3:
+                await message.channel.send(f":x: {message.author.mention} ruined it at {number}, the next number is 1")
+                number = 1
+                next_number = 2
+                counting_data['number'] = number
+                countingDB.set(counting_data)
     else:
         invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}"
         invite_embed = discord.Embed(
@@ -565,11 +580,12 @@ DiscordColors = [
     discord.Color.dark_purple(),
     discord.Color.dark_orange(),
     discord.Color.dark_gold(),
-    discord.Color.dark_teal()
+    discord.Color.dark_teal(),
+    discord.Color.random()
 ]
 
 class EmbedColorSelection(discord.ui.Modal, title="Test Modal"):
-    modal_choices = [discord.Color.blue(), discord.Color.red(), discord.Color.green(), discord.Color.purple(), discord.Color.orange(), discord.Color.gold(), discord.Color.teal(), discord.Color.dark_blue(), discord.Color.dark_red(), discord.Color.dark_green(), discord.Color.dark_purple(), discord.Color.dark_orange(), discord.Color.dark_gold(), discord.Color.dark_teal()]
+    modal_choices = [discord.Color.blue(), discord.Color.red(), discord.Color.green(), discord.Color.purple(), discord.Color.orange(), discord.Color.gold(), discord.Color.teal(), discord.Color.dark_blue(), discord.Color.dark_red(), discord.Color.dark_green(), discord.Color.dark_purple(), discord.Color.dark_orange(), discord.Color.dark_gold(), discord.Color.dark_teal(), discord.Color.random()]
     color_select = discord.ui.Select(
         options=[discord.SelectOption(label="Blue", description="A nice blue color", value=str(discord.Color.blue().value), emoji="🔵"),
         discord.SelectOption(label="Red", description="A vibrant red color", value=str(discord.Color.red().value), emoji="🔴"),
@@ -585,6 +601,7 @@ class EmbedColorSelection(discord.ui.Modal, title="Test Modal"):
             discord.SelectOption(label="Dark Orange", description="A deep dark orange color", value=str(discord.Color.dark_orange().value), emoji="🟠"),
             discord.SelectOption(label="Dark Gold", description="A deep dark gold color", value=str(discord.Color.dark_gold().value), emoji="🟡"),
             discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷"),
+            discord.SelectOption(label="Random", description="A random color", value=str(discord.Color.random().value), emoji="🔷"),
         ]
     )
     def __init__(self):
@@ -649,7 +666,7 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
         data = response.json()
 
         # Get First 5 results
-        if "items" in data and len(data["items"]) > 0:
+        if "items" in data and len(data["items"]) >= 5:
             first_result = data["items"][0]
             title = first_result.get("title", "No Title")
             snippet = first_result.get("snippet", "No Description")
@@ -733,11 +750,12 @@ async def settings(interaction: discord.Interaction):
             discord.SelectOption(label="Dark Orange", description="A deep dark orange color", value=str(discord.Color.dark_orange().value), emoji="🟠", default=defaults[11]),
             discord.SelectOption(label="Dark Gold", description="A deep dark gold color", value=str(discord.Color.dark_gold().value), emoji="🟡", default=defaults[12]),
             discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷", default=defaults[13]),
+            discord.SelectOption(label="Random", description="A random color", value=str(discord.Color.random().value), emoji="🔷", default=defaults[14]),
         ]
     )
     async def on_submit(interaction: discord.Interaction):
         selected_color_value = int(color_select.values[0])
-        selected_color_name = color_select.values[0]
+        selected_color_name = color_select.values[0].name
         embedDB.set(f"{interaction.user.id}", selected_color_value)
         embed = discord.Embed(
             title="Embed Color Changed!",
@@ -802,78 +820,68 @@ async def restart(interaction: discord.Interaction):
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
-@bot.tree.command(name="settings", description="Your Settings For Shapes")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def settings(interaction: discord.Interaction):
-    current = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    # loop through the colors to figure out which one is the current one and set the default value on the selectoption as True
-    defaults = []
-    for color in DiscordColors:
-        if color.value == current:
-            defaults.append(True)
-        else:
-            defaults.append(False)
-
+@bot.tree.command(name="counting", description="Counting Settings")
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+async def counting(interaction: discord.Interaction):
+    server = interaction.guild
+    counting_json = countingDB.get(interaction.guild.id)
+    countingData = json.loads(counting_json)
+    channels = server.channels
 
     view = discord.ui.View()
-    color_select = discord.ui.Select(
-        placeholder="Select your embed color",
-        options=[
-            discord.SelectOption(label="Blue", description="A nice blue color", value=str(discord.Color.blue().value), emoji="🔵", default=defaults[0]),
-            discord.SelectOption(label="Red", description="A vibrant red color", value=str(discord.Color.red().value), emoji="🔴", default=defaults[1]),
-            discord.SelectOption(label="Green", description="A refreshing green color", value=str(discord.Color.green().value), emoji="🟢", default=defaults[2]),
-            discord.SelectOption(label="Purple", description="A royal purple color", value=str(discord.Color.purple().value), emoji="🟣", default=defaults[3]),
-            discord.SelectOption(label="Orange", description="A bright orange color", value=str(discord.Color.orange().value), emoji="🟠", default=defaults[4]),
-            discord.SelectOption(label="Gold", description="A shiny gold color", value=str(discord.Color.gold().value), emoji="🟡", default=defaults[5]),
-            discord.SelectOption(label="Teal", description="A cool teal color", value=str(discord.Color.teal().value), emoji="🔷", default=defaults[6]),
-            discord.SelectOption(label="Dark Blue", description="A deep dark blue color", value=str(discord.Color.dark_blue().value), emoji="🔷", default=defaults[7]),
-            discord.SelectOption(label="Dark Red", description="A deep dark red color", value=str(discord.Color.dark_red().value), emoji="🔴", default=defaults[8]),
-            discord.SelectOption(label="Dark Green", description="A deep dark green color", value=str(discord.Color.dark_green().value), emoji="🟢", default=defaults[9]),
-            discord.SelectOption(label="Dark Purple", description="A deep dark purple color", value=str(discord.Color.dark_purple().value), emoji="🟣", default=defaults[10]),
-            discord.SelectOption(label="Dark Orange", description="A deep dark orange color", value=str(discord.Color.dark_orange().value), emoji="🟠", default=defaults[11]),
-            discord.SelectOption(label="Dark Gold", description="A deep dark gold color", value=str(discord.Color.dark_gold().value), emoji="🟡", default=defaults[12]),
-            discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷", default=defaults[13]),
-        ]
+    channel_select = discord.ui.Select(
+        placeholder="Select a channel for counting",
+        options=[]
     )
-    async def on_submit(interaction: discord.Interaction):
-        selected_color_value = int(color_select.values[0])
-        selected_color_name = color_select.values[0]
-        embedDB.set(f"{interaction.user.id}", selected_color_value)
+    for channel in channels:
+        new_channel = discord.SelectOption(
+            label=channel.name,
+            value=channel.id,
+        )
+        channel_select.options.append(new_channel)
+    async def on_channel_submit(interaction: discord.Interaction):
+        selected_channel_value = int(channel_select.values[0])
+        countingData['channel'] = selected_channel_value
+        countingData['enabled'] = True
+        countingDB.set(interaction.guild.id, countingData)
         embed = discord.Embed(
-            title="Embed Color Changed!",
-            description=f"Your embed color has been changed successfully to {selected_color_name}!",
-            color=selected_color_value
+            title="Counting Channel Changed!",
+            description=f"The counting channel has been changed successfully to {channel_select.values[0].name}!",
+            color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
         )
         embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.response.send_message(embed=embed, ephemeral=True)
-    color_select.callback = on_submit
-    view.add_item(color_select)
+    channel_select.callback = on_channel_submit
+    view.add_item(channel_select)
 
-    class SettingsView(discord.ui.View):
+    class CountingView(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=None)  # No timeout
-
-        @discord.ui.button(label="Change Counting Channel", style=discord.ButtonStyle.primary, custom_id="change_counting_channel", emoji=)
-        async def change_embed_color(self, interaction: discord.Interaction, button: discord.ui.Button):
+        @discord.ui.button(label="Change Counting Channel", style=discord.ButtonStyle.primary, custom_id="change_counting_channel")
+        async def change_counting_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
             await interaction.response.send_message(content="Select a channel for counting", view=view, ephemeral=True)
             #await interaction.response.send_modal(EmbedColorModal())
-        #@discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting")
-        #async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
-        #    current_setting = countingDB.get("enabled")
-        #    if current_setting:
-        #        countingDB.set("enabled", False)
-        #        await interaction.response.send_message("Counting feature disabled.", ephemeral=True)
-        #    else:
-        #        countingDB.set("enabled", True)
-        #        await interaction.response.send_message("Counting feature enabled.", ephemeral=True)
+        @discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting")
+        async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
+            countingdatajson = countingDB.get(interaction.guild.id)
+            countingdata = json.loads(countingdatajson)
+            current_setting = countingdata['enabled']
+            if current_setting == True:
+                current_setting = False
+                countingDB.set(interaction.guild.id, countingdata)
+                await interaction.response.send_message("Counting disabled.", ephemeral=True)
+            else:
+                current_setting = True
+                countingDB.set(interaction.guild.id, countingdata)
+                await interaction.response.send_message("Counting enabled.", ephemeral=True)
     embed = discord.Embed(
         title="Counting Settings",
         description="Choose a setting below to modify it.",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-    await interaction.response.send_message(embed=embed, view=SettingsView(), ephemeral=True)
+    await interaction.response.send_message(embed=embed, view=CountingView(), ephemeral=True)
 
 @bot.tree.command(name="spookpfp", description="Get a pfp from a user's spook.bio profile.")
 @app_commands.allowed_installs(guilds=True, users=True)

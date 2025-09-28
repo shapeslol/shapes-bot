@@ -825,7 +825,9 @@ async def restart(interaction: discord.Interaction):
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 async def counting(interaction: discord.Interaction):
     server = interaction.guild
-    counting_json = countingDB.get(interaction.guild.id)
+    print(server.id)
+    counting_json = countingDB.get(server.id)
+    print(str(counting_json))
     countingData = json.loads(str(counting_json))
     channels = server.channels
 

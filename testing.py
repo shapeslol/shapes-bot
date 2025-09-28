@@ -756,7 +756,7 @@ async def settings(interaction: discord.Interaction):
     )
     async def on_submit(interaction: discord.Interaction):
         selected_color_value = int(color_select.values[0])
-        selected_color_name = color_select.values[0].name
+        selected_color_name = color_select.values[0]
         embedDB.set(f"{interaction.user.id}", selected_color_value)
         embed = discord.Embed(
             title="Embed Color Changed!",
@@ -853,7 +853,7 @@ async def counting(interaction: discord.Interaction):
         countingDB.set(interaction.guild.id, countingData)
         embed = discord.Embed(
             title="Counting Channel Changed!",
-            description=f"The counting channel has been changed successfully to {channel_select.values[0].name}!",
+            description=f"The counting channel has been changed successfully to {channel_select.values[0]}!",
             color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
         )
         embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")

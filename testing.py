@@ -476,7 +476,7 @@ async def on_message(message):
     if message.guild:
         server = message.guild
         countingjson = countingDB.get(server.id)
-        counting_data = json.loads(countingjson)
+        counting_data = json.loads(str(countingjson))
         number = counting_data['number']
         enabled = counting_data['enabled']
         channel = counting_data['channel']
@@ -826,7 +826,7 @@ async def restart(interaction: discord.Interaction):
 async def counting(interaction: discord.Interaction):
     server = interaction.guild
     counting_json = countingDB.get(interaction.guild.id)
-    countingData = json.loads(counting_json)
+    countingData = json.loads(str(counting_json))
     channels = server.channels
 
     view = discord.ui.View()
@@ -865,7 +865,7 @@ async def counting(interaction: discord.Interaction):
         @discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting")
         async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
             countingdatajson = countingDB.get(interaction.guild.id)
-            countingdata = json.loads(countingdatajson)
+            countingdata = json.loads(str(countingdatajson))
             current_setting = countingdata['enabled']
             if current_setting == True:
                 current_setting = False

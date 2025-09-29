@@ -544,7 +544,7 @@ async def on_ready():
     bot.loop.create_task(update_db())
     #bot.loop.create_task(update_db_on_close())
 
-def restartbot():
+async def restartbot():
     print("Bot Restarting.")
     await bot.close(token)
     await asyncio.sleep(10)

@@ -8,7 +8,7 @@ import asyncio
 import discord
 import aiohttp
 import pytz
-# import pandas as pd # Last resort if i keep getting json errors
+import pandas as pd # Last resort if i keep getting json errors
 from pickledb import PickleDB
 from datetime import datetime, timezone
 from discord import app_commands
@@ -16,7 +16,7 @@ import requests
 from discord.ext import commands
 from discord.gateway import DiscordWebSocket, _log
 from discord.ext.commands import Bot
-from flask import Flask, render_template_string, request, redirect, url_for, session
+from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
 # === Hardcoded Admin Key (change this!) ===
 ADMIN_KEY = "lc1220"
@@ -401,6 +401,23 @@ class MyBot(Bot):
                 # This is apparently what the official Discord client does.
                 ws_params.update(sequence=self.ws.sequence, resume=True, session=self.ws.session_id)
 
+colors = [
+    [3447003] = "Blue",
+    [15158332] = "Red",
+    [3066993] = "Green",
+    [10181046] = "Purple",
+    [15105570] = "Orange",
+    [15844367] = "Gold",
+    [1752220] = "Teal",
+    [2123412] = "Dark Blue",
+    [10038562] = "Dark Red",
+    [2067276] = "Dark Green",
+    [7419530] = "Dark Purple",
+    [11027200] = "Dark Orange",
+    [12745742] = "Dark Gold", # I might change "Gold" To "Yellow" tbh.
+    [1146986] = "Dark Teal"
+]
+
 #bot = commands.Bot(command_prefix="/", intents=intents)
 bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 #tree = app_commands.CommandTree(bot)
@@ -419,7 +436,36 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
             #print("Bot Closed, Shutting Down Flask Server.")
             #os._exit(0)
 
+# == update databases every second == #
+async def update_db():
+    while True:
+        await asyncio.sleep(1)
+        if not bot.is_closed():
+            countingDB.save()
+            embedDB.save()
+            usersDB.save()
+            #print(f"EmbedDB = {embedDB.all()}")
+            #print(f"CountingDB = {countingDB.all()}")
+            #print(f"UsersDB = {usersDB.all()}")
+            for guild in bot.guilds:
+                if not countingDB.get(f"{guild.id}"):
+                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
+                    countingDB.save()
+            for embed in embedDB.all():
+                print(1)
+                #print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
+            for info in countingDB.all():
+                print(2)
+                #print(f"CountingDB Key: {info}, Value: {countingDB.get(info)}")
+            for users in usersDB.all():
+                print(3)
+                #print(f"UsersDB Key: {users}, Value: {usersDB.get(users)}")
+            #for user in bot.users:
+                #if not usersDB.get(f"{user.id}"):
+                    #usersDB.set(f"{user.id}", user.name)
+                    #usersDB.save()
 # == update databases every 4 seconds == #
+
 async def update_db():
     while True:
         await asyncio.sleep(1)
@@ -453,6 +499,7 @@ async def update_guild_cache():
         await bot.tree.sync()
         cached_guilds = list(bot.guilds)
         print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
+        print(f"[SYSTEM] Watching {BotInfo.approximate_user_install_count} Users! As of {time.strftime('%X')}")
         await bot.change_presence(activity=discord.CustomActivity(name="🔗 spook.bio/discord"))
         await asyncio.sleep(5)
         if len(bot.guilds) == 1:
@@ -530,6 +577,7 @@ async def on_ready():
     bot_ready = True
     await bot.tree.sync()
     print(f"Logged in as {bot.user}")
+    BotInfo = await bot.application_info()
     await bot.change_presence(activity=discord.CustomActivity(name="🔗 spook.bio/discord"))
     if len(bot.guilds) == 1:
         print(bot.guilds[0].name)
@@ -537,12 +585,28 @@ async def on_ready():
     else:
         print(f"Watching {len(bot.guilds)} Servers")
         #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
-
     # Start the cache updater task
     MyBot(command_prefix="/", intents=discord.Intents.all())
     bot.loop.create_task(update_guild_cache())
     bot.loop.create_task(update_db())
     #bot.loop.create_task(update_db_on_close())
+
+@app.route('/server_count', methods=["GET"])
+def get_server_count():
+    # Ensure the bot is ready before accessing guilds
+    if bot.is_ready():
+        server_count = len(bot.guilds)
+        return jsonify({"server_count": server_count})
+    else:
+        return jsonify({"server_count": "Unknown"}), 503
+
+@app.route('/user-count', methods=["GET"])
+def get_user_count():
+    if bot.is_ready():
+        user_count = BotInfo.approximate_user_install_count
+        return jsonify({"user_count": user_count})
+    else:
+        return jsonify({"user_count": "Unknown"}), 503
 
 async def restartbot():
     print("Bot Restarting.")

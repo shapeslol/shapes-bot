@@ -8,6 +8,7 @@ import asyncio
 import discord
 import aiohttp
 import pytz
+# import pandas as pd # Last resort if i keep getting json errors
 from pickledb import PickleDB
 from datetime import datetime, timezone
 from discord import app_commands
@@ -432,7 +433,7 @@ async def update_db():
     
             for guild in bot.guilds:
                 if not countingDB.get(f"{guild.id}"):
-                    countingDB.set(f"{guild.id}", {"channel": None, "number": 1, "enabled": False})
+                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
                     countingDB.save()
         if bot.is_closed():
             countingDB.save()
@@ -481,18 +482,41 @@ async def on_message(message):
         number = counting_data['number']
         enabled = counting_data['enabled']
         channel = counting_data['channel']
+        warnings = counting_data['warnings']
+        LastCounter = counting_data['LastCounter']
         next_number = number + 1
-        if message.content.lower() == next_number and message.channel.id == channel and enabled == True:
+        if message.content.lower() == next_number and message.channel.id == channel and enabled == True and message.author.id != LastCounter.id:
             await message.add_reaction('👍')
+            LastCounter = message.author
+            counting_data["LastCounter"] = LastCounter
+            countingDB.set(server.id, counting_data)
         else:
-            if counting_warnings[server.id] < 3:
-                await message.channel.send(f":x: The next number is {next_number}")
-            if counting_warnings[server.id] >= 3:
+            if enabled == False:
+                return
+            
+            if channel != message.channel.id:
+                return
+            
+            if message.author.id == LastCounter.id:
+                await message.channel.send(f":warning: You cannot count by yourself!")
+                warnings = warnings + 1
+                counting_data['warnings'] = warnings
+                countingDB.set(server.id, counting_data)
+                return
+            if warnings < 3:
+                await message.channel.send(f":warning: The next number is {next_number}")
+                warnings = warnings + 1
+                counting_data['warnings'] = warnings
+                countingDB.set(server.id, counting_data)
+                return
+            if warnings >= 3:
                 await message.channel.send(f":x: {message.author.mention} ruined it at {number}, the next number is 1")
-                number = 1
+                number = 0
                 next_number = 2
+                warnings = 0
                 counting_data['number'] = number
-                countingDB.set(counting_data)
+                countingDB.set(server.id, counting_data)
+                return
     else:
         invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}"
         invite_embed = discord.Embed(
@@ -522,8 +546,8 @@ async def on_ready():
 
 def restartbot():
     print("Bot Restarting.")
-    bot.close()
-    time.sleep(10)
+    await bot.close(token)
+    await asyncio.sleep(10)
     bot.run(token)
 
 
@@ -633,6 +657,7 @@ async def sayhitouser(interaction: discord.Interaction, member: discord.Member):
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
     url = f"https://api.prp.bio/discord/{user.name}"
     print(url)
+    print(user.id)
     response = requests.get(url)
     print(response.text)
     if response.status_code == 200:
@@ -702,6 +727,14 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=embed)
         else:
+            if "items" in data and len(data["items"]) > 0:
+                notenoughresultsembed = discord.Embed(
+                title=":x: Not enough results found! :x:",
+                description=f"Please search on google yourself as there wasn't enough results to generate an embed | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+            )
+            noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=notenoughresultsembed)
             noresultembed = discord.Embed(
                 title=":x: No results found! :x:",
                 description=f"No Results for {query} | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
@@ -757,6 +790,9 @@ async def settings(interaction: discord.Interaction):
     async def on_submit(interaction: discord.Interaction):
         selected_color_value = int(color_select.values[0])
         selected_color_name = color_select.values[0]
+        print(selected_color_name)
+        print(color_select)
+        print(color_select.values)
         embedDB.set(f"{interaction.user.id}", selected_color_value)
         embed = discord.Embed(
             title="Embed Color Changed!",
@@ -831,8 +867,7 @@ async def counting(interaction: discord.Interaction):
     countingDATA = str(counting_json)
     print(countingDATA)
     await interaction.response.send_message(f"COMING SOON!", ephemeral=True)
-    return
-    countingData = json.loads(countingDATA)
+    countingData = json.load(countingDATA)
     channels = server.channels
 
     view = discord.ui.View()
@@ -907,6 +942,7 @@ async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
     url = f"https://api.prp.bio/discord/{user.name}"
+    print(user.id)
     print(url)
     response = requests.get(url)
     print(response.text)

@@ -512,8 +512,7 @@ async def on_message(message):
     # Ignore messages sent by the bot to prevent infinite loops
     if message.author == bot.user:
         return
-    usercheck = IsBot(message.author)
-    if usercheck == True:
+    if message.author.bot:
         return
 
     if message.guild:
@@ -574,7 +573,7 @@ async def on_ready():
     await bot.tree.sync()
     print(f"Logged in as {bot.user}")
     BotInfo = await bot.application_info()
-    await bot.change_presence(activity=discord.CustomActivity(name="🔗 spook.bio/discord"))
+    await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 {MainURL}/discord"))
     if len(bot.guilds) == 1:
         print(bot.guilds[0].name)
         #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))

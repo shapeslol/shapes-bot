@@ -6,3 +6,4 @@ aiohttp
 bs4
 pickledb
 pandas
+slpp

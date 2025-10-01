@@ -9,6 +9,7 @@ import discord
 import aiohttp
 import pytz
 import pandas as pd # Last resort if i keep getting json errors
+from slpp import slpp as lua
 from pickledb import PickleDB
 from datetime import datetime, timezone
 from discord import app_commands
@@ -401,22 +402,9 @@ class MyBot(Bot):
                 # This is apparently what the official Discord client does.
                 ws_params.update(sequence=self.ws.sequence, resume=True, session=self.ws.session_id)
 
-colors = [
-    ["3447003"] = "Blue",
-    ["15158332"] = "Red",
-    ["3066993"] = "Green",
-    ["10181046"] = "Purple",
-    ["15105570"] = "Orange",
-    ["15844367"] = "Gold",
-    ["1752220"] = "Teal",
-    ["2123412"] = "Dark Blue",
-    ["10038562"] = "Dark Red",
-    ["2067276"] = "Dark Green",
-    ["7419530"] = "Dark Purple",
-    ["11027200"] = "Dark Orange",
-    ["12745742"] = "Dark Gold", # I might change "Gold" To "Yellow" tbh.
-    ["1146986"] = "Dark Teal"
-]
+colors_lua = """{[3447003] = "Blue", [15158332] = "Red", [3066993] = "Green", [10181046] = "Purple", [15105570] = "Orange", [15844367] = "Gold", [1752220] = "Teal", [2123412] = "Dark Blue", [10038562] = "Dark Red", [2067276] = "Dark Green", [7419530] = "Dark Purple", [11027200] = "Dark Orange", [12745742] = "Dark Gold", [1146986] = "Dark Teal"}"""
+colors = lua.decode(colors_lua)
+print(colors)
 
 #bot = commands.Bot(command_prefix="/", intents=intents)
 bot = MyBot(command_prefix="/", intents=discord.Intents.all())
@@ -500,8 +488,8 @@ async def update_guild_cache():
         cached_guilds = list(bot.guilds)
         print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
         print(f"[SYSTEM] Watching {BotInfo.approximate_user_install_count} Users! As of {time.strftime('%X')}")
-        await bot.change_presence(activity=discord.CustomActivity(name="🔗 spook.bio/discord"))
-        await asyncio.sleep(5)
+        await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 {MainURL}/discord"))
+        await asyncio.sleep(2.5)
         if len(bot.guilds) == 1:
             print(bot.guilds[0].name)
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
@@ -528,11 +516,11 @@ async def on_message(message):
     if usercheck == True:
         return
 
-    # Print the content of the message
-    print(f'Message from {message.author} in #{message.channel}: {message.content}')
-    server = message.guild
+    if message.guild:
+        # Print the content of the message
+        print(f'Message from {message.author} in #{message.channel}: {message.content}')
+        server = message.guild
         countingjson = countingDB.get(server.id)
-        return
         counting_data = json.loads(str(countingjson))
         number = counting_data['number']
         enabled = counting_data['enabled']
@@ -861,9 +849,7 @@ async def settings(interaction: discord.Interaction):
     )
     async def on_submit(interaction: discord.Interaction):
         selected_color_value = int(color_select.values[0])
-        selected_color_name = colors[str(color_select.values[0])]
-        if not selected_color_name:
-            selected_color_name = "Unknown"
+        selected_color_name = colors.get(selected_color_value, "Unknown")
         print(selected_color_name)
         print(color_select)
         print(color_select.values)

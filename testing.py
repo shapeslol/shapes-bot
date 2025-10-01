@@ -512,17 +512,25 @@ async def update_guild_cache():
         cached_guilds = []
         await asyncio.sleep(30)
 
+async def IsBot(User):
+    if User.Bot:
+        return True
+    else:
+        return False
+
 # === Bot Events ===
 @bot.event
 async def on_message(message):
     # Ignore messages sent by the bot to prevent infinite loops
     if message.author == bot.user:
         return
+    usercheck = IsBot(message.author)
+    if usercheck == True:
+        return
 
     # Print the content of the message
     print(f'Message from {message.author} in #{message.channel}: {message.content}')
-    if message.guild:
-        server = message.guild
+    server = message.guild
         countingjson = countingDB.get(server.id)
         return
         counting_data = json.loads(str(countingjson))
@@ -928,65 +936,58 @@ async def counting(interaction: discord.Interaction):
     server = interaction.guild
     print(server.id)
     counting_json = countingDB.get(server.id)
-    countingDATA = str(counting_json)
-    print(countingDATA)
-    await interaction.response.send_message(f"COMING SOON!", ephemeral=True)
-    countingData = json.load(countingDATA)
+    countingData = json.loads(str(counting_json))
+    print(countingData)
+    if not countingData:
+        countingDB.set(server.id, {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
+        countingDB.save()
+        counting_json = countingDB.get(server.id)
+        countingData = json.loads(str(counting_json))
+    print(countingData)
+    print(countingData['channel'])
+    print(countingData['number'])
+    print(countingData['enabled'])
+    print(countingData['warnings'])
+    print(countingData['lastcounter'])
     channels = server.channels
-
-    view = discord.ui.View()
-    channel_select = discord.ui.Select(
-        placeholder="Select a channel for counting",
-        options=[]
-    )
+    channel_options = []
     for channel in channels:
-        new_channel = discord.SelectOption(
-            label=channel.name,
-            value=channel.id,
-        )
-        channel_select.options.append(new_channel)
-    async def on_channel_submit(interaction: discord.Interaction):
-        selected_channel_value = int(channel_select.values[0])
-        countingData['channel'] = selected_channel_value
-        countingData['enabled'] = True
-        countingDB.set(interaction.guild.id, countingData)
-        embed = discord.Embed(
-            title="Counting Channel Changed!",
-            description=f"The counting channel has been changed successfully to {channel_select.values[0]}!",
-            color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-        )
-        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-    channel_select.callback = on_channel_submit
-    view.add_item(channel_select)
-
+        if isinstance(channel, discord.TextChannel):
+            channel_options.append(discord.SelectOption(label=channel.name, value=str(channel.id)))
     class CountingView(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=None)  # No timeout
-        @discord.ui.button(label="Change Counting Channel", style=discord.ButtonStyle.primary, custom_id="change_counting_channel")
-        async def change_counting_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await interaction.response.send_message(content="Select a channel for counting", view=view, ephemeral=True)
-            #await interaction.response.send_modal(EmbedColorModal())
-        @discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting")
+
+        @discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting", emoji="🔢")
         async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
-            countingdatajson = countingDB.get(interaction.guild.id)
-            countingdata = json.loads(str(countingdatajson))
-            current_setting = countingdata['enabled']
-            if current_setting == True:
-                current_setting = False
-                countingDB.set(interaction.guild.id, countingdata)
-                await interaction.response.send_message("Counting disabled.", ephemeral=True)
+            counting_json = countingDB.get(server.id)
+            countingData = json.loads(str(counting_json))
+            current_setting = countingData['enabled']
+            if current_setting:
+                countingData['enabled'] = False
+                countingDB.set(server.id, countingData)
+                await interaction.response.send_message("Counting feature disabled.", ephemeral=True)
             else:
-                current_setting = True
-                countingDB.set(interaction.guild.id, countingdata)
-                await interaction.response.send_message("Counting enabled.", ephemeral=True)
+                countingData['enabled'] = True
+                countingDB.set(server.id, countingData)
+                await interaction.response.send_message("Counting feature enabled.", ephemeral=True)
+
+        @discord.ui.select(placeholder="Select Counting Channel", options=channel_options, custom_id="select_channel")
+        async def select_channel(self, interaction: discord.Interaction, select: discord.ui.Select):
+            selected_channel_id = int(select.values[0])
+            counting_json = countingDB.get(server.id)
+            countingData = json.loads(str(counting_json))
+            countingData['channel'] = selected_channel_id
+            countingDB.set(server.id, countingData)
+            await interaction.response.send_message(f"Counting channel set to <#{selected_channel_id}>.", ephemeral=True)
     embed = discord.Embed(
         title="Counting Settings",
-        description="Choose a setting below to modify it.",
+        description=f"**Current Settings:**\n- Counting Enabled: `{countingData['enabled']}`\n- Counting Channel: `<#{countingData['channel']}>`\n- Current Number: `{countingData['number']}`\n- Warnings: `{countingData['warnings']}`\n- Last Counter: `{countingData['lastcounter']}`",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.response.send_message(embed=embed, view=CountingView(), ephemeral=True)
+
 
 @bot.tree.command(name="spookpfp", description="Get a pfp from a user's spook.bio profile.")
 @app_commands.allowed_installs(guilds=True, users=True)

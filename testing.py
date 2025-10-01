@@ -402,20 +402,20 @@ class MyBot(Bot):
                 ws_params.update(sequence=self.ws.sequence, resume=True, session=self.ws.session_id)
 
 colors = [
-    [3447003] = "Blue",
-    [15158332] = "Red",
-    [3066993] = "Green",
-    [10181046] = "Purple",
-    [15105570] = "Orange",
-    [15844367] = "Gold",
-    [1752220] = "Teal",
-    [2123412] = "Dark Blue",
-    [10038562] = "Dark Red",
-    [2067276] = "Dark Green",
-    [7419530] = "Dark Purple",
-    [11027200] = "Dark Orange",
-    [12745742] = "Dark Gold", # I might change "Gold" To "Yellow" tbh.
-    [1146986] = "Dark Teal"
+    ["3447003"] = "Blue",
+    ["15158332"] = "Red",
+    ["3066993"] = "Green",
+    ["10181046"] = "Purple",
+    ["15105570"] = "Orange",
+    ["15844367"] = "Gold",
+    ["1752220"] = "Teal",
+    ["2123412"] = "Dark Blue",
+    ["10038562"] = "Dark Red",
+    ["2067276"] = "Dark Green",
+    ["7419530"] = "Dark Purple",
+    ["11027200"] = "Dark Orange",
+    ["12745742"] = "Dark Gold", # I might change "Gold" To "Yellow" tbh.
+    ["1146986"] = "Dark Teal"
 ]
 
 #bot = commands.Bot(command_prefix="/", intents=intents)
@@ -861,7 +861,9 @@ async def settings(interaction: discord.Interaction):
     )
     async def on_submit(interaction: discord.Interaction):
         selected_color_value = int(color_select.values[0])
-        selected_color_name = color_select.values[0]
+        selected_color_name = colors[str(color_select.values[0])]
+        if not selected_color_name:
+            selected_color_name = "Unknown"
         print(selected_color_name)
         print(color_select)
         print(color_select.values)

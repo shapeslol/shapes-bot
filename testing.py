@@ -404,7 +404,7 @@ class MyBot(Bot):
 
 colors_lua = """{[3447003] = "Blue", [15158332] = "Red", [3066993] = "Green", [10181046] = "Purple", [15105570] = "Orange", [15844367] = "Gold", [1752220] = "Teal", [2123412] = "Dark Blue", [10038562] = "Dark Red", [2067276] = "Dark Green", [7419530] = "Dark Purple", [11027200] = "Dark Orange", [12745742] = "Dark Gold", [1146986] = "Dark Teal"}"""
 colors = lua.decode(colors_lua)
-print(colors)
+#print(colors)
 
 #bot = commands.Bot(command_prefix="/", intents=intents)
 bot = MyBot(command_prefix="/", intents=discord.Intents.all())
@@ -500,12 +500,6 @@ async def update_guild_cache():
         cached_guilds = []
         await asyncio.sleep(30)
 
-async def IsBot(User):
-    if User.Bot:
-        return True
-    else:
-        return False
-
 # === Bot Events ===
 @bot.event
 async def on_message(message):
@@ -515,22 +509,22 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    print(f'Message from {message.author} in #{message.channel}: {message.content}')
     if message.guild:
         # Print the content of the message
-        print(f'Message from {message.author} in #{message.channel}: {message.content}')
         server = message.guild
         countingjson = countingDB.get(server.id)
-        counting_data = json.loads(str(countingjson))
+        counting_data = json.load(countingjson)
         number = counting_data['number']
         enabled = counting_data['enabled']
         channel = counting_data['channel']
         warnings = counting_data['warnings']
-        LastCounter = counting_data['LastCounter']
+        LastCounter = counting_data['lastcounter']
         next_number = number + 1
-        if message.content.lower() == next_number and message.channel.id == channel and enabled == True and message.author.id != LastCounter.id:
+        if message.content.lower() == next_number and message.channel.id == channel and enabled == True and message.author.id != LastCounter:
             await message.add_reaction('👍')
             LastCounter = message.author
-            counting_data["LastCounter"] = LastCounter
+            counting_data["lastcounter"] = LastCounter
             countingDB.set(server.id, counting_data)
         else:
             if enabled == False:
@@ -539,8 +533,8 @@ async def on_message(message):
             if channel != message.channel.id:
                 return
             
-            if message.author.id == LastCounter.id:
-                await message.channel.send(f":warning: You cannot count by yourself!")
+            if message.author.id == LastCounter and warnngs != 3:
+                await message.channel.send(f":warning: You can't count by yourself!")
                 warnings = warnings + 1
                 counting_data['warnings'] = warnings
                 countingDB.set(server.id, counting_data)
@@ -565,6 +559,7 @@ async def on_message(message):
             description=f"[Click Here To Add Shapes To Your Server or Apps]({invite_url})",
             color=embedDB.get(f"{message.author.id}") if embedDB.get(f"{message.author.id}") else discord.Color.blue()
         )
+        await message.channel.send(embed=invite_embed)
 
 @bot.event
 async def on_ready():
@@ -573,6 +568,7 @@ async def on_ready():
     await bot.tree.sync()
     print(f"Logged in as {bot.user}")
     BotInfo = await bot.application_info()
+    print(BotInfo)
     await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 {MainURL}/discord"))
     if len(bot.guilds) == 1:
         print(bot.guilds[0].name)

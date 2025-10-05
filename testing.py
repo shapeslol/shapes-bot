@@ -533,7 +533,7 @@ async def on_message(message):
             if channel != message.channel.id:
                 return
             
-            if message.author.id == LastCounter and warnngs != 3:
+            if message.author.id == LastCounter and warnings != 3:
                 await message.channel.send(f":warning: You can't count by yourself!")
                 warnings = warnings + 1
                 counting_data['warnings'] = warnings
@@ -564,6 +564,7 @@ async def on_message(message):
 @bot.event
 async def on_ready():
     global bot_ready
+    global BotInfo
     bot_ready = True
     await bot.tree.sync()
     print(f"Logged in as {bot.user}")
@@ -919,13 +920,13 @@ async def counting(interaction: discord.Interaction):
     server = interaction.guild
     print(server.id)
     counting_json = countingDB.get(server.id)
-    countingData = json.loads(str(counting_json))
+    countingData = counting_json
     print(countingData)
     if not countingData:
         countingDB.set(server.id, {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
         countingDB.save()
         counting_json = countingDB.get(server.id)
-        countingData = json.loads(str(counting_json))
+        countingData = counting_json
     print(countingData)
     print(countingData['channel'])
     print(countingData['number'])
@@ -1196,7 +1197,7 @@ async def invite(interaction: discord.Interaction):
         description=f"[Click Here To Add Shapes To Your Server or Apps]({invite_url})",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
-    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    invite_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.response.send_message(embed=invite_embed, ephemeral=False)
     #await interaction.response.send_message(f"Invite me to your server or add me to your apps using this link: {invite_url}", ephemeral=False)
 

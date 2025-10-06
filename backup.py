@@ -996,7 +996,6 @@ async def restart(interaction: discord.Interaction):
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
-<<<<<<< HEAD
 @bot.tree.command(name="counting", description="Counting Settings")
 @commands.has_permissions(administrator=True)
 @commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
@@ -1059,70 +1058,6 @@ async def counting(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, view=CountingView(), ephemeral=True)
 
 
-=======
-@bot.tree.command(name="counting", description="Counting Settings")
-@commands.has_permissions(administrator=True)
-@commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
-@app_commands.allowed_installs(guilds=True, users=False)
-@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-async def counting(interaction: discord.Interaction):
-    server = interaction.guild
-    print(server.id)
-    counting_json = countingDB.get(server.id)
-    countingData = counting_json
-    print(countingData)
-    if not countingData:
-        countingDB.set(server.id, {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
-        countingDB.save()
-        counting_json = countingDB.get(server.id)
-        countingData = counting_json
-    print(countingData)
-    print(countingData['channel'])
-    print(countingData['number'])
-    print(countingData['enabled'])
-    print(countingData['warnings'])
-    print(countingData['lastcounter'])
-    channels = server.channels
-    channel_options = []
-    for channel in channels:
-        if isinstance(channel, discord.TextChannel):
-            channel_options.append(discord.SelectOption(label=channel.name, value=str(channel.id)))
-    class CountingView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=None)  # No timeout
-
-        @discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting", emoji="🔢")
-        async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
-            counting_json = countingDB.get(server.id)
-            countingData = counting_json
-            current_setting = countingData['enabled']
-            if current_setting:
-                countingData['enabled'] = False
-                countingDB.set(server.id, countingData)
-                await interaction.response.send_message("Counting disabled.", ephemeral=True)
-            else:
-                countingData['enabled'] = True
-                countingDB.set(server.id, countingData)
-                await interaction.response.send_message("Counting enabled.", ephemeral=True)
-
-        @discord.ui.select(placeholder="Select Counting Channel", options=channel_options, custom_id="select_channel")
-        async def select_channel(self, interaction: discord.Interaction, select: discord.ui.Select):
-            selected_channel_id = int(select.values[0])
-            counting_json = countingDB.get(server.id)
-            countingData = counting_json
-            countingData['channel'] = selected_channel_id
-            countingDB.set(server.id, countingData)
-            await interaction.response.send_message(f"Counting channel set to <#{selected_channel_id}>.", ephemeral=True)
-    embed = discord.Embed(
-        title="Counting Settings",
-        description=f"**Current Settings:**\n- Counting Enabled: `{countingData['enabled']}`\n- Counting Channel: `<#{countingData['channel']}>`\n- Current Number: `{countingData['number']}`\n- Warnings: `{countingData['warnings']}`\n- Last Counter: `{countingData['lastcounter']}`",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-    await interaction.response.send_message(embed=embed, view=CountingView(), ephemeral=True)
-
-
->>>>>>> 6037748688885a7508023d35b0ad4152c78c393c
 @bot.tree.command(name="spookpfp", description="Get a pfp from a user's spook.bio profile.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)

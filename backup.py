@@ -663,7 +663,7 @@ def get_user_count():
 async def restartbot():
     print("Bot Restarting.")
     await bot.close(token)
-    await asyncio.sleep(10)
+    await asyncio.sleep(20)
     bot.run(token)
 
 
@@ -996,7 +996,7 @@ async def stop(interaction: discord.Interaction):
 async def restart(interaction: discord.Interaction):
     if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip":
         await interaction.response.send_message(":white_check_mark: Restarted Successfully!!", ephemeral=False)
-        restartbot()
+        await restartbot()
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 

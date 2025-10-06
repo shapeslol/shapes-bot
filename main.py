@@ -20,9 +20,6 @@ from discord.gateway import DiscordWebSocket, _log
 from discord.ext.commands import Bot
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
-# === Hardcoded Admin Key (change this!) ===
-ADMIN_KEY = "lc1220"
-
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
 embedDB = PickleDB('embed.db')
@@ -42,7 +39,16 @@ try:
     with open('TOKEN.txt', 'r') as f:
         token = f.read()
 except FileNotFoundError:
-    print("Error: The file 'TOKEN' was not found.")
+    print("Error: The file 'TOKEN.txt' was not found.")
+except Exception as e:
+    print(f"An error occurred: {e}")
+
+# get the admin key from akey.txt
+try:
+    with open('akey.txt', 'r') as f:
+        ADMIN_KEY = f.read()
+except FileNotFoundError:
+    print("Error: The file 'akey.txt' was not found.")
 except Exception as e:
     print(f"An error occurred: {e}")
 
@@ -51,13 +57,13 @@ try:
     with open('GoogleToken.txt', 'r') as f:
         GoogleAPIKey = f.read()
 except FileNotFoundError:
-    print("Error: The file 'GoogleToken' was not found.")
+    print("Error: The file 'GoogleToken.txt' was not found.")
 except Exception as e:
     print(f"An error occurred: {e}")
 
 # === Flask App Setup ===
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecret")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "keepthisasecret")
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -438,22 +444,22 @@ async def update_db():
             #print(f"UsersDB = {usersDB.all()}")
             for guild in bot.guilds:
                 if not countingDB.get(f"{guild.id}"):
-                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
+                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber": 0})
                     countingDB.save()
-            for embed in embedDB.all():
-                print(1)
+            #for embed in embedDB.all():
+                #print(1)
                 #print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
-            for info in countingDB.all():
-                print(2)
+            #for info in countingDB.all():
+                #print(2)
                 #print(f"CountingDB Key: {info}, Value: {countingDB.get(info)}")
-            for users in usersDB.all():
-                print(3)
+            #for users in usersDB.all():
+                #print(3)
                 #print(f"UsersDB Key: {users}, Value: {usersDB.get(users)}")
             #for user in bot.users:
                 #if not usersDB.get(f"{user.id}"):
                     #usersDB.set(f"{user.id}", user.name)
                     #usersDB.save()
-# == update databases every 4 seconds == #
+# == update databases every second == #
 
 async def update_db():
     while True:
@@ -494,7 +500,7 @@ async def update_guild_cache():
         #if len(bot.guilds) == 1:
             #print(bot.guilds[0].name)
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
-       # else:
+        #else:
             #print(f"Watching {len(bot.guilds)} Servers")
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
@@ -517,9 +523,9 @@ async def on_message_delete(message):
         server = message.guild
         counting = countingDB.get(f"{server.id}")
         if counting:
-            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content):
+            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content) and counting['number'] == message.content:
                 nextnumber = counting['number'] + 1
-                await message.channel.send(f"{message.author.mention} deleted their message possibly containing the next number. The next number is {nextnumber}")
+                await message.channel.send(f"{message.author.mention} deleted their message containing the next number. The next number is {nextnumber}")
 
 @bot.event
 async def on_message(message):
@@ -872,21 +878,19 @@ async def userinstalls(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def getdata(interaction: discord.Interaction, database: str, key: str):
-    key = str(key)
-    database = str(database)
     edata = None
     data = None
     if database == "Counting":
         edata = countingDB.get(f"{key}")
-        data = edata[key]
+        data = str(edata)
     if database == "Embed":
         edata = embedDB.get(f"{key}")
-        data = edata[key]
+        data = str(edata)
     if database == "Users":
         edata = usersDB.get(f"{key}")
-        data = edata[key]
+        data = str(edata)
     if data:
-         await interaction.response.send_message(data, ephemeral=True)
+        await interaction.response.send_message(data, ephemeral=True)
     else:
         await interaction.response.send_message(f"No Data Found For {key} In the {database} Database!", ephemeral=True)
 

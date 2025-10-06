@@ -440,20 +440,20 @@ async def update_db():
                 if not countingDB.get(f"{guild.id}"):
                     countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
                     countingDB.save()
-            for embed in embedDB.all():
-                print(1)
+            #for embed in embedDB.all():
+                #print(1)
                 #print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
-            for info in countingDB.all():
-                print(2)
+            #for info in countingDB.all():
+                #print(2)
                 #print(f"CountingDB Key: {info}, Value: {countingDB.get(info)}")
-            for users in usersDB.all():
-                print(3)
+            #for users in usersDB.all():
+                #print(3)
                 #print(f"UsersDB Key: {users}, Value: {usersDB.get(users)}")
             #for user in bot.users:
                 #if not usersDB.get(f"{user.id}"):
                     #usersDB.set(f"{user.id}", user.name)
                     #usersDB.save()
-# == update databases every 4 seconds == #
+# == update databases every second == #
 
 async def update_db():
     while True:
@@ -494,7 +494,7 @@ async def update_guild_cache():
         #if len(bot.guilds) == 1:
             #print(bot.guilds[0].name)
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
-       # else:
+        #else:
             #print(f"Watching {len(bot.guilds)} Servers")
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
@@ -872,21 +872,19 @@ async def userinstalls(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def getdata(interaction: discord.Interaction, database: str, key: str):
-    key = str(key)
-    database = str(database)
     edata = None
     data = None
     if database == "Counting":
         edata = countingDB.get(f"{key}")
-        data = edata[key]
+        data = str(edata)
     if database == "Embed":
         edata = embedDB.get(f"{key}")
-        data = edata[key]
+        data = str(edata)
     if database == "Users":
         edata = usersDB.get(f"{key}")
-        data = edata[key]
+        data = str(edata)
     if data:
-         await interaction.response.send_message(data, ephemeral=True)
+        await interaction.response.send_message(data, ephemeral=True)
     else:
         await interaction.response.send_message(f"No Data Found For {key} In the {database} Database!", ephemeral=True)
 

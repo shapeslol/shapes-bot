@@ -1024,8 +1024,10 @@ async def counting(interaction: discord.Interaction):
     print(countingData['lastcounter'])
     channels = server.channels
     channel_options = []
+    ccount = 0
     for channel in channels:
-        if isinstance(channel, discord.TextChannel):
+        ccount = ccount + 1
+        if isinstance(channel, discord.TextChannel) and ccount != 25:
             channel_options.append(discord.SelectOption(label=channel.name, value=str(channel.id)))
     class CountingView(discord.ui.View):
         def __init__(self):

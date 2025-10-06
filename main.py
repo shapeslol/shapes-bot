@@ -874,6 +874,12 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
 async def userinstalls(interaction: discord.Interaction):
     await interaction.response.send_message(f"{BotInfo.approximate_user_install_count} Users Use Shapes!")
 
+@bot.tree.command(name="servercount", description="Get The Server Count For Shapes!")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def userinstalls(interaction: discord.Interaction):
+    await interaction.response.send_message(f"{len(bot.guilds)} Servers Use Shapes!")
+
 @bot.tree.command(name="getdata", description="Get The Data From One Of Our Databases")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)

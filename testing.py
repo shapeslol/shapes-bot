@@ -468,7 +468,7 @@ async def update_db():
     
             for guild in bot.guilds:
                 if not countingDB.get(f"{guild.id}"):
-                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
+                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber":0})
                     countingDB.save()
         if bot.is_closed():
             countingDB.save()
@@ -510,6 +510,18 @@ def IsInteger(s):
 
 # === Bot Events ===
 @bot.event
+async def on_message_delete(message):
+    print(f"Message by {message.author} deleted in channel {message.channel}: {message.content}")
+
+    if message.guild: # Check if the message was in a guild
+        server = message.guild
+        counting = countingDB.get(f"{server.id}")
+        if counting:
+            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content):
+                nextnumber = counting['number'] + 1
+                await message.channel.send(f"{message.author.mention} deleted their message possibly containing the next number. The next number is {nextnumber}")
+
+@bot.event
 async def on_message(message):
     # Ignore messages sent by the bot to prevent infinite loops
     if message.author == bot.user:
@@ -530,13 +542,17 @@ async def on_message(message):
         channel = counting_data['channel']
         warnings = counting_data['warnings']
         LastCounter = counting_data['lastcounter']
+        HighestNumber = counting_data['highestnumber']
         next_number = number + 1
         print(next_number)
         if str(message.content) == str(next_number) and message.channel.id == channel and enabled == True and message.author.id != LastCounter:
             await message.add_reaction('👍')
             LastCounter = message.author.id
             number = next_number
-            print(number)
+            #print(number)
+            if number > HighestNumber:
+                HighestNumber = number
+            counting_data['highestnumber'] = HighestNumber
             counting_data['number'] = number
             counting_data["lastcounter"] = LastCounter
             countingDB.set(server.id, counting_data)
@@ -549,7 +565,8 @@ async def on_message(message):
                 return
             
             if message.author.id == LastCounter and warnings != 3:
-                await message.channel.send(f":warning: You can't count by yourself!")
+                await message.add_reaction('⚠️')
+                await message.reply(f":warning: You can't count by yourself!")
                 warnings = warnings + 1
                 counting_data['warnings'] = warnings
                 countingDB.set(server.id, counting_data)
@@ -558,8 +575,8 @@ async def on_message(message):
             if warnings < 3:
                 await message.add_reaction('⚠️')
                 if number == 0:
-                    await message.channel.reply(f":warning: The next number is 2")
-                await message.channel.reply(f":warning: The next number is {next_number}")
+                    await message.reply(f":warning: The next number is 1")
+                await message.reply(f":warning: The next number is {next_number}")
                 warnings = warnings + 1
                 counting_data['warnings'] = warnings
                 countingDB.set(server.id, counting_data)
@@ -567,6 +584,9 @@ async def on_message(message):
                 return
             if warnings >= 3:
                 message.add_reaction('❌')
+                if number > HighestNumber:
+                    HighestNumber = number
+                counting_data['highestnumber'] = HighestNumber
                 if number == 0:
                     await message.channel.send(f":x: {message.author.mention} ruined it at 1, the next number is 1 (again)")
                     next_number = 1

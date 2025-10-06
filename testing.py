@@ -8,7 +8,8 @@ import asyncio
 import discord
 import aiohttp
 import pytz
-import pandas as pd # Last resort if i keep getting json errors
+import numbers
+#import pandas as pd # Last resort if i keep getting json errors
 from slpp import slpp as lua
 from pickledb import PickleDB
 from datetime import datetime, timezone
@@ -490,15 +491,22 @@ async def update_guild_cache():
         print(f"[SYSTEM] Watching {BotInfo.approximate_user_install_count} Users! As of {time.strftime('%X')}")
         await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 {MainURL}/discord"))
         await asyncio.sleep(2.5)
-        if len(bot.guilds) == 1:
-            print(bot.guilds[0].name)
+        #if len(bot.guilds) == 1:
+            #print(bot.guilds[0].name)
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
-        else:
-            print(f"Watching {len(bot.guilds)} Servers")
+       # else:
+            #print(f"Watching {len(bot.guilds)} Servers")
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
         cached_guilds = []
         await asyncio.sleep(30)
+
+def IsInteger(s):
+    try:
+        int(s)
+        return True  # Conversion succeeded, it is an integer
+    except ValueError:
+        return False  # Conversion failed, it is not an integer
 
 # === Bot Events ===
 @bot.event
@@ -509,23 +517,30 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    print(f'Message from {message.author} in #{message.channel}: {message.content}')
+    #print(f'Message from {message.author} in #{message.channel}: {message.content}')
     if message.guild:
+        if not IsInteger(message.content):
+            return
         # Print the content of the message
         server = message.guild
         countingjson = countingDB.get(server.id)
-        counting_data = json.load(countingjson)
+        counting_data = countingjson
         number = counting_data['number']
         enabled = counting_data['enabled']
         channel = counting_data['channel']
         warnings = counting_data['warnings']
         LastCounter = counting_data['lastcounter']
         next_number = number + 1
-        if message.content.lower() == next_number and message.channel.id == channel and enabled == True and message.author.id != LastCounter:
+        print(next_number)
+        if str(message.content) == str(next_number) and message.channel.id == channel and enabled == True and message.author.id != LastCounter:
             await message.add_reaction('👍')
-            LastCounter = message.author
+            LastCounter = message.author.id
+            number = next_number
+            print(number)
+            counting_data['number'] = number
             counting_data["lastcounter"] = LastCounter
             countingDB.set(server.id, counting_data)
+            countingDB.save()
         else:
             if enabled == False:
                 return
@@ -538,20 +553,39 @@ async def on_message(message):
                 warnings = warnings + 1
                 counting_data['warnings'] = warnings
                 countingDB.set(server.id, counting_data)
+                countingDB.save()
                 return
             if warnings < 3:
-                await message.channel.send(f":warning: The next number is {next_number}")
+                await message.add_reaction('⚠️')
+                if number == 0:
+                    await message.channel.reply(f":warning: The next number is 2")
+                await message.channel.reply(f":warning: The next number is {next_number}")
                 warnings = warnings + 1
                 counting_data['warnings'] = warnings
                 countingDB.set(server.id, counting_data)
+                countingDB.save()
                 return
             if warnings >= 3:
+                message.add_reaction('❌')
+                if number == 0:
+                    await message.channel.send(f":x: {message.author.mention} ruined it at 1, the next number is 1 (again)")
+                    next_number = 1
+                    warnings = 0
+                    counting_data['warnings'] = warnings
+                    counting_data['number'] = number
+                    countingDB.set(server.id, counting_data)
+                    countingDB.save()
+                    return
                 await message.channel.send(f":x: {message.author.mention} ruined it at {number}, the next number is 1")
                 number = 0
-                next_number = 2
+                next_number = 1
                 warnings = 0
+                LastCounter = None
+                counting_data['lastcounter'] = LastCounter
+                counting_data['warnings'] = warnings
                 counting_data['number'] = number
                 countingDB.set(server.id, counting_data)
+                countingDB.save()
                 return
     else:
         invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}"
@@ -583,7 +617,7 @@ async def on_ready():
     bot.loop.create_task(update_db())
     #bot.loop.create_task(update_db_on_close())
 
-@app.route('/server_count', methods=["GET"])
+@app.route('/server-count', methods=["GET"])
 def get_server_count():
     # Ensure the bot is ready before accessing guilds
     if bot.is_ready():
@@ -808,6 +842,35 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
         await interaction.edit_original_response(embed=errorembed)
 
 # === Bot Commands ===
+@bot.tree.command(name="userinstalls", description="Get The User Installation Count For Shapes!")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def userinstalls(interaction: discord.Interaction):
+    await interaction.response.send_message(f"{BotInfo.approximate_user_install_count} Users Use Shapes!")
+
+@bot.tree.command(name="getdata", description="Get The Data From One Of Our Databases")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def getdata(interaction: discord.Interaction, database: str, key: str):
+    key = str(key)
+    database = str(database)
+    edata = None
+    data = None
+    if database == "Counting":
+        edata = countingDB.get(f"{key}")
+        data = edata[key]
+    if database == "Embed":
+        edata = embedDB.get(f"{key}")
+        data = edata[key]
+    if database == "Users":
+        edata = usersDB.get(f"{key}")
+        data = edata[key]
+    if data:
+         await interaction.response.send_message(data, ephemeral=True)
+    else:
+        await interaction.response.send_message(f"No Data Found For {key} In the {database} Database!", ephemeral=True)
+
+
 @bot.tree.command(name="settings", description="Your Settings For Shapes")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -914,6 +977,8 @@ async def restart(interaction: discord.Interaction):
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
 @bot.tree.command(name="counting", description="Counting Settings")
+@commands.has_permissions(administrator=True)
+@commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 async def counting(interaction: discord.Interaction):
@@ -945,22 +1010,22 @@ async def counting(interaction: discord.Interaction):
         @discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting", emoji="🔢")
         async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
             counting_json = countingDB.get(server.id)
-            countingData = json.loads(str(counting_json))
+            countingData = counting_json
             current_setting = countingData['enabled']
             if current_setting:
                 countingData['enabled'] = False
                 countingDB.set(server.id, countingData)
-                await interaction.response.send_message("Counting feature disabled.", ephemeral=True)
+                await interaction.response.send_message("Counting disabled.", ephemeral=True)
             else:
                 countingData['enabled'] = True
                 countingDB.set(server.id, countingData)
-                await interaction.response.send_message("Counting feature enabled.", ephemeral=True)
+                await interaction.response.send_message("Counting enabled.", ephemeral=True)
 
         @discord.ui.select(placeholder="Select Counting Channel", options=channel_options, custom_id="select_channel")
         async def select_channel(self, interaction: discord.Interaction, select: discord.ui.Select):
             selected_channel_id = int(select.values[0])
             counting_json = countingDB.get(server.id)
-            countingData = json.loads(str(counting_json))
+            countingData = counting_json
             countingData['channel'] = selected_channel_id
             countingDB.set(server.id, countingData)
             await interaction.response.send_message(f"Counting channel set to <#{selected_channel_id}>.", ephemeral=True)

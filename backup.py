@@ -8,6 +8,9 @@ import asyncio
 import discord
 import aiohttp
 import pytz
+import numbers
+#import pandas as pd # Last resort if i keep getting json errors
+from slpp import slpp as lua
 from pickledb import PickleDB
 from datetime import datetime, timezone
 from discord import app_commands
@@ -15,7 +18,7 @@ import requests
 from discord.ext import commands
 from discord.gateway import DiscordWebSocket, _log
 from discord.ext.commands import Bot
-from flask import Flask, render_template_string, request, redirect, url_for, session
+from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
 # === Hardcoded Admin Key (change this!) ===
 ADMIN_KEY = "lc1220"
@@ -400,6 +403,10 @@ class MyBot(Bot):
                 # This is apparently what the official Discord client does.
                 ws_params.update(sequence=self.ws.sequence, resume=True, session=self.ws.session_id)
 
+colors_lua = """{[3447003] = "Blue", [15158332] = "Red", [3066993] = "Green", [10181046] = "Purple", [15105570] = "Orange", [15844367] = "Gold", [1752220] = "Teal", [2123412] = "Dark Blue", [10038562] = "Dark Red", [2067276] = "Dark Green", [7419530] = "Dark Purple", [11027200] = "Dark Orange", [12745742] = "Dark Gold", [1146986] = "Dark Teal"}"""
+colors = lua.decode(colors_lua)
+#print(colors)
+
 #bot = commands.Bot(command_prefix="/", intents=intents)
 bot = MyBot(command_prefix="/", intents=discord.Intents.all())
 #tree = app_commands.CommandTree(bot)
@@ -418,10 +425,10 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
             #print("Bot Closed, Shutting Down Flask Server.")
             #os._exit(0)
 
-# == update databases every 4 seconds == #
+# == update databases every second == #
 async def update_db():
     while True:
-        await asyncio.sleep(4)
+        await asyncio.sleep(1)
         if not bot.is_closed():
             countingDB.save()
             embedDB.save()
@@ -429,20 +436,39 @@ async def update_db():
             #print(f"EmbedDB = {embedDB.all()}")
             #print(f"CountingDB = {countingDB.all()}")
             #print(f"UsersDB = {usersDB.all()}")
+            for guild in bot.guilds:
+                if not countingDB.get(f"{guild.id}"):
+                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
+                    countingDB.save()
             for embed in embedDB.all():
-                print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
+                print(1)
+                #print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
             for info in countingDB.all():
-                print(f"CountingDB Key: {info}, Value: {countingDB.get(info)}")
+                print(2)
+                #print(f"CountingDB Key: {info}, Value: {countingDB.get(info)}")
             for users in usersDB.all():
-                print(f"UsersDB Key: {users}, Value: {usersDB.get(users)}")
+                print(3)
+                #print(f"UsersDB Key: {users}, Value: {usersDB.get(users)}")
             #for user in bot.users:
                 #if not usersDB.get(f"{user.id}"):
                     #usersDB.set(f"{user.id}", user.name)
                     #usersDB.save()
+# == update databases every 4 seconds == #
+
+async def update_db():
+    while True:
+        await asyncio.sleep(1)
+        if not bot.is_closed():
+            countingDB.save()
+            embedDB.save()
+            usersDB.save()
+            #print(f"EmbedDB = {embedDB.all()}")
+            #print(f"CountingDB = {countingDB.all()}")
+            #print(f"UsersDB = {usersDB.all()}")
     
             for guild in bot.guilds:
                 if not countingDB.get(f"{guild.id}"):
-                    countingDB.set(f"{guild.id}", {"channel": None, "number": 1, "enabled": False})
+                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber":0})
                     countingDB.save()
         if bot.is_closed():
             countingDB.save()
@@ -462,58 +488,176 @@ async def update_guild_cache():
         await bot.tree.sync()
         cached_guilds = list(bot.guilds)
         print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
-        await bot.change_presence(activity=discord.CustomActivity(name="🔗 spook.bio/discord"))
-        await asyncio.sleep(5)
-        if len(bot.guilds) == 1:
-            print(bot.guilds[0].name)
+        print(f"[SYSTEM] Watching {BotInfo.approximate_user_install_count} Users! As of {time.strftime('%X')}")
+        await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 {MainURL}/discord"))
+        await asyncio.sleep(2.5)
+        #if len(bot.guilds) == 1:
+            #print(bot.guilds[0].name)
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
-        else:
-            print(f"Watching {len(bot.guilds)} Servers")
+       # else:
+            #print(f"Watching {len(bot.guilds)} Servers")
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
         cached_guilds = []
         await asyncio.sleep(30)
 
+def IsInteger(s):
+    try:
+        int(s)
+        return True  # Conversion succeeded, it is an integer
+    except ValueError:
+        return False  # Conversion failed, it is not an integer
+
 # === Bot Events ===
 @bot.event
+async def on_message_delete(message):
+    print(f"Message by {message.author} deleted in channel {message.channel}: {message.content}")
+
+    if message.guild: # Check if the message was in a guild
+        server = message.guild
+        counting = countingDB.get(f"{server.id}")
+        if counting:
+            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content):
+                nextnumber = counting['number'] + 1
+                await message.channel.send(f"{message.author.mention} deleted their message possibly containing the next number. The next number is {nextnumber}")
+
+@bot.event
 async def on_message(message):
-    # Ignore messages sent by the bot itself
+    # Ignore messages sent by the bot to prevent infinite loops
     if message.author == bot.user:
         return
+    if message.author.bot:
+        return
 
-    if message.guild and message.author == "lcjunior1220":  # This checks if the message was sent in a guild
-        print(f"Message '{message.content}' was sent in guild: {message.guild.name} (ID: {message.guild.id})")
-        # You can add further logic here, e.g., checking specific guild IDs
-        # if message.guild.id == YOUR_GUILD_ID:
-        #     await message.channel.send("This message is from a specific guild!")
+    #print(f'Message from {message.author} in #{message.channel}: {message.content}')
+    if message.guild:
+        if not IsInteger(message.content):
+            return
+        # Print the content of the message
+        server = message.guild
+        countingjson = countingDB.get(server.id)
+        counting_data = countingjson
+        number = counting_data['number']
+        enabled = counting_data['enabled']
+        channel = counting_data['channel']
+        warnings = counting_data['warnings']
+        LastCounter = counting_data['lastcounter']
+        HighestNumber = counting_data['highestnumber']
+        next_number = number + 1
+        print(next_number)
+        if str(message.content) == str(next_number) and message.channel.id == channel and enabled == True and message.author.id != LastCounter:
+            await message.add_reaction('👍')
+            LastCounter = message.author.id
+            number = next_number
+            #print(number)
+            if number > HighestNumber:
+                HighestNumber = number
+            counting_data['highestnumber'] = HighestNumber
+            counting_data['number'] = number
+            counting_data["lastcounter"] = LastCounter
+            countingDB.set(server.id, counting_data)
+            countingDB.save()
+        else:
+            if enabled == False:
+                return
+            
+            if channel != message.channel.id:
+                return
+            
+            if message.author.id == LastCounter and warnings != 3:
+                await message.add_reaction('⚠️')
+                await message.reply(f":warning: You can't count by yourself!")
+                warnings = warnings + 1
+                counting_data['warnings'] = warnings
+                countingDB.set(server.id, counting_data)
+                countingDB.save()
+                return
+            if warnings < 3:
+                await message.add_reaction('⚠️')
+                if number == 0:
+                    await message.reply(f":warning: The next number is 1")
+                await message.reply(f":warning: The next number is {next_number}")
+                warnings = warnings + 1
+                counting_data['warnings'] = warnings
+                countingDB.set(server.id, counting_data)
+                countingDB.save()
+                return
+            if warnings >= 3:
+                message.add_reaction('❌')
+                if number > HighestNumber:
+                    HighestNumber = number
+                counting_data['highestnumber'] = HighestNumber
+                if number == 0:
+                    await message.channel.send(f":x: {message.author.mention} ruined it at 1, the next number is 1 (again)")
+                    next_number = 1
+                    warnings = 0
+                    counting_data['warnings'] = warnings
+                    counting_data['number'] = number
+                    countingDB.set(server.id, counting_data)
+                    countingDB.save()
+                    return
+                await message.channel.send(f":x: {message.author.mention} ruined it at {number}, the next number is 1")
+                number = 0
+                next_number = 1
+                warnings = 0
+                LastCounter = None
+                counting_data['lastcounter'] = LastCounter
+                counting_data['warnings'] = warnings
+                counting_data['number'] = number
+                countingDB.set(server.id, counting_data)
+                countingDB.save()
+                return
     else:
-        if message.author == "lcjunior1220":
-            print(f"Message '{message.content}' was sent in a DM.")
+        invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}"
+        invite_embed = discord.Embed(
+            description=f"[Click Here To Add Shapes To Your Server or Apps]({invite_url})",
+            color=embedDB.get(f"{message.author.id}") if embedDB.get(f"{message.author.id}") else discord.Color.blue()
+        )
+        await message.channel.send(embed=invite_embed)
 
 @bot.event
 async def on_ready():
     global bot_ready
+    global BotInfo
     bot_ready = True
     await bot.tree.sync()
     print(f"Logged in as {bot.user}")
-    await bot.change_presence(activity=discord.CustomActivity(name="🔗 spook.bio/discord"))
+    BotInfo = await bot.application_info()
+    print(BotInfo)
+    await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 {MainURL}/discord"))
     if len(bot.guilds) == 1:
         print(bot.guilds[0].name)
         #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
     else:
         print(f"Watching {len(bot.guilds)} Servers")
         #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
-
     # Start the cache updater task
     MyBot(command_prefix="/", intents=discord.Intents.all())
     bot.loop.create_task(update_guild_cache())
     bot.loop.create_task(update_db())
     #bot.loop.create_task(update_db_on_close())
 
-def restartbot():
+@app.route('/server-count', methods=["GET"])
+def get_server_count():
+    # Ensure the bot is ready before accessing guilds
+    if bot.is_ready():
+        server_count = len(bot.guilds)
+        return jsonify({"server_count": server_count})
+    else:
+        return jsonify({"server_count": "Unknown"}), 503
+
+@app.route('/user-count', methods=["GET"])
+def get_user_count():
+    if bot.is_ready():
+        user_count = BotInfo.approximate_user_install_count
+        return jsonify({"user_count": user_count})
+    else:
+        return jsonify({"user_count": "Unknown"}), 503
+
+async def restartbot():
     print("Bot Restarting.")
-    bot.close()
-    asyncio.sleep(2)
+    await bot.close(token)
+    await asyncio.sleep(10)
     bot.run(token)
 
 
@@ -571,11 +715,12 @@ DiscordColors = [
     discord.Color.dark_purple(),
     discord.Color.dark_orange(),
     discord.Color.dark_gold(),
-    discord.Color.dark_teal()
+    discord.Color.dark_teal(),
+    discord.Color.random()
 ]
 
 class EmbedColorSelection(discord.ui.Modal, title="Test Modal"):
-    modal_choices = [discord.Color.blue(), discord.Color.red(), discord.Color.green(), discord.Color.purple(), discord.Color.orange(), discord.Color.gold(), discord.Color.teal(), discord.Color.dark_blue(), discord.Color.dark_red(), discord.Color.dark_green(), discord.Color.dark_purple(), discord.Color.dark_orange(), discord.Color.dark_gold(), discord.Color.dark_teal()]
+    modal_choices = [discord.Color.blue(), discord.Color.red(), discord.Color.green(), discord.Color.purple(), discord.Color.orange(), discord.Color.gold(), discord.Color.teal(), discord.Color.dark_blue(), discord.Color.dark_red(), discord.Color.dark_green(), discord.Color.dark_purple(), discord.Color.dark_orange(), discord.Color.dark_gold(), discord.Color.dark_teal(), discord.Color.random()]
     color_select = discord.ui.Select(
         options=[discord.SelectOption(label="Blue", description="A nice blue color", value=str(discord.Color.blue().value), emoji="🔵"),
         discord.SelectOption(label="Red", description="A vibrant red color", value=str(discord.Color.red().value), emoji="🔴"),
@@ -591,6 +736,7 @@ class EmbedColorSelection(discord.ui.Modal, title="Test Modal"):
             discord.SelectOption(label="Dark Orange", description="A deep dark orange color", value=str(discord.Color.dark_orange().value), emoji="🟠"),
             discord.SelectOption(label="Dark Gold", description="A deep dark gold color", value=str(discord.Color.dark_gold().value), emoji="🟡"),
             discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷"),
+            discord.SelectOption(label="Random", description="A random color", value=str(discord.Color.random().value), emoji="🔷"),
         ]
     )
     def __init__(self):
@@ -621,6 +767,7 @@ async def sayhitouser(interaction: discord.Interaction, member: discord.Member):
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
     url = f"https://api.prp.bio/discord/{user.name}"
     print(url)
+    print(user.id)
     response = requests.get(url)
     print(response.text)
     if response.status_code == 200:
@@ -655,7 +802,7 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
         data = response.json()
 
         # Get First 5 results
-        if "items" in data and len(data["items"]) > 0:
+        if "items" in data and len(data["items"]) >= 5:
             first_result = data["items"][0]
             title = first_result.get("title", "No Title")
             snippet = first_result.get("snippet", "No Description")
@@ -690,6 +837,14 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
             embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=embed)
         else:
+            if "items" in data and len(data["items"]) > 0:
+                notenoughresultsembed = discord.Embed(
+                title=":x: Not enough results found! :x:",
+                description=f"Please search on google yourself as there wasn't enough results to generate an embed | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+            )
+            noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=notenoughresultsembed)
             noresultembed = discord.Embed(
                 title=":x: No results found! :x:",
                 description=f"No Results for {query} | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
@@ -707,6 +862,35 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
         await interaction.edit_original_response(embed=errorembed)
 
 # === Bot Commands ===
+@bot.tree.command(name="userinstalls", description="Get The User Installation Count For Shapes!")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def userinstalls(interaction: discord.Interaction):
+    await interaction.response.send_message(f"{BotInfo.approximate_user_install_count} Users Use Shapes!")
+
+@bot.tree.command(name="getdata", description="Get The Data From One Of Our Databases")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def getdata(interaction: discord.Interaction, database: str, key: str):
+    key = str(key)
+    database = str(database)
+    edata = None
+    data = None
+    if database == "Counting":
+        edata = countingDB.get(f"{key}")
+        data = edata[key]
+    if database == "Embed":
+        edata = embedDB.get(f"{key}")
+        data = edata[key]
+    if database == "Users":
+        edata = usersDB.get(f"{key}")
+        data = edata[key]
+    if data:
+         await interaction.response.send_message(data, ephemeral=True)
+    else:
+        await interaction.response.send_message(f"No Data Found For {key} In the {database} Database!", ephemeral=True)
+
+
 @bot.tree.command(name="settings", description="Your Settings For Shapes")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -739,11 +923,15 @@ async def settings(interaction: discord.Interaction):
             discord.SelectOption(label="Dark Orange", description="A deep dark orange color", value=str(discord.Color.dark_orange().value), emoji="🟠", default=defaults[11]),
             discord.SelectOption(label="Dark Gold", description="A deep dark gold color", value=str(discord.Color.dark_gold().value), emoji="🟡", default=defaults[12]),
             discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷", default=defaults[13]),
+            discord.SelectOption(label="Random", description="A random color", value=str(discord.Color.random().value), emoji="🔷", default=defaults[14]),
         ]
     )
     async def on_submit(interaction: discord.Interaction):
         selected_color_value = int(color_select.values[0])
-        selected_color_name = color_select.values[0]
+        selected_color_name = colors.get(selected_color_value, "Unknown")
+        print(selected_color_name)
+        print(color_select)
+        print(color_select.values)
         embedDB.set(f"{interaction.user.id}", selected_color_value)
         embed = discord.Embed(
             title="Embed Color Changed!",
@@ -808,6 +996,68 @@ async def restart(interaction: discord.Interaction):
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
+@bot.tree.command(name="counting", description="Counting Settings")
+@commands.has_permissions(administrator=True)
+@commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+async def counting(interaction: discord.Interaction):
+    server = interaction.guild
+    print(server.id)
+    counting_json = countingDB.get(server.id)
+    countingData = counting_json
+    print(countingData)
+    if not countingData:
+        countingDB.set(server.id, {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
+        countingDB.save()
+        counting_json = countingDB.get(server.id)
+        countingData = counting_json
+    print(countingData)
+    print(countingData['channel'])
+    print(countingData['number'])
+    print(countingData['enabled'])
+    print(countingData['warnings'])
+    print(countingData['lastcounter'])
+    channels = server.channels
+    channel_options = []
+    for channel in channels:
+        if isinstance(channel, discord.TextChannel):
+            channel_options.append(discord.SelectOption(label=channel.name, value=str(channel.id)))
+    class CountingView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=None)  # No timeout
+
+        @discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting", emoji="🔢")
+        async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
+            counting_json = countingDB.get(server.id)
+            countingData = counting_json
+            current_setting = countingData['enabled']
+            if current_setting:
+                countingData['enabled'] = False
+                countingDB.set(server.id, countingData)
+                await interaction.response.send_message("Counting disabled.", ephemeral=True)
+            else:
+                countingData['enabled'] = True
+                countingDB.set(server.id, countingData)
+                await interaction.response.send_message("Counting enabled.", ephemeral=True)
+
+        @discord.ui.select(placeholder="Select Counting Channel", options=channel_options, custom_id="select_channel")
+        async def select_channel(self, interaction: discord.Interaction, select: discord.ui.Select):
+            selected_channel_id = int(select.values[0])
+            counting_json = countingDB.get(server.id)
+            countingData = counting_json
+            countingData['channel'] = selected_channel_id
+            countingDB.set(server.id, countingData)
+            await interaction.response.send_message(f"Counting channel set to <#{selected_channel_id}>.", ephemeral=True)
+    embed = discord.Embed(
+        title="Counting Settings",
+        description=f"**Current Settings:**\n- Counting Enabled: `{countingData['enabled']}`\n- Counting Channel: `<#{countingData['channel']}>`\n- Current Number: `{countingData['number']}`\n- Warnings: `{countingData['warnings']}`\n- Last Counter: `{countingData['lastcounter']}`",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.response.send_message(embed=embed, view=CountingView(), ephemeral=True)
+
+
 @bot.tree.command(name="spookpfp", description="Get a pfp from a user's spook.bio profile.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -826,6 +1076,7 @@ async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
     url = f"https://api.prp.bio/discord/{user.name}"
+    print(user.id)
     print(url)
     response = requests.get(url)
     print(response.text)
@@ -1027,12 +1278,12 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def invite(interaction: discord.Interaction):
     invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}"
-    embed = discord.Embed(
+    invite_embed = discord.Embed(
         description=f"[Click Here To Add Shapes To Your Server or Apps]({invite_url})",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
-    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-    await interaction.response.send_message(embed=embed, ephemeral=False)
+    invite_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.response.send_message(embed=invite_embed, ephemeral=False)
     #await interaction.response.send_message(f"Invite me to your server or add me to your apps using this link: {invite_url}", ephemeral=False)
 
 @bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.")

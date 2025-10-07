@@ -1492,7 +1492,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
 # === Flask Runner in Thread ===
 def run_flask():
-    port = int(os.environ.get("PORT", 80))
+    port = int(os.environ.get("PORT", 13455))
     print(f"Starting Flask on port {port}")
     app.run(host="0.0.0.0", port=port)
 

@@ -648,17 +648,17 @@ def get_server_count():
     # Ensure the bot is ready before accessing guilds
     if bot.is_ready():
         server_count = len(bot.guilds)
-        return jsonify({"server_count": server_count})
+        return str(server_count), 200
     else:
-        return jsonify({"server_count": "Unknown"}), 503
+        return "Unknown", 503
 
 @app.route('/user-count', methods=["GET"])
 def get_user_count():
     if bot.is_ready():
         user_count = BotInfo.approximate_user_install_count
-        return jsonify({"user_count": user_count})
+        return str(user_count), 200
     else:
-        return jsonify({"user_count": "Unknown"}), 503
+        return "Unknown", 503
 
 async def restartbot():
     print("Bot Restarting.")

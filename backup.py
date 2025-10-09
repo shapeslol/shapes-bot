@@ -19,6 +19,7 @@ from discord.ext import commands
 from discord.gateway import DiscordWebSocket, _log
 from discord.ext.commands import Bot
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
+from flask-cors import CORS
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
@@ -63,6 +64,7 @@ except Exception as e:
 
 # === Flask App Setup ===
 app = Flask(__name__)
+CORS(app)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "keepthisasecret")
 
 HTML_TEMPLATE = """
@@ -589,7 +591,7 @@ async def on_message(message):
                 countingDB.save()
                 return
             if warnings >= 3:
-                message.add_reaction('❌')
+                message.add_reaction(':x:')
                 if number > HighestNumber:
                     HighestNumber = number
                 counting_data['highestnumber'] = HighestNumber
@@ -644,6 +646,7 @@ async def on_ready():
     #bot.loop.create_task(update_db_on_close())
 
 @app.route('/server-count', methods=["GET"])
+@cross_origin()
 def get_server_count():
     # Ensure the bot is ready before accessing guilds
     if bot.is_ready():
@@ -653,6 +656,7 @@ def get_server_count():
         return "Unknown", 503
 
 @app.route('/user-count', methods=["GET"])
+@cross_origin()
 def get_user_count():
     if bot.is_ready():
         user_count = BotInfo.approximate_user_install_count

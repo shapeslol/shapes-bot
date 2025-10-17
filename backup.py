@@ -494,10 +494,11 @@ async def update_guild_cache():
     global cached_guilds
     while True:
         await bot.tree.sync()
+        BotInfo = await bot.application_info()
         cached_guilds = list(bot.guilds)
         print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
         print(f"[SYSTEM] Watching {BotInfo.approximate_user_install_count} Users! As of {time.strftime('%X')}")
-        await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 {MainURL}/discord"))
+        await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 shapes.lol/discord"))
         await asyncio.sleep(2.5)
         #if len(bot.guilds) == 1:
             #print(bot.guilds[0].name)
@@ -527,7 +528,7 @@ async def on_message_delete(message):
         if counting:
             if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content) and counting['number'] == message.content:
                 nextnumber = counting['number'] + 1
-                await message.channel.send(f"{message.author.mention} deleted their message containing the next number. The next number is {nextnumber}")
+                await message.channel.send(f"{message.author.mention} deleted their message containing the last number. The next number is {nextnumber}")
 
 @bot.event
 async def on_message(message):
@@ -539,8 +540,38 @@ async def on_message(message):
 
     #print(f'Message from {message.author} in #{message.channel}: {message.content}')
     if message.guild:
-        if not IsInteger(message.content):
+        messagecontent = message.content
+        messagecontent = messagecontent.replace(" ", "")
+        InputNumber = 0
+        if '+' in messagecontent:
+            parts = messagecontent.split('+')
+            for part in parts:
+                if not IsInteger(messagecontent):
+                    return
+                InputNumber += part
+        elif '-' in messagecontent:
+            parts = messagecontent.split('-')
+            for part in parts:
+                if not IsInteger(messagecontent):
+                    return
+                InputNumber -= part
+        elif '*' in messagecontent:
+            parts = messagecontent.split('*')
+            for part in parts:
+                if not IsInteger(messagecontent):
+                    return
+                InputNumber = InputNumber * part
+        elif '/' in messagecontent:
+            parts = messagecontent.split('/')
+            for part in parts:
+                if not IsInteger(messagecontent):
+                    return
+                InputNumber = InputNumber / part
+        elif not IsInteger(messagecontent):
             return
+        else:
+            InputNumber = messagecontent
+        
         # Print the content of the message
         server = message.guild
         countingjson = countingDB.get(server.id)
@@ -553,7 +584,7 @@ async def on_message(message):
         HighestNumber = counting_data['highestnumber']
         next_number = number + 1
         print(next_number)
-        if str(message.content) == str(next_number) and message.channel.id == channel and enabled == True and message.author.id != LastCounter:
+        if str(InputNumber) == str(next_number) and message.channel.id == channel and enabled == True and message.author.id != LastCounter:
             await message.add_reaction('👍')
             LastCounter = message.author.id
             number = next_number
@@ -631,8 +662,8 @@ async def on_ready():
     await bot.tree.sync()
     print(f"Logged in as {bot.user}")
     BotInfo = await bot.application_info()
-    print(BotInfo)
-    await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 {MainURL}/discord"))
+    #print(BotInfo)
+    await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 shapes.lol/discord"))
     if len(bot.guilds) == 1:
         print(bot.guilds[0].name)
         #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))

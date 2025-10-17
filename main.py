@@ -569,7 +569,7 @@ async def on_message(message):
             for part in parts[1:]:
                 if not IsInteger(part):
                     return
-                InputNumber /= int(part)
+                InputNumber //= int(part)
         elif not IsInteger(messagecontent):
             return
         else:

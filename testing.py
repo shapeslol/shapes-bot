@@ -546,27 +546,30 @@ async def on_message(message):
         if '+' in messagecontent:
             parts = messagecontent.split('+')
             for part in parts:
-                if not IsInteger(messagecontent):
+                if not IsInteger(part):
                     return
-                InputNumber += part
+                InputNumber += int(part)
         elif '-' in messagecontent:
             parts = messagecontent.split('-')
-            for part in parts:
-                if not IsInteger(messagecontent):
+            InputNumber = int(parts[0])
+            for part in parts[1:]:
+                if not IsInteger(part):
                     return
-                InputNumber -= part
+                InputNumber -= int(part)
         elif '*' in messagecontent:
             parts = messagecontent.split('*')
+            InputNumber = 1
             for part in parts:
-                if not IsInteger(messagecontent):
+                if not IsInteger(part):
                     return
-                InputNumber = InputNumber * part
+                InputNumber *= int(part)
         elif '/' in messagecontent:
             parts = messagecontent.split('/')
-            for part in parts:
-                if not IsInteger(messagecontent):
+            InputNumber = int(parts[0])
+            for part in parts[1:]:
+                if not IsInteger(part):
                     return
-                InputNumber = InputNumber / part
+                InputNumber /= int(part)
         elif not IsInteger(messagecontent):
             return
         else:

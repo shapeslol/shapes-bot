@@ -539,8 +539,38 @@ async def on_message(message):
 
     #print(f'Message from {message.author} in #{message.channel}: {message.content}')
     if message.guild:
-        if not IsInteger(message.content):
+        messagecontent = message.content
+        messagecontent = messagecontent.replace(" ", "")
+        InputNumber = 0
+        if '+' in messagecontent:
+            parts = messagecontent.split('+')
+            for part in parts:
+                if not IsInteger(messagecontent):
+                    return
+                InputNumber += part
+        elif '-' in messagecontent:
+            parts = messagecontent.split('-')
+            for part in parts:
+                if not IsInteger(messagecontent):
+                    return
+                InputNumber -= part
+        elif '*' in messagecontent:
+            parts = messagecontent.split('*')
+            for part in parts:
+                if not IsInteger(messagecontent):
+                    return
+                InputNumber = InputNumber * part
+        elif '/' in messagecontent:
+            parts = messagecontent.split('/')
+            for part in parts:
+                if not IsInteger(messagecontent):
+                    return
+                InputNumber = InputNumber / part
+        elif not IsInteger(messagecontent):
             return
+        else:
+            InputNumber = messagecontent
+        
         # Print the content of the message
         server = message.guild
         countingjson = countingDB.get(server.id)
@@ -553,7 +583,7 @@ async def on_message(message):
         HighestNumber = counting_data['highestnumber']
         next_number = number + 1
         print(next_number)
-        if str(message.content) == str(next_number) and message.channel.id == channel and enabled == True and message.author.id != LastCounter:
+        if str(InputNumber) == str(next_number) and message.channel.id == channel and enabled == True and message.author.id != LastCounter:
             await message.add_reaction('👍')
             LastCounter = message.author.id
             number = next_number

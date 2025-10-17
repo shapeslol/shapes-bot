@@ -677,7 +677,6 @@ async def on_ready():
     #bot.loop.create_task(update_db_on_close())
 
 @app.route('/server-count', methods=["GET"])
-@cross_origin()
 def get_server_count():
     # Ensure the bot is ready before accessing guilds
     if bot.is_ready():
@@ -687,7 +686,6 @@ def get_server_count():
         return "Unknown", 503
 
 @app.route('/user-count', methods=["GET"])
-@cross_origin()
 def get_user_count():
     if bot.is_ready():
         user_count = BotInfo.approximate_user_install_count

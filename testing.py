@@ -19,7 +19,7 @@ from discord.ext import commands
 from discord.gateway import DiscordWebSocket, _log
 from discord.ext.commands import Bot
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
-from flask-cors import CORS
+from flask_cors import CORS
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')

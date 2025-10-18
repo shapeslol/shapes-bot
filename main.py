@@ -20,6 +20,7 @@ from discord.gateway import DiscordWebSocket, _log
 from discord.ext.commands import Bot
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 from flask_cors import CORS
+import base64
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
@@ -1527,6 +1528,87 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
         await interaction.edit_original_response(embed=failedembed8)
         #await interaction.edit_original_response(f"An error occurred during the API request: {e}")
         return
+
+@bot.tree.command(name="british", description="Check if a user has their language set to British English")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def british_check(interaction: discord.Interaction, user_input: str):
+    await interaction.response.defer(thinking=True)
+    
+    embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Checking if {user_input} is British!",
+        color=embed_color
+    )
+    await interaction.followup.send(embed=thinkingembed)
+
+    url = "https://users.roblox.com/v1/usernames/users"
+    
+    request_payload = {
+        "usernames": [user_input],
+        "excludeBannedUsers": False
+    }
+
+    try:
+        response = requests.post(url, json=request_payload)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("data") and len(data["data"]) > 0:
+            userinfo = data["data"][0]
+            UserID = userinfo["id"]
+            username = userinfo["name"]
+
+            payload = json.dumps([{"name": "vieweeUserId", "type": "UserId", "value": int(UserID)}])
+            b64encoded = base64.b64encode(payload.encode('utf-8')).decode('utf-8')
+            
+            british_url = f"https://apis.roblox.com/access-management/v1/upsell-feature-access?featureName=MustHideConnections&extraParameters={b64encoded}"
+            british_response = requests.get(british_url)
+            british_response.raise_for_status()
+            british_data = british_response.json()
+            
+            is_british = british_data.get("access") == "Granted"
+
+            avatar_url = f"https://thumbnails.roblox.com/v1/users/avatar-bust?userIds={UserID}&size=150x150&format=Png&isCircular=false"
+            avatar_response = requests.get(avatar_url)
+            avatar_data = avatar_response.json()
+            avatar_thumbnail = avatar_data["data"][0]["imageUrl"] if avatar_data.get("data") and len(avatar_data["data"]) > 0 else None
+
+            if is_british:
+                embed = discord.Embed(
+                    title=":flag_gb: British Check Result",
+                    description=f"**{username}** is British! :flag_gb:",
+                    color=embed_color
+                )
+            else:
+                embed = discord.Embed(
+                    title=":x: British Check Result",
+                    description=f"**{username}** is not British :x:",
+                    color=embed_color
+                )
+            
+            if avatar_thumbnail:
+                embed.set_thumbnail(url=avatar_thumbnail)
+            
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed)
+            
+        else:
+            embed = discord.Embed(
+                title=f":warning: {user_input} not found",
+                color=embed_color
+            )
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed)
+            
+    except requests.exceptions.RequestException as e:
+        embed = discord.Embed(
+            title=":x: API Error",
+            description=f"An error occurred: {str(e)}",
+            color=embed_color
+        )
+        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=embed)
 
 # === Flask Runner in Thread ===
 def run_flask():

@@ -1688,106 +1688,84 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
     else:
         item_id = item_query
 
-    url = f"https://catalog.roblox.com/v1/catalog/items/{item_id}/details?itemType=Asset"
+url = f"https://catalog.roblox.com/v1/catalog/items/{item_id}/details?itemType=Asset"
+
+try:
+    response = requests.get(url)
+    response.raise_for_status()
+    item_data = response.json()
+    print(f"ItemData: {item_data}")
+
+    name = item_data.get("name", "Unknown Item")
+    description = item_data.get("description", "No description available")
+    creator_name = item_data.get("creatorName", "Unknown Creator")
+    creator_type = item_data.get("creatorType", "User")
+    creator_verified = item_data.get("creatorHasVerifiedBadge", False)
+    creator_target_id = item_data.get("creatorTargetId")
+    favorite_count = item_data.get("favoriteCount", 0)
+    lowest_price = item_data.get("lowestPrice", 0)
+    is_purchasable = item_data.get("isPurchasable", False)
+    item_type = item_data.get("itemType", "Asset")
     
+    created_date = item_data.get("itemCreatedUtc")
+    
+    if created_date:
+        created_timestamp = isotodiscordtimestamp(created_date, "F")
+    else:
+        created_timestamp = "Unknown"
+    
+    updated_timestamp = created_timestamp
+
+    creator_display = creator_name
+    if creator_verified:
+        creator_display += " <:RobloxVerified:1416951927513677874>"
+    else:
+        creator_display += f" ({creator_type})"
+
+    price_display = "Not for sale"
+    if is_purchasable and lowest_price is not None:
+        price_display = "Free" if lowest_price == 0 else f"{lowest_price:,} Robux"
+
+    thumbnail_url = f"https://thumbnails.roblox.com/v1/assets?assetIds={item_id}&size=420x420&format=Png"
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        item_data = response.json()
-        print(f"ItemData: {item_data}")
-
-        name = item_data.get("name", "Unknown Item")
-        description = item_data.get("description", "No description available")
-        creator_name = item_data.get("creatorName", "Unknown Creator")
-        creator_type = item_data.get("creatorType", "User")
-        creator_verified = item_data.get("creatorHasVerifiedBadge", False)
-        lowest_price = item_data.get("lowestPrice", 0)
-        is_purchasable = item_data.get("isPurchasable", False)
-        item_type = item_data.get("itemType", "Asset")
-        
-        details_url = f"https://economy.roblox.com/v2/assets/{item_id}/details"
-        try:
-            details_response = requests.get(details_url)
-            details_response.raise_for_status()
-            details_data = details_response.json()
-            
-            created_date = details_data.get("Created")
-            updated_date = details_data.get("Updated")
-            
-            if created_date:
-                created_timestamp = isotodiscordtimestamp(created_date, "F")
-            else:
-                created_timestamp = "Unknown"
-                
-            if updated_date:
-                updated_timestamp = isotodiscordtimestamp(updated_date, "F")
-            else:
-                updated_timestamp = "Unknown"
-                
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching item details: {e}")
-            created_timestamp = "Unknown"
-            updated_timestamp = "Unknown"
-
-        creator_display = creator_name
-        if creator_verified:
-            creator_display += " <:RobloxVerified:1416951927513677874>"
+        thumb_response = requests.get(thumbnail_url)
+        thumb_response.raise_for_status()
+        thumb_data = thumb_response.json()
+        if thumb_data and thumb_data.get("data") and len(thumb_data["data"]) > 0:
+            image_url = thumb_data["data"][0].get("imageUrl")
         else:
-            creator_display += f" ({creator_type})"
-
-        price_display = "Not for sale"
-        if is_purchasable and lowest_price is not None:
-            price_display = "Free" if lowest_price == 0 else f"{lowest_price:,} Robux"
-
-        thumbnail_url = f"https://thumbnails.roblox.com/v1/assets?assetIds={item_id}&size=420x420&format=Png"
-        try:
-            thumb_response = requests.get(thumbnail_url)
-            thumb_response.raise_for_status()
-            thumb_data = thumb_response.json()
-            if thumb_data and thumb_data.get("data") and len(thumb_data["data"]) > 0:
-                image_url = thumb_data["data"][0].get("imageUrl")
-            else:
-                image_url = None
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching item thumbnail: {e}")
             image_url = None
-
-        embed = discord.Embed(
-            title=name,
-            url=f"https://www.roblox.com/catalog/{item_id}/",
-            description=description,
-            color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-        )
-
-        if image_url:
-            embed.set_thumbnail(url=image_url)
-
-        embed.add_field(name="Item ID", value=item_id, inline=True)
-        embed.add_field(name="Item Type", value=item_type, inline=True)
-        embed.add_field(name="Price", value=price_display, inline=True)
-        embed.add_field(name="Creator", value=creator_display, inline=True)
-        embed.add_field(name="Created", value=created_timestamp, inline=True)
-        embed.add_field(name="Updated", value=updated_timestamp, inline=True)
-
-        view = discord.ui.View()
-        view.add_item(discord.ui.Button(
-            label="View Item",
-            style=discord.ButtonStyle.link,
-            emoji="<:RobloxLogo:1416951004607418398>",
-            url=f"https://www.roblox.com/catalog/{item_id}/"
-        ))
-
-        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=embed, view=view)
-
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching item data for ID {item_id}: {e}")
-        failedembed = discord.Embed(
-            title=f":x: An error occurred while fetching data for item ID: {item_id}. Please try again later.",
-            color=discord.Color.red()
-        )
-        await interaction.edit_original_response(embed=failedembed)
-        return
+        print(f"Error fetching item thumbnail: {e}")
+        image_url = None
+
+    embed = discord.Embed(
+        title=name,
+        url=f"https://www.roblox.com/catalog/{item_id}/",
+        description=description,
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+
+    if image_url:
+        embed.set_thumbnail(url=image_url)
+
+    embed.add_field(name="Item ID", value=item_id, inline=True)
+    embed.add_field(name="Item Type", value=item_type, inline=True)
+    embed.add_field(name="Price", value=price_display, inline=True)
+    embed.add_field(name="Creator", value=creator_display, inline=True)
+    embed.add_field(name="Favorites", value=f"{favorite_count:,}", inline=True)
+    embed.add_field(name="Created", value=created_timestamp, inline=True)
+
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(
+        label="View Item",
+        style=discord.ButtonStyle.link,
+        emoji="<:RobloxLogo:1416951004607418398>",
+        url=f"https://www.roblox.com/catalog/{item_id}/"
+    ))
+
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.edit_original_response(embed=embed, view=view)
 
 @bot.tree.command(name="groupinfo", description="Get information about a Roblox group")
 @app_commands.allowed_installs(guilds=True, users=True)

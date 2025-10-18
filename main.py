@@ -1351,7 +1351,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     await interaction.followup.send(embed=thinkingembed)
 
     url = "https://users.roblox.com/v1/usernames/users"
-    # print(f"Fetching Data From {url}")
     
     request_payload = {
         "usernames": [user],
@@ -1366,6 +1365,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             userinfo = data["data"][0]
             UserID = userinfo["id"]
             Display = userinfo["displayName"]
+            hasVerifiedBadge = userinfo.get("hasVerifiedBadge", False)
             print(f"UserInfo: {userinfo}")
 
             url = f"https://users.roblox.com/v1/users/{UserID}"
@@ -1388,10 +1388,14 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 await interaction.edit_original_response(embed=failedembed)
                 return
 
+            # Add verified badge to username if user is verified
             if Display == user:
                 Username = Display
             else:
                 Username = f"{Display} (@{user})"
+            
+            if hasVerifiedBadge and not Banned:
+                Username += " <:RobloxVerified:1416951927513677874>"
 
             if Banned:
                 Username = f":warning: [Account Deleted] {Username}"
@@ -1411,7 +1415,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     color=discord.Color.red()
                 )
                 await interaction.edit_original_response(embed=failedembed2)
-                # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
                 return
 
             profileurl = f"https://www.roblox.com/users/{UserID}/profile"
@@ -1467,7 +1470,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                         color=discord.Color.red()
                 )
                     await interaction.edit_original_response(embed=failedembed3)
-                    #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
                     return
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching avatar headshot: {e}")
@@ -1476,7 +1478,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     color=discord.Color.red()
                 )
                 await interaction.edit_original_response(embed=failedembed4)
-                #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
                 return
 
             # Get avatar bust
@@ -1499,7 +1500,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                         color=discord.Color.red()
                 )
                     await interaction.edit_original_response(embed=failedembed5)
-                    #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                     return
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching avatar bust: {e}")
@@ -1508,7 +1508,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     color=discord.Color.red()
                 )
                 await interaction.edit_original_response(embed=failedembed6)
-                #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                 return
         else:
             print(f"{user} not found.")
@@ -1517,7 +1516,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 color=discord.Color.yellow()
             )
             await interaction.edit_original_response(embed=failedembed7)
-            #await interaction.edit_original_response(f"{user} not found.")
             return
     except requests.exceptions.RequestException as e:
         print(f"An error occurred during the API request: {e}")
@@ -1526,7 +1524,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             color=discord.Color.yellow()
         )
         await interaction.edit_original_response(embed=failedembed8)
-        #await interaction.edit_original_response(f"An error occurred during the API request: {e}")
         return
 
 @bot.tree.command(name="british", description="Check if a user has their language set to British English")

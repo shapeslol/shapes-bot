@@ -1350,7 +1350,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     await interaction.followup.send(embed=thinkingembed)
 
     url = "https://users.roblox.com/v1/usernames/users"
-    # print(f"Fetching Data From {url}")
     
     request_payload = {
         "usernames": [user],
@@ -1365,6 +1364,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             userinfo = data["data"][0]
             UserID = userinfo["id"]
             Display = userinfo["displayName"]
+            hasVerifiedBadge = userinfo.get("hasVerifiedBadge", False)
             print(f"UserInfo: {userinfo}")
 
             url = f"https://users.roblox.com/v1/users/{UserID}"
@@ -1391,6 +1391,10 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 Username = Display
             else:
                 Username = f"{Display} (@{user})"
+            
+            # FIXED: Removed "and not Banned" condition so verified badge shows for terminated users
+            if hasVerifiedBadge:
+                Username += " <:RobloxVerified:1416951927513677874>"
 
             if Banned:
                 Username = f":warning: [Account Deleted] {Username}"
@@ -1410,13 +1414,11 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     color=discord.Color.red()
                 )
                 await interaction.edit_original_response(embed=failedembed2)
-                # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
                 return
 
             profileurl = f"https://www.roblox.com/users/{UserID}/profile"
             rolimonsurl = f"https://rolimons.com/player/{UserID}"
 
-            # --- Create link buttons ---
             view = discord.ui.View()
             if not Banned:
                 view.add_item(discord.ui.Button(
@@ -1449,7 +1451,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             embed.add_field(name="UserID", value=UserID, inline=False)
             embed.add_field(name="Join Date", value=RobloxJoinDate_DiscordTimestamp, inline=False)
 
-            # Get avatar headshot
             url = f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={UserID}&size=420x420&format=Png&is=false"
             try:
                 response = requests.get(url)
@@ -1459,15 +1460,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     HeadShot = data["data"][0].get("imageUrl")
                     embed.set_author(name=user, url=profileurl, icon_url=HeadShot)
                     print(data)
-                else:
-                    print(f"Error fetching avatar headshot: {e}")
-                    failedembed3 = discord.Embed(
-                        title=f"Failed To Retrieve {user}'s Headshot!",
-                        color=discord.Color.red()
-                )
-                    await interaction.edit_original_response(embed=failedembed3)
-                    #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
-                    return
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching avatar headshot: {e}")
                 failedembed4 = discord.Embed(
@@ -1475,10 +1467,8 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     color=discord.Color.red()
                 )
                 await interaction.edit_original_response(embed=failedembed4)
-                #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Headshot!")
                 return
 
-            # Get avatar bust
             url = f"https://thumbnails.roblox.com/v1/users/avatar-bust?userIds={UserID}&size=150x150&format=Png&isCircular=false"
             try:
                 response = requests.get(url)
@@ -1498,7 +1488,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                         color=discord.Color.red()
                 )
                     await interaction.edit_original_response(embed=failedembed5)
-                    #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                     return
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching avatar bust: {e}")
@@ -1507,7 +1496,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     color=discord.Color.red()
                 )
                 await interaction.edit_original_response(embed=failedembed6)
-                #await interaction.edit_original_response(f"Failed To Retrieve {user}'s Avatar!")
                 return
         else:
             print(f"{user} not found.")
@@ -1516,7 +1504,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 color=discord.Color.yellow()
             )
             await interaction.edit_original_response(embed=failedembed7)
-            #await interaction.edit_original_response(f"{user} not found.")
             return
     except requests.exceptions.RequestException as e:
         print(f"An error occurred during the API request: {e}")
@@ -1525,7 +1512,219 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             color=discord.Color.yellow()
         )
         await interaction.edit_original_response(embed=failedembed8)
-        #await interaction.edit_original_response(f"An error occurred during the API request: {e}")
+        return
+
+@bot.tree.command(name="british", description="Check if a user has their language set to British English")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def british_check(interaction: discord.Interaction, user_input: str):
+    await interaction.response.defer(thinking=True)
+    
+    embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Checking if {user_input} is British!",
+        color=embed_color
+    )
+    await interaction.followup.send(embed=thinkingembed)
+
+    url = "https://users.roblox.com/v1/usernames/users"
+    
+    request_payload = {
+        "usernames": [user_input],
+        "excludeBannedUsers": False
+    }
+
+    try:
+        response = requests.post(url, json=request_payload)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("data") and len(data["data"]) > 0:
+            userinfo = data["data"][0]
+            UserID = userinfo["id"]
+            username = userinfo["name"]
+
+            payload = json.dumps([{"name": "vieweeUserId", "type": "UserId", "value": int(UserID)}])
+            b64encoded = base64.b64encode(payload.encode('utf-8')).decode('utf-8')
+            
+            british_url = f"https://apis.roblox.com/access-management/v1/upsell-feature-access?featureName=MustHideConnections&extraParameters={b64encoded}"
+            british_response = requests.get(british_url)
+            british_response.raise_for_status()
+            british_data = british_response.json()
+            
+            is_british = british_data.get("access") == "Granted"
+
+            avatar_url = f"https://thumbnails.roblox.com/v1/users/avatar-bust?userIds={UserID}&size=150x150&format=Png&isCircular=false"
+            avatar_response = requests.get(avatar_url)
+            avatar_data = avatar_response.json()
+            avatar_thumbnail = avatar_data["data"][0]["imageUrl"] if avatar_data.get("data") and len(avatar_data["data"]) > 0 else None
+
+            if is_british:
+                embed = discord.Embed(
+                    title=":flag_gb: British Check Result",
+                    description=f"**{username}** is British! :flag_gb:",
+                    color=embed_color
+                )
+            else:
+                embed = discord.Embed(
+                    title=":x: British Check Result",
+                    description=f"**{username}** is not British :x:",
+                    color=embed_color
+                )
+            
+            if avatar_thumbnail:
+                embed.set_thumbnail(url=avatar_thumbnail)
+            
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed)
+            
+        else:
+            embed = discord.Embed(
+                title=f":warning: {user_input} not found",
+                color=embed_color
+            )
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed)
+            
+    except requests.exceptions.RequestException as e:
+        embed = discord.Embed(
+            title=":x: API Error",
+            description=f"An error occurred: {str(e)}",
+            color=embed_color
+        )
+        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=embed)
+
+@bot.tree.command(name="item", description="Get detailed information about a Roblox item")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def item(interaction: discord.Interaction, item_query: str = "Dominus Empyreus"):
+    
+    print(f"Searching For {item_query}'s item info")
+    await interaction.response.defer(thinking=True)
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {item_query}'s Item Information!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+
+    if not item_query.isdigit():
+        search_url = f"https://catalog.roblox.com/v1/search/items?category=All&limit=10&keyword={urllib.parse.quote(item_query)}"
+        
+        try:
+            response = requests.get(search_url)
+            response.raise_for_status()
+            search_data = response.json()
+            
+            if search_data.get("data") and len(search_data["data"]) > 0:
+                item_id = None
+                for item in search_data["data"]:
+                    if item.get("name", "").lower() == item_query.lower():
+                        item_id = item.get("id")
+                        break
+                
+                if not item_id:
+                    item_id = search_data["data"][0].get("id")
+                
+                if not item_id:
+                    failedembed = discord.Embed(
+                        title=f":warning: {item_query} not found.",
+                        color=discord.Color.yellow()
+                    )
+                    await interaction.edit_original_response(embed=failedembed)
+                    return
+            else:
+                failedembed = discord.Embed(
+                    title=f":warning: {item_query} not found.",
+                    color=discord.Color.yellow()
+                )
+                await interaction.edit_original_response(embed=failedembed)
+                return
+                
+        except requests.exceptions.RequestException as e:
+            print(f"Error searching for item {item_query}: {e}")
+            failedembed = discord.Embed(
+                title=f":x: An error occurred while searching for {item_query}. Please try again later.",
+                color=discord.Color.red()
+            )
+            await interaction.edit_original_response(embed=failedembed)
+            return
+    else:
+        item_id = item_query
+
+    url = f"https://catalog.roblox.com/v1/catalog/items/{item_id}/details?itemType=Asset"
+    
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        item_data = response.json()
+        print(f"ItemData: {item_data}")
+
+        name = item_data.get("name", "Unknown Item")
+        description = item_data.get("description", "No description available")
+        creator_name = item_data.get("creatorName", "Unknown Creator")
+        creator_type = item_data.get("creatorType", "User")
+        creator_verified = item_data.get("creatorHasVerifiedBadge", False)
+        lowest_price = item_data.get("lowestPrice", 0)
+        is_purchasable = item_data.get("isPurchasable", False)
+        item_type = item_data.get("itemType", "Asset")
+
+        creator_display = creator_name
+        if creator_verified:
+            creator_display += " <:RobloxVerified:1416951927513677874>"
+        else:
+            creator_display += f" ({creator_type})"
+
+        price_display = "Not for sale"
+        if is_purchasable and lowest_price is not None:
+            price_display = "Free" if lowest_price == 0 else f"{lowest_price:,} Robux"
+
+        thumbnail_url = f"https://thumbnails.roblox.com/v1/assets?assetIds={item_id}&size=420x420&format=Png"
+        try:
+            thumb_response = requests.get(thumbnail_url)
+            thumb_response.raise_for_status()
+            thumb_data = thumb_response.json()
+            if thumb_data and thumb_data.get("data") and len(thumb_data["data"]) > 0:
+                image_url = thumb_data["data"][0].get("imageUrl")
+            else:
+                image_url = None
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching item thumbnail: {e}")
+            image_url = None
+
+        embed = discord.Embed(
+            title=name,
+            url=f"https://www.roblox.com/catalog/{item_id}/",
+            description=description,
+            color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+        )
+
+        if image_url:
+            embed.set_thumbnail(url=image_url)
+
+        embed.add_field(name="Item ID", value=item_id, inline=True)
+        embed.add_field(name="Item Type", value=item_type, inline=True)
+        embed.add_field(name="Price", value=price_display, inline=True)
+        embed.add_field(name="Creator", value=creator_display, inline=True)
+
+        view = discord.ui.View()
+        view.add_item(discord.ui.Button(
+            label="View Item",
+            style=discord.ButtonStyle.link,
+            emoji="<:RobloxLogo:1416951004607418398>",
+            url=f"https://www.roblox.com/catalog/{item_id}/"
+        ))
+
+        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=embed, view=view)
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching item data for ID {item_id}: {e}")
+        failedembed = discord.Embed(
+            title=f":x: An error occurred while fetching data for item ID: {item_id}. Please try again later.",
+            color=discord.Color.red()
+        )
+        await interaction.edit_original_response(embed=failedembed)
         return
 
 # === Flask Runner in Thread ===

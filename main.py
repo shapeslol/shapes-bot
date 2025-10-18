@@ -22,6 +22,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 from flask_cors import CORS
 import base64
 import urllib
+import re
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
@@ -1875,6 +1876,180 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
         )
         await interaction.edit_original_response(embed=failedembed)
         return
+
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="placeinfo", description="Get detailed information about a Roblox place")
+@app_commands.describe(game_input="Roblox place ID or game URL")
+async def placeinfo(interaction: discord.Interaction, game_input: str):
+    await interaction.response.defer(thinking=True)
+    
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For Place Information!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+
+    try:
+        connector = aiohttp.TCPConnector(family=socket.AF_INET)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            place_id = None
+            
+            if "roblox.com/games/" in game_input:
+                match = re.search(r'roblox\.com/games/(\d+)', game_input)
+                if match:
+                    place_id = match.group(1)
+                else:
+                    errorembed = discord.Embed(
+                        title=":x: Invalid URL :x:",
+                        description="Could not extract place ID from the URL",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=errorembed)
+                    return
+            else:
+                if not game_input.isdigit():
+                    errorembed = discord.Embed(
+                        title=":x: Invalid Input :x:",
+                        description="Please provide a valid place ID or Roblox game URL",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=errorembed)
+                    return
+                place_id = game_input
+            
+            universe_url = f"https://apis.roblox.com/universes/v1/places/{place_id}/universe"
+            async with session.get(universe_url) as response:
+                if response.status != 200:
+                    errorembed = discord.Embed(
+                        title=":x: API Error :x:",
+                        description=f"Failed to fetch universe information (Status: {response.status})",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=errorembed)
+                    return
+                
+                universe_data = await response.json()
+                universe_id = universe_data.get('universeId')
+                
+                if not universe_id:
+                    errorembed = discord.Embed(
+                        title=":x: Not Found :x:",
+                        description="Could not find universe for this place ID",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=errorembed)
+                    return
+            
+            games_url = f"https://games.roblox.com/v1/games?universeIds={universe_id}"
+            async with session.get(games_url) as response:
+                if response.status != 200:
+                    errorembed = discord.Embed(
+                        title=":x: API Error :x:",
+                        description=f"Failed to fetch game details (Status: {response.status})",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=errorembed)
+                    return
+                
+                games_data = await response.json()
+                if not games_data.get('data') or len(games_data['data']) == 0:
+                    errorembed = discord.Embed(
+                        title=":x: Not Found :x:",
+                        description="Could not find game details for this universe",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=errorembed)
+                    return
+                
+                game_info = games_data['data'][0]
+            
+            name = game_info.get('name', 'Unknown')
+            description = game_info.get('description', 'No description available')
+            creator_id = game_info.get('creator', {}).get('id', 'Unknown')
+            creator_name = game_info.get('creator', {}).get('name', 'Unknown')
+            creator_type = game_info.get('creator', {}).get('type', 'User')
+            current_players = game_info.get('playing', 0)
+            visits = game_info.get('visits', 0)
+            max_players = game_info.get('maxPlayers', 0)
+            created = game_info.get('created', 'Unknown')
+            updated = game_info.get('updated', 'Unknown')
+            genre = game_info.get('genre', 'Unknown')
+            favorites_count = game_info.get('favoritedCount', 0)
+        
+            created_timestamp = isotodiscordtimestamp(created, "F") if created != 'Unknown' else "Unknown"
+            updated_timestamp = isotodiscordtimestamp(updated, "F") if updated != 'Unknown' else "Unknown"
+            
+            thumbnail_url = f"https://thumbnails.roblox.com/v1/games/icons?universeIds={universe_id}&size=512x512&format=Png&isCircular=false"
+            thumbnail_image = None
+            async with session.get(thumbnail_url) as response:
+                if response.status == 200:
+                    thumbnail_data = await response.json()
+                    if thumbnail_data.get('data') and len(thumbnail_data['data']) > 0:
+                        thumbnail_image = thumbnail_data['data'][0]['imageUrl']
+            
+            embed = discord.Embed(
+                title=name,
+                url=f"https://www.roblox.com/games/{place_id}/",
+                description=description,
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+            )
+        
+            embed.add_field(name="Place ID", value=f"`{place_id}`", inline=True)
+            embed.add_field(name="Universe ID", value=f"`{universe_id}`", inline=True)
+            
+            if creator_type.lower() == "user":
+                creator_display = f"[{creator_name}](https://www.roblox.com/users/{creator_id}/profile)"
+            else:
+                creator_display = f"[{creator_name}](https://www.roblox.com/groups/{creator_id}/)"
+            embed.add_field(name="Creator", value=creator_display, inline=True)
+
+            embed.add_field(name="Visits", value=f"{visits:,}", inline=True)
+            embed.add_field(name="Current Players", value=f"{current_players:,}", inline=True)
+            embed.add_field(name="Max Players", value=f"{max_players}", inline=True)
+            
+            embed.add_field(name="Favorites", value=f"{favorites_count:,}", inline=True)
+            embed.add_field(name="Genre", value=genre, inline=True)
+            
+            embed.add_field(name="Created", value=created_timestamp, inline=True)
+            embed.add_field(name="Updated", value=updated_timestamp, inline=True)
+            
+            if description and description != "No description available":
+                if len(description) > 1024:
+                    description = description[:1021] + "..."
+                if len(embed.fields) % 3 != 0:
+                    embed.add_field(name="\u200b", value="\u200b", inline=True)
+                embed.add_field(name="Description", value=description, inline=False)
+            
+            if thumbnail_image:
+                embed.set_thumbnail(url=thumbnail_image)
+            
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="View Game",
+                style=discord.ButtonStyle.link,
+                emoji="<:RobloxLogo:1416951004607418398>",
+                url=f"https://www.roblox.com/games/{place_id}/"
+            ))
+            
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed, view=view)
+            
+    except Exception as e:
+        print(f"Error in placeinfo command: {e}")
+        errorembed = discord.Embed(
+            title=":x: Unexpected Error :x:",
+            description=f"An error occurred while fetching place information: {str(e)}",
+            color=discord.Color.red()
+        )
+        errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=errorembed)
 
 # === Flask Runner in Thread ===
 def run_flask():

@@ -491,17 +491,17 @@ async def update_db():
             os._exit(0)
 
 
-# === Background task to update cached guilds every 30 seconds ===
+# === Background task to update cached guilds every 2 seconds ===
 async def update_guild_cache():
     global cached_guilds
     while True:
         #await bot.tree.sync()
         BotInfo = await bot.application_info()
         cached_guilds = list(bot.guilds)
-        print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
-        print(f"[SYSTEM] Watching {BotInfo.approximate_user_install_count} Users! As of {time.strftime('%X')}")
+        print(f"[SYSTEM] Watching {len(cached_guilds)} Servers!")
+        print(f"[SYSTEM] Watching {BotInfo.approximate_user_install_count} Users!")
         await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 shapes.lol/discord"))
-        await asyncio.sleep(2.5)
+        await asyncio.sleep(2)
         #if len(bot.guilds) == 1:
             #print(bot.guilds[0].name)
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
@@ -556,6 +556,7 @@ async def on_message(message):
         
         messagecontent = message.content
         messagecontent = messagecontent.replace(" ", "")
+        InputNumber = None
         if not any(op in messagecontent for op in "+-*/"):
             if IsInteger(messagecontent):
                 InputNumber = int(messagecontent)
@@ -685,22 +686,14 @@ async def on_ready():
     bot.loop.create_task(update_db())
     #bot.loop.create_task(update_db_on_close())
 
-@app.route('/server-count', methods=["GET"])
+@app.route('/bot-info', methods=["GET"])
 def get_server_count():
     # Ensure the bot is ready before accessing guilds
     if bot.is_ready():
         server_count = len(bot.guilds)
-        return str(server_count), 200
+        return {"Servers":str(server_count),"Users":str(BotInfo.approximate_user_install_count)}, 200
     else:
-        return "Unknown", 503
-
-@app.route('/user-count', methods=["GET"])
-def get_user_count():
-    if bot.is_ready():
-        user_count = BotInfo.approximate_user_install_count
-        return str(user_count), 200
-    else:
-        return "Unknown", 503
+        return {"Servers":"Unknown","Users":"Unknown"}, 503
 
 async def restartbot():
     print("Bot Restarting.")

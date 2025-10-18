@@ -8,4 +8,4 @@ pickledb
 pandas
 slpp
 flask-cors
-import base64
+base64

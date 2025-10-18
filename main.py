@@ -495,7 +495,7 @@ async def update_db():
 async def update_guild_cache():
     global cached_guilds
     while True:
-        await bot.tree.sync()
+        #await bot.tree.sync()
         BotInfo = await bot.application_info()
         cached_guilds = list(bot.guilds)
         print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
@@ -509,7 +509,6 @@ async def update_guild_cache():
             #print(f"Watching {len(bot.guilds)} Servers")
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
-        cached_guilds = []
         await asyncio.sleep(30)
 
 def IsInteger(s):
@@ -528,7 +527,7 @@ async def on_message_delete(message):
         server = message.guild
         counting = countingDB.get(f"{server.id}")
         if counting:
-            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content) and counting['number'] == message.content:
+            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content):
                 nextnumber = counting['number'] + 1
                 await message.channel.send(f"{message.author.mention} deleted their message containing the last number. The next number is {nextnumber}")
 
@@ -542,6 +541,19 @@ async def on_message(message):
 
     #print(f'Message from {message.author} in #{message.channel}: {message.content}')
     if message.guild:
+        server = message.guild
+        countingjson = countingDB.get(server.id)
+        counting_data = countingjson
+        enabled = counting_data['enabled']
+        number = counting_data['number']
+        channel = counting_data['channel']
+        warnings = counting_data['warnings']
+        LastCounter = counting_data['lastcounter']
+        HighestNumber = counting_data['highestnumber']
+        next_number = number + 1
+        if enabled == False and message.channel.id != channel:
+            return
+        
         messagecontent = message.content
         messagecontent = messagecontent.replace(" ", "")
         if not any(op in messagecontent for op in "+-*/"):
@@ -580,18 +592,8 @@ async def on_message(message):
                 i += 2
         
         # Print the content of the message
-        server = message.guild
-        countingjson = countingDB.get(server.id)
-        counting_data = countingjson
-        number = counting_data['number']
-        enabled = counting_data['enabled']
-        channel = counting_data['channel']
-        warnings = counting_data['warnings']
-        LastCounter = counting_data['lastcounter']
-        HighestNumber = counting_data['highestnumber']
-        next_number = number + 1
-        print(next_number)
-        if str(InputNumber) == str(next_number) and message.channel.id == channel and enabled == True and message.author.id != LastCounter:
+        #print(next_number)
+        if str(InputNumber) == str(next_number) and message.author.id != LastCounter:
             await message.add_reaction('👍')
             LastCounter = message.author.id
             number = next_number

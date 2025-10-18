@@ -542,38 +542,40 @@ async def on_message(message):
     if message.guild:
         messagecontent = message.content
         messagecontent = messagecontent.replace(" ", "")
-        InputNumber = 0
-        if '+' in messagecontent:
-            parts = messagecontent.split('+')
-            for part in parts:
-                if not IsInteger(part):
-                    return
-                InputNumber += int(part)
-        elif '-' in messagecontent:
-            parts = messagecontent.split('-')
-            InputNumber = int(parts[0])
-            for part in parts[1:]:
-                if not IsInteger(part):
-                    return
-                InputNumber -= int(part)
-        elif '*' in messagecontent:
-            parts = messagecontent.split('*')
-            InputNumber = 1
-            for part in parts:
-                if not IsInteger(part):
-                    return
-                InputNumber *= int(part)
-        elif '/' in messagecontent:
-            parts = messagecontent.split('/')
-            InputNumber = int(parts[0])
-            for part in parts[1:]:
-                if not IsInteger(part):
-                    return
-                InputNumber /= int(part)
-        elif not IsInteger(messagecontent):
-            return
+        if not any(op in messagecontent for op in "+-*/"):
+            if IsInteger(messagecontent):
+                InputNumber = int(messagecontent)
+            else:
+                print("stop")
         else:
-            InputNumber = messagecontent
+            num = ''
+            parts = []
+            for ch in messagecontent:
+                if IsInteger(ch):
+                    num += ch
+                else:
+                    parts.append(num)
+                    parts.append(ch)
+                    num = ''
+            parts.append(num)
+        
+            InputNumber = int(parts[0])
+            i = 1
+            while i < len(parts):
+                op = parts[i]
+                val = int(parts[i + 1])
+        
+                if op == '+':
+                    InputNumber += val
+                elif op == '-':
+                    InputNumber -= val
+                elif op == '*':
+                    InputNumber *= val
+                elif op == '/':
+                    result = InputNumber / val
+                    InputNumber = int(result) if IsInteger(ch) else result
+        
+                i += 2
         
         # Print the content of the message
         server = message.guild

@@ -1797,14 +1797,21 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
         owner_id = owner_data.get("userId")
         owner_name = owner_data.get("username", "Unknown")
 
-        # Force verified badges for specific group and user
         if group_id == "5544706":
             group_verified = True
         
-        if str(owner_id) == "124767284":
-            owner_verified = True
-        else:
-            owner_verified = owner_data.get("hasVerifiedBadge", False)
+        owner_verified = False
+        if owner_id:
+            try:
+                user_url = f"https://users.roblox.com/v1/users/{owner_id}"
+                user_response = requests.get(user_url)
+                user_response.raise_for_status()
+                user_data = user_response.json()
+                owner_verified = user_data.get("hasVerifiedBadge", False)
+                if user_data.get("id") == 124767284:
+                    owner_verified = True
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching owner data: {e}")
 
         group_display = name
         if group_verified:

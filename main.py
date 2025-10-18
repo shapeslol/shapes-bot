@@ -557,6 +557,7 @@ async def on_message(message):
         messagecontent = message.content
         messagecontent = messagecontent.replace(" ", "")
         InputNumber = None
+        
         if not any(op in messagecontent for op in "+-*/"):
             if IsInteger(messagecontent):
                 InputNumber = int(messagecontent)
@@ -607,6 +608,8 @@ async def on_message(message):
             countingDB.set(server.id, counting_data)
             countingDB.save()
         else:
+            if InputNumber == None:
+                return
             if enabled == False:
                 return
             

@@ -706,46 +706,25 @@ async def restartbot():
     await asyncio.sleep(20)
     bot.run(token)
 
-
 def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str:
-    """
-    Converts an ISO 8601 formatted UTC timestamp string to Discord's timestamp markdown.
-
-    Args:
-        iso_timestamp_str: The ISO 8601 formatted timestamp string (e.g., "2023-10-27T10:30:00Z").
-        format_type: The Discord timestamp format type (e.g., "t", "T", "d", "D", "f", "F", "R").
-                    Defaults to "f" (short date/time).
-
-    Returns:
-        A string formatted for Discord's timestamp display.
-    """
     try:
-        # 1. Parse the ISO 8601 string into a datetime object.
-        # Use fromisoformat for modern Python versions (3.7+)
-        dt_object = datetime.fromisoformat(iso_timestamp_str.replace('Z', '+00:00'))
+        if '.' in iso_timestamp_str and iso_timestamp_str.endswith('Z'):
+            main_part = iso_timestamp_str.split('.')[0]
+            iso_timestamp_str = main_part + '+00:00'
+        else:
+            iso_timestamp_str = iso_timestamp_str.replace('Z', '+00:00')
+        
+        dt_object = datetime.fromisoformat(iso_timestamp_str)
 
-        # Ensure the datetime object is timezone-aware and in UTC
         if dt_object.tzinfo is None:
             dt_object = pytz.utc.localize(dt_object)
         else:
             dt_object = dt_object.astimezone(pytz.utc)
 
-        # 2. Convert the datetime object to a Unix timestamp.
         unix_timestamp = int(dt_object.timestamp())
-
-        # 3. Format the Unix timestamp into Discord's special timestamp markdown.
         return f"<t:{unix_timestamp}:{format_type}>"
     except ValueError as e:
         return f"Error parsing timestamp: {e}"
-
-# TESTING
-#iso_time_utc = "2025-12-25T14:30:00Z"
-#discord_time_short = iso_to_discord_time(iso_time_utc, "f")
-#discord_time_relative = iso_to_discord_time(iso_time_utc, "R")
-
-#print(f"Short date/time: {discord_time_short}")
-#print(f"Long date/time: {discord_time_long}")
-#print(f"Relative time: {discord_time_relative}")
 
 DiscordColors = [
     discord.Color.blue(),

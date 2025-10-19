@@ -24,6 +24,8 @@ import base64
 import urllib
 import re
 import socket
+import typing
+from typing import Dict, Any, Optional
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')

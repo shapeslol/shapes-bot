@@ -692,13 +692,15 @@ async def on_ready():
     #bot.loop.create_task(update_db_on_close())
 
 @app.route('/bot-info', methods=["GET"])
-def get_server_count():
+def get_bot_info():
     # Ensure the bot is ready before accessing guilds
     if bot.is_ready():
         server_count = len(bot.guilds)
-        return {"Servers":str(server_count),"Users":str(BotInfo.approximate_user_install_count)}, 200
+        jsonData = {"Servers":str(server_count),"Users":str(BotInfo.appoximate_user_install_count)}
+        return jsonify(jsonData), 200
     else:
-        return {"Servers":"Unknown","Users":"Unknown"}, 503
+        jsonData = {"Servers":"Unknown","Users":"Unknown"}
+        return jsonify(jsonData), 503
 
 async def restartbot():
     print("Bot Restarting.")

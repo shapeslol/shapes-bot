@@ -711,7 +711,10 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
         if '.' in iso_timestamp_str and iso_timestamp_str.endswith('Z'):
             main_part = iso_timestamp_str.split('.')[0]
             iso_timestamp_str = main_part + '+00:00'
-        else:
+        elif '.' in iso_timestamp_str and '+00:00' in iso_timestamp_str:
+            main_part = iso_timestamp_str.split('.')[0]
+            iso_timestamp_str = main_part + '+00:00'
+        elif iso_timestamp_str.endswith('Z'):
             iso_timestamp_str = iso_timestamp_str.replace('Z', '+00:00')
         
         dt_object = datetime.fromisoformat(iso_timestamp_str)

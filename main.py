@@ -24,13 +24,12 @@ import base64
 import urllib
 import re
 import socket
-import typing
-from typing import Dict, Any, Optional
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
 embedDB = PickleDB('embed.db')
 usersDB = PickleDB('users.db')
+autoroleDB = PickleDB('autorole.db')
 
 # === Discord Bot Setup ===
 intents = discord.Intents.default()
@@ -693,6 +692,16 @@ async def on_ready():
     bot.loop.create_task(update_db())
     #bot.loop.create_task(update_db_on_close())
 
+@bot.event
+async def on_member_join(member):
+    autorole_data = autoroleDB.get(f"{member.guild.id}")
+    if autorole_data and autorole_data.get("enabled"):
+        role_id = autorole_data.get("role_id")
+        if role_id:
+            role = member.guild.get_role(role_id)
+            if role:
+                await member.add_roles(role)
+
 @app.route('/botinfo', methods=["GET"])
 def get_bot_info():
     # Ensure the bot is ready before accessing guilds
@@ -729,9 +738,9 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
             dt_object = dt_object.astimezone(pytz.utc)
 
         unix_timestamp = int(dt_object.timestamp())
-        return f"<t:{unix_timestamp}:{format_type}>"
+        return unix_timestamp  
     except ValueError as e:
-        return f"Error parsing timestamp: {e}"
+        return None
 
 DiscordColors = [
     discord.Color.blue(),
@@ -2108,7 +2117,7 @@ async def create_badge_embed(badge_data: dict, thumbnail_url: Optional[str], bad
     if created_timestamp:
         embed.add_field(
             name="Created", 
-            value=f"<t:{created_timestamp}:f> (<t:{created_timestamp}:R>)", 
+            value=f"{created_timestamp} {created_timestamp})", 
             inline=True
         )
     else:
@@ -2197,6 +2206,38 @@ async def badge_info(interaction: discord.Interaction, badge_id: str):
             
         except Exception as e:
             await send_error_embed(interaction, "Unexpected Error", f"An error occurred: {str(e)}")
+
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="autorole", description="Autorole specific users")
+@app_commands.describe(badge_id="Autorole specific users")
+async def autorole(interaction: discord.Interaction, role: discord.Role):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("You need administrator permissions to use this command.", ephemeral=True)
+        return
+    
+    autorole_data = {"role_id": role.id, "enabled": True}
+    autoroleDB.set(f"{interaction.guild.id}", autorole_data)
+    autoroleDB.save()
+    
+    class AutoroleView(discord.ui.View):
+        @discord.ui.button(label="Assign to Existing Members", style=discord.ButtonStyle.primary)
+        async def assign_existing(self, interaction: discord.Interaction, button: discord.ui.Button):
+            count = 0
+            for member in interaction.guild.members:
+                if role not in member.roles:
+                    try:
+                        await member.add_roles(role)
+                        count += 1
+                    except:
+                        pass
+            await interaction.response.send_message(f"Assigned {role.mention} to {count} existing members", ephemeral=True)
+    
+    await interaction.response.send_message(
+        f"Autorole set to {role.mention} for new members. Assign to existing members?", 
+        view=AutoroleView(), 
+        ephemeral=True
+    )
 
 # === Flask Runner in Thread ===
 def run_flask():

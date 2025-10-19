@@ -23,6 +23,7 @@ from flask_cors import CORS
 import base64
 import urllib
 import re
+import socket
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')

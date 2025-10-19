@@ -2036,6 +2036,166 @@ async def placeinfo(interaction: discord.Interaction, game_input: str):
         errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=errorembed)
 
+async def send_error_embed(interaction: discord.Interaction, title: str, description: str):
+    embed = discord.Embed(
+        title=f":x: {title}",
+        description=description,
+        color=discord.Color.red()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.followup.send(embed=embed)
+
+async def get_badge_thumbnail(session: aiohttp.ClientSession, badge_id: str) -> Optional[str]:
+    thumbnail_url = f"https://thumbnails.roblox.com/v1/badges/icons?badgeIds={badge_id}&size=150x150&format=Png"
+    
+    try:
+        async with session.get(thumbnail_url) as response:
+            if response.status == 200:
+                thumbnail_data = await response.json()
+                if thumbnail_data.get('data') and len(thumbnail_data['data']) > 0:
+                    return thumbnail_data['data'][0].get('imageUrl')
+    except Exception:
+        pass
+    return None
+
+async def create_badge_embed(badge_data: dict, thumbnail_url: Optional[str], badge_id: str, 
+                           start_time: float, requester: discord.User) -> discord.Embed:
+    badge_id = badge_data.get('id', 'N/A')
+    name = badge_data.get('name', 'Unknown')
+    display_name = badge_data.get('displayName', name)
+    description = badge_data.get('description') or badge_data.get('displayDescription') or "No description"
+    
+    statistics = badge_data.get('statistics', {})
+    past_day_awarded = statistics.get('pastDayAwardedCount', 0)
+    awarded_count = statistics.get('awardedCount', 0)
+    win_rate = statistics.get('winRatePercentage', 0)
+    
+    created = badge_data.get('created', 'Unknown')
+    updated = badge_data.get('updated', 'Unknown')
+    
+    awarding_universe = badge_data.get('awardingUniverse', {})
+    universe_name = awarding_universe.get('name', 'Unknown')
+    universe_id = awarding_universe.get('id', 'N/A')
+    root_place_id = awarding_universe.get('rootPlaceId', 'N/A')
+    
+    embed_color = embedDB.get(f"{requester.id}") if embedDB.get(f"{requester.id}") else discord.Color.blue()
+    
+    embed = discord.Embed(
+        title=f"Badge: {display_name}",
+        color=embed_color,
+        timestamp=datetime.now(),
+        url=f"https://www.roblox.com/badges/{badge_id}"
+    )
+    
+    if thumbnail_url:
+        embed.set_thumbnail(url=thumbnail_url)
+    
+    embed.add_field(name="Badge ID", value=f"`{badge_id}`", inline=True)
+    embed.add_field(name="Internal Name", value=name, inline=True)
+    embed.add_field(name="Enabled", value="Yes" if badge_data.get('enabled') else "No", inline=True)
+    
+    embed.add_field(name="Description", value=description, inline=False)
+    
+    embed.add_field(name="Awarded Today", value=f"{past_day_awarded:,}", inline=True)
+    embed.add_field(name="Obtained Total", value=f"{awarded_count:,}", inline=True)
+    embed.add_field(name="Win Rate", value=f"{win_rate}%", inline=True)
+    
+    created_timestamp = isotodiscordtimestamp(created)
+    updated_timestamp = isotodiscordtimestamp(updated)
+    
+    if created_timestamp:
+        embed.add_field(
+            name="Created", 
+            value=f"<t:{created_timestamp}:f> (<t:{created_timestamp}:R>)", 
+            inline=True
+        )
+    else:
+        embed.add_field(name="Created", value=created, inline=True)
+    
+    if updated_timestamp:
+        embed.add_field(
+            name="Last Updated", 
+            value=f"<t:{updated_timestamp}:f> (<t:{updated_timestamp}:R>)", 
+            inline=True
+        )
+    else:
+        embed.add_field(name="Last Updated", value=updated, inline=True)
+    
+    if universe_id != 'N/A':
+        universe_field = f"[{universe_name}](https://www.roblox.com/games/{root_place_id}/)"
+        universe_field += f"\nUniverse ID: `{universe_id}`"
+        if root_place_id != 'N/A':
+            universe_field += f"\nPlace ID: `{root_place_id}`"
+        
+        embed.add_field(name="Awarding Universe", value=universe_field, inline=False)
+    
+    elapsed_time = asyncio.get_event_loop().time() - start_time
+    embed.set_footer(text=f"Load time: {elapsed_time:.2f}s • Requested by {requester.display_name} | {MainURL}")
+    
+    return embed
+
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="badge", description="Get detailed information about a Roblox badge")
+@app_commands.describe(badge_id="The ID of the Roblox badge")
+async def badge_info(interaction: discord.Interaction, badge_id: str):
+    await interaction.response.defer(thinking=True)
+    start_time = asyncio.get_event_loop().time()
+    
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For Badge ID {badge_id}!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
+    if not badge_id.isdigit():
+        await send_error_embed(
+            interaction,
+            "Invalid Badge ID",
+            "Please provide a valid numeric badge ID."
+        )
+        return
+    
+    connector = aiohttp.TCPConnector(family=socket.AF_INET)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        try:
+            badge_url = f"https://badges.roblox.com/v1/badges/{badge_id}"
+            
+            async with session.get(badge_url) as response:
+                if response.status == 404:
+                    await send_error_embed(
+                        interaction,
+                        "Badge Not Found",
+                        f"Could not find a badge with ID `{badge_id}`"
+                    )
+                    return
+                elif response.status != 200:
+                    await send_error_embed(
+                        interaction,
+                        "API Error",
+                        f"Failed to fetch badge information (Status: {response.status})"
+                    )
+                    return
+                
+                badge_data = await response.json()
+            
+            thumbnail_url = await get_badge_thumbnail(session, badge_id)
+            
+            embed = await create_badge_embed(badge_data, thumbnail_url, badge_id, start_time, interaction.user)
+            
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="View Badge",
+                style=discord.ButtonStyle.link,
+                emoji="<:RobloxLogo:1416951004607418398>",
+                url=f"https://www.roblox.com/badges/{badge_id}"
+            ))
+            
+            await interaction.edit_original_response(embed=embed, view=view)
+            
+        except Exception as e:
+            await send_error_embed(interaction, "Unexpected Error", f"An error occurred: {str(e)}")
+
 # === Flask Runner in Thread ===
 def run_flask():
     port = int(os.environ.get("PORT", 13455))

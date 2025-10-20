@@ -696,6 +696,9 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member):
+    if member.bot:
+        return
+        
     autorole_data = autoroleDB.get(f"{member.guild.id}")
     if autorole_data and autorole_data.get("enabled"):
         role_id = autorole_data.get("role_id")
@@ -2211,14 +2214,17 @@ async def badge_info(interaction: discord.Interaction, badge_id: str):
 
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@bot.tree.command(name="autorole", description="Autorole specific users")
-@app_commands.describe(badge_id="Autorole specific users")
-async def autorole(interaction: discord.Interaction, role: discord.Role):
+@bot.tree.command(name="autorole", description="Set a role to be automatically given to members")
+@app_commands.describe(
+    role="The role to automatically assign to members",
+    enable="Whether to enable or disable autorole (default: True)"
+)
+async def autorole(interaction: discord.Interaction, role: discord.Role, enable: bool = True):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("You need administrator permissions to use this command.", ephemeral=True)
         return
     
-    autorole_data = {"role_id": role.id, "enabled": True}
+    autorole_data = {"role_id": role.id, "enabled": enable}
     autoroleDB.set(f"{interaction.guild.id}", autorole_data)
     autoroleDB.save()
     
@@ -2227,7 +2233,7 @@ async def autorole(interaction: discord.Interaction, role: discord.Role):
         async def assign_existing(self, interaction: discord.Interaction, button: discord.ui.Button):
             count = 0
             for member in interaction.guild.members:
-                if role not in member.roles:
+                if not member.bot and role not in member.roles:
                     try:
                         await member.add_roles(role)
                         count += 1
@@ -2235,12 +2241,13 @@ async def autorole(interaction: discord.Interaction, role: discord.Role):
                         pass
             await interaction.response.send_message(f"Assigned {role.mention} to {count} existing members", ephemeral=True)
     
+    status = "enabled" if enable else "disabled"
     await interaction.response.send_message(
-        f"Autorole set to {role.mention} for new members. Assign to existing members?", 
+        f"Autorole {status} for {role.mention}. Assign to existing members?", 
         view=AutoroleView(), 
         ephemeral=True
     )
-
+    
 # === Flask Runner in Thread ===
 def run_flask():
     port = int(os.environ.get("PORT", 13455))

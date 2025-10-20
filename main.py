@@ -720,7 +720,7 @@ def countinglb():
             guild = bot.get_guild(int(guild_id))
             if guild:
                 lb.append({"Server": guild.name, "HighestNumber": highest_number})
-        return jsonify(lb), 200
+        return jsonify(str(lb)), 200
     else:
         return {"Unknown"}, 503
 

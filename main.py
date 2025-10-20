@@ -549,11 +549,12 @@ async def on_message(message):
         messagecontent = messagecontent.replace(" ", "")
         InputNumber = None
         
-        if not any(op in messagecontent for op in "+-*/"):
+        if not any(op in messagecontent for op in "+-x*/"):
             if IsInteger(messagecontent):
                 InputNumber = int(messagecontent)
             else:
                 print("stop")
+                return
         else:
             num = ''
             parts = []

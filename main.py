@@ -707,7 +707,7 @@ def get_bot_info():
 @app.route('/clb', methods=["GET"])
 def countinglb():
     if bot.is_ready():
-        return countingdb.all(), 200
+        return countingDB.all(), 200
     else:
         return {"Unknown"}, 503
 

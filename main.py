@@ -707,7 +707,20 @@ def get_bot_info():
 @app.route('/clb', methods=["GET"])
 def countinglb():
     if bot.is_ready():
-        return str(countingDB.all()), 200
+        countingnumbers = []
+        for server in countingDB.all():
+            countingdata = countingDB.get(server)
+            countingnumbers.append((server, countingdata['highestnumber']))
+        countingnumbers.sort(key=lambda x: x[1], reverse=True)
+        top10 = countingnumbers[:10]
+        lb = []
+        for entry in top10:
+            guild_id = entry[0]
+            highest_number = entry[1]
+            guild = bot.get_guild(int(guild_id))
+            if guild:
+                lb.append({"Server": guild.name, "HighestNumber": highest_number})
+        return jsonify(lb), 200
     else:
         return {"Unknown"}, 503
 

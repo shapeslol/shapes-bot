@@ -25,7 +25,7 @@ import urllib
 import re
 import socket
 from typing
-from typing import Dict, Any, Optional
+import typing import Dict, Any, Optional
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
@@ -1047,7 +1047,7 @@ async def restart(interaction: discord.Interaction):
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
 @bot.tree.command(name="counting", description="Counting Settings")
-@commands.has_permissions(administrator=True)
+@app_commands.default_permissions(administrator=True)
 @commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1058,7 +1058,7 @@ async def counting(interaction: discord.Interaction):
     countingData = counting_json
     print(countingData)
     if not countingData:
-        countingDB.set(server.id, {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
+        countingDB.set(server.id, {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber":0})
         countingDB.save()
         counting_json = countingDB.get(server.id)
         countingData = counting_json
@@ -1077,7 +1077,7 @@ async def counting(interaction: discord.Interaction):
             channel_options.append(discord.SelectOption(label=channel.name, value=str(channel.id)))
     class CountingView(discord.ui.View):
         def __init__(self):
-            super().__init__(timeout=None)  # No timeout
+            super().__init__(timeout=None)
 
         @discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting", emoji="🔢")
         async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1103,12 +1103,11 @@ async def counting(interaction: discord.Interaction):
             await interaction.response.send_message(f"Counting channel set to <#{selected_channel_id}>.", ephemeral=True)
     embed = discord.Embed(
         title="Counting Settings",
-        description=f"**Current Settings:**\n- Counting Enabled: `{countingData['enabled']}`\n- Counting Channel: `<#{countingData['channel']}>`\n- Current Number: `{countingData['number']}`\n- Highest Number: `{countingData['highestnumber']}`\n- Warnings: `{countingData['warnings']}`\n- Last Counter: `{countingData['lastcounter']}`",
+        description=f"**Current Settings:**\n- Counting Enabled: `{countingData['enabled']}`\n- Counting Channel: `<#{countingData['channel']}>`\n- Current Number: `{countingData['number']}`\n- Highest Number: `{countingData.get('highestnumber', 0)}`\n- Warnings: `{countingData['warnings']}`\n- Last Counter: `{countingData['lastcounter']}`",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.response.send_message(embed=embed, view=CountingView(), ephemeral=True)
-
 
 @bot.tree.command(name="spookpfp", description="Get a pfp from a user's spook.bio profile.")
 @app_commands.allowed_installs(guilds=True, users=True)

@@ -626,7 +626,7 @@ async def on_message(message):
                 countingDB.save()
                 return
             if warnings >= 3:
-                message.add_reaction('❌️')
+                await message.add_reaction('❌️')
                 if number > HighestNumber:
                     HighestNumber = number
                 counting_data['highestnumber'] = HighestNumber

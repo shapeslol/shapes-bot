@@ -704,6 +704,13 @@ def get_bot_info():
         jsonData = {"Servers":"Unknown","Users":"Unknown"}
         return jsonify(jsonData), 503
 
+@app.route('/clb', methods=["GET"])
+def countinglb():
+    if bot.is_ready():
+        return countingdb.all(), 200
+    else:
+        return {"Unknown"}, 503
+
 async def restartbot():
     print("Bot Restarting.")
     await bot.close(token)
@@ -2290,7 +2297,7 @@ class HelpDropdown(discord.ui.Select):
                 "• Right-click a message → Apps → google - Search message content on Google", inline=False)
         
         embed.set_footer(text="Use slash commands (/) to interact")
-        await interaction.response.edit_message(embed=embed)
+        await interaction.response.edit_message(embed=embed, ephemeral=True)
 
 class HelpView(discord.ui.View):
     def __init__(self):
@@ -2312,7 +2319,7 @@ async def help_command(interaction: discord.Interaction):
     )
     
     view = HelpView()
-    await interaction.response.send_message(embed=embed, view=view)
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     
 # === Flask Runner in Thread ===
 def run_flask():

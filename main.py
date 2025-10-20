@@ -440,43 +440,16 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
             #print("Bot Closed, Shutting Down Flask Server.")
             #os._exit(0)
 
-# == update databases every second == #
-async def update_db():
-    while True:
-        await asyncio.sleep(1)
-        if not bot.is_closed():
-            countingDB.save()
-            embedDB.save()
-            usersDB.save()
-            #print(f"EmbedDB = {embedDB.all()}")
-            #print(f"CountingDB = {countingDB.all()}")
-            #print(f"UsersDB = {usersDB.all()}")
-            for guild in bot.guilds:
-                if not countingDB.get(f"{guild.id}"):
-                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber": 0})
-                    countingDB.save()
-            #for embed in embedDB.all():
-                #print(1)
-                #print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
-            #for info in countingDB.all():
-                #print(2)
-                #print(f"CountingDB Key: {info}, Value: {countingDB.get(info)}")
-            #for users in usersDB.all():
-                #print(3)
-                #print(f"UsersDB Key: {users}, Value: {usersDB.get(users)}")
-            #for user in bot.users:
-                #if not usersDB.get(f"{user.id}"):
-                    #usersDB.set(f"{user.id}", user.name)
-                    #usersDB.save()
-# == update databases every second == #
+# == update databases 0.5 seconds == #
 
 async def update_db():
     while True:
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
         if not bot.is_closed():
             countingDB.save()
             embedDB.save()
             usersDB.save()
+            autoroleDB.save()
             #print(f"EmbedDB = {embedDB.all()}")
             #print(f"CountingDB = {countingDB.all()}")
             #print(f"UsersDB = {usersDB.all()}")
@@ -489,9 +462,11 @@ async def update_db():
             countingDB.save()
             embedDB.save()
             usersDB.save()
+            autoroleDB.save()
             print(f"Saved EmbedDB {embedDB.all()}")
             print(f"Saved CountingDB {countingDB.all()}")
             print(f"Saved UsersDB {usersDB.all()}")
+            print(f"Saved AutoRoleDB {autoroleDB.all()}")
             print("Bot Closed, Shutting Down Flask Server.")
             os._exit(0)
 
@@ -2222,9 +2197,11 @@ async def badge_info(interaction: discord.Interaction, badge_id: str):
         except Exception as e:
             await send_error_embed(interaction, "Unexpected Error", f"An error occurred: {str(e)}")
 
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @bot.tree.command(name="autorole", description="Set a role to be automatically given to members")
+@app_commands.default_permissions(administrator=True)
+@commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
 @app_commands.describe(
     role="The role to automatically assign to members",
     enable="Whether to enable or disable autorole (default: True)"

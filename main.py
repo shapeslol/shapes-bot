@@ -2234,6 +2234,85 @@ async def autorole(interaction: discord.Interaction, role: discord.Role, enable:
         view=AutoroleView(), 
         ephemeral=True
     )
+
+class HelpDropdown(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Counting Commands", description="Counting game and settings"),
+            discord.SelectOption(label="User Settings", description="Personal bot settings"),
+            discord.SelectOption(label="Roblox Commands", description="Roblox user and item information"),
+            discord.SelectOption(label="Utility Commands", description="General utility commands"),
+            discord.SelectOption(label="Context Menu Commands", description="Right-click context commands")
+        ]
+        super().__init__(placeholder="Choose a command category...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        category = self.values[0]
+        embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+        
+        if category == "Counting Commands":
+            embed = discord.Embed(title="Counting Commands", color=embed_color)
+            embed.add_field(name="Commands", value=
+                "• /counting - Counting in a specific channel", inline=False)
+                
+        elif category == "User Settings":
+            embed = discord.Embed(title="User Settings", color=embed_color)
+            embed.add_field(name="Commands", value=
+                "• /settings - Customize your personal bot settings", inline=False)
+                
+        elif category == "Roblox Commands":
+            embed = discord.Embed(title="Roblox Commands", color=embed_color)
+            embed.add_field(name="Commands", value=
+                "• /robloxinfo - Get detailed Roblox user information\n"
+                "• /roblox2discord - Find a Roblox user's Discord\n"
+                "• /britishuser - Check if user is british\n"
+                "• /iteminfo - Get Roblox item information\n"
+                "• /groupinfo - Get Roblox group information\n"
+                "• /placeinfo - Get Roblox place/game information\n"
+                "• /badge - Get Roblox badge information", inline=False)
+                
+        elif category == "Utility Commands":
+            embed = discord.Embed(title="Utility Commands", color=embed_color)
+            embed.add_field(name="Commands", value=
+                "• /ping - Check bot latency and connection\n"
+                "• /invite - Get bot invite link\n"
+                "• /google - Search something on Google\n"
+                "• /status - Check shapes.lol status\n"
+                "• /userinstalls - Get user installation count\n"
+                "• /servercount - Get server count\n"
+                "• /spookpfp - Get profile picture from spook.bio", inline=False)
+                
+        elif category == "Context Menu Commands":
+            embed = discord.Embed(title="Context Menu Commands", color=embed_color)
+            embed.add_field(name="Commands", value=
+                "• Right-click a user → Apps → sayhitouser - Say hello to a user\n"
+                "• Right-click a user → Apps → discord2spook - Get user's spook.bio profile\n"
+                "• Right-click a message → Apps → google - Search message content on Google", inline=False)
+        
+        embed.set_footer(text="Use slash commands (/) to interact")
+        await interaction.response.edit_message(embed=embed)
+
+class HelpView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(HelpDropdown())
+
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="help", description="Get help with all available commands")
+async def help_command(interaction: discord.Interaction):
+    """Display help information for all bot commands"""
+    
+    embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    
+    embed = discord.Embed(
+        title="Bot Help & Commands",
+        description="Use the dropdown menu below to browse commands by category.",
+        color=embed_color
+    )
+    
+    view = HelpView()
+    await interaction.response.send_message(embed=embed, view=view)
     
 # === Flask Runner in Thread ===
 def run_flask():

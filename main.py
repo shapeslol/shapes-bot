@@ -31,6 +31,7 @@ from typing import Dict, Any, Optional
 countingDB = PickleDB('counting.db')
 embedDB = PickleDB('embed.db')
 usersDB = PickleDB('users.db')
+autoroleDB = PickleDB('autorole.db')
 
 # === Discord Bot Setup ===
 intents = discord.Intents.default()
@@ -524,26 +525,12 @@ def IsInteger(s):
 
 # === Bot Events ===
 @bot.event
-async def on_message_delete(message):
-    print(f"Message by {message.author} deleted in channel {message.channel}: {message.content}")
-
-    if message.guild: # Check if the message was in a guild
-        server = message.guild
-        counting = countingDB.get(f"{server.id}")
-        if counting:
-            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content):
-                nextnumber = counting['number'] + 1
-                await message.channel.send(f"{message.author.mention} deleted their message containing the last number. The next number is {nextnumber}")
-
-@bot.event
 async def on_message(message):
-    # Ignore messages sent by the bot to prevent infinite loops
     if message.author == bot.user:
         return
     if message.author.bot:
         return
 
-    #print(f'Message from {message.author} in #{message.channel}: {message.content}')
     if message.guild:
         server = message.guild
         countingjson = countingDB.get(server.id)
@@ -562,11 +549,12 @@ async def on_message(message):
         messagecontent = messagecontent.replace(" ", "")
         InputNumber = None
         
-        if not any(op in messagecontent for op in "+-*/"):
+        if not any(op in messagecontent for op in "+-x*/"):
             if IsInteger(messagecontent):
                 InputNumber = int(messagecontent)
             else:
                 print("stop")
+                return
         else:
             num = ''
             parts = []
@@ -579,6 +567,8 @@ async def on_message(message):
                     num = ''
             parts.append(num)
         
+            if not IsInteger(parts[0]):
+                return
             InputNumber = int(parts[0])
             i = 1
             while i < len(parts):
@@ -589,7 +579,7 @@ async def on_message(message):
                     InputNumber += val
                 elif op == '-':
                     InputNumber -= val
-                elif op == '*':
+                elif op == '*' or op == 'x':
                     InputNumber *= val
                 elif op == '/':
                     result = InputNumber / val
@@ -597,13 +587,10 @@ async def on_message(message):
         
                 i += 2
         
-        # Print the content of the message
-        #print(next_number)
         if str(InputNumber) == str(next_number) and message.author.id != LastCounter:
             await message.add_reaction('👍')
             LastCounter = message.author.id
             number = next_number
-            #print(number)
             if number > HighestNumber:
                 HighestNumber = number
             counting_data['highestnumber'] = HighestNumber
@@ -639,7 +626,7 @@ async def on_message(message):
                 countingDB.save()
                 return
             if warnings >= 3:
-                message.add_reaction(':x:')
+                message.add_reaction('❌️')
                 if number > HighestNumber:
                     HighestNumber = number
                 counting_data['highestnumber'] = HighestNumber
@@ -672,6 +659,31 @@ async def on_message(message):
         await message.channel.send(embed=invite_embed)
 
 @bot.event
+async def on_message_delete(message):
+    print(f"Message by {message.author} deleted in channel {message.channel}: {message.content}")
+
+    if message.guild:
+        server = message.guild
+        counting = countingDB.get(f"{server.id}")
+        if counting:
+            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content):
+                nextnumber = counting['number'] + 1
+                await message.channel.send(f"{message.author.mention} deleted their message containing the last number. The next number is {nextnumber}")
+
+@bot.event
+async def on_message_edit(before, after):
+    if before.author.bot:
+        return
+
+    if before.guild:
+        server = before.guild
+        counting = countingDB.get(f"{server.id}")
+        if counting:
+            if before.author.id == counting['lastcounter'] and before.channel.id == counting['channel'] and IsInteger(before.content):
+                nextnumber = counting['number'] + 1
+                await before.channel.send(f"{before.author.mention} edited their message containing the last number. The next number is {nextnumber}")
+
+@bot.event
 async def on_ready():
     global bot_ready
     global BotInfo
@@ -692,6 +704,19 @@ async def on_ready():
     bot.loop.create_task(update_guild_cache())
     bot.loop.create_task(update_db())
     #bot.loop.create_task(update_db_on_close())
+
+@bot.event
+async def on_member_join(member):
+    if member.bot:
+        return
+        
+    autorole_data = autoroleDB.get(f"{member.guild.id}")
+    if autorole_data and autorole_data.get("enabled"):
+        role_id = autorole_data.get("role_id")
+        if role_id:
+            role = member.guild.get_role(role_id)
+            if role:
+                await member.add_roles(role)
 
 @app.route('/botinfo', methods=["GET"])
 def get_bot_info():
@@ -729,9 +754,9 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
             dt_object = dt_object.astimezone(pytz.utc)
 
         unix_timestamp = int(dt_object.timestamp())
-        return f"<t:{unix_timestamp}:{format_type}>"
+        return unix_timestamp  
     except ValueError as e:
-        return f"Error parsing timestamp: {e}"
+        return None
 
 DiscordColors = [
     discord.Color.blue(),
@@ -1033,7 +1058,7 @@ async def restart(interaction: discord.Interaction):
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
 @bot.tree.command(name="counting", description="Counting Settings")
-@commands.has_permissions(administrator=True)
+@app_commands.default_permissions(administrator=True)
 @commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1044,7 +1069,7 @@ async def counting(interaction: discord.Interaction):
     countingData = counting_json
     print(countingData)
     if not countingData:
-        countingDB.set(server.id, {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
+        countingDB.set(server.id, {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber":0})
         countingDB.save()
         counting_json = countingDB.get(server.id)
         countingData = counting_json
@@ -1063,7 +1088,7 @@ async def counting(interaction: discord.Interaction):
             channel_options.append(discord.SelectOption(label=channel.name, value=str(channel.id)))
     class CountingView(discord.ui.View):
         def __init__(self):
-            super().__init__(timeout=None)  # No timeout
+            super().__init__(timeout=None)
 
         @discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting", emoji="🔢")
         async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1089,12 +1114,11 @@ async def counting(interaction: discord.Interaction):
             await interaction.response.send_message(f"Counting channel set to <#{selected_channel_id}>.", ephemeral=True)
     embed = discord.Embed(
         title="Counting Settings",
-        description=f"**Current Settings:**\n- Counting Enabled: `{countingData['enabled']}`\n- Counting Channel: `<#{countingData['channel']}>`\n- Current Number: `{countingData['number']}`\n- Highest Number: `{countingData['highestnumber']}`\n- Warnings: `{countingData['warnings']}`\n- Last Counter: `{countingData['lastcounter']}`",
+        description=f"**Current Settings:**\n- Counting Enabled: `{countingData['enabled']}`\n- Counting Channel: `<#{countingData['channel']}>`\n- Current Number: `{countingData['number']}`\n- Highest Number: `{countingData.get('highestnumber', 0)}`\n- Warnings: `{countingData['warnings']}`\n- Last Counter: `{countingData['lastcounter']}`",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.response.send_message(embed=embed, view=CountingView(), ephemeral=True)
-
 
 @bot.tree.command(name="spookpfp", description="Get a pfp from a user's spook.bio profile.")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -2108,7 +2132,7 @@ async def create_badge_embed(badge_data: dict, thumbnail_url: Optional[str], bad
     if created_timestamp:
         embed.add_field(
             name="Created", 
-            value=f"<t:{created_timestamp}:f> (<t:{created_timestamp}:R>)", 
+            value=f"{created_timestamp} {created_timestamp})", 
             inline=True
         )
     else:
@@ -2198,6 +2222,42 @@ async def badge_info(interaction: discord.Interaction, badge_id: str):
         except Exception as e:
             await send_error_embed(interaction, "Unexpected Error", f"An error occurred: {str(e)}")
 
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="autorole", description="Set a role to be automatically given to members")
+@app_commands.describe(
+    role="The role to automatically assign to members",
+    enable="Whether to enable or disable autorole (default: True)"
+)
+async def autorole(interaction: discord.Interaction, role: discord.Role, enable: bool = True):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("You need administrator permissions to use this command.", ephemeral=True)
+        return
+    
+    autorole_data = {"role_id": role.id, "enabled": enable}
+    autoroleDB.set(f"{interaction.guild.id}", autorole_data)
+    autoroleDB.save()
+    
+    class AutoroleView(discord.ui.View):
+        @discord.ui.button(label="Assign to Existing Members", style=discord.ButtonStyle.primary)
+        async def assign_existing(self, interaction: discord.Interaction, button: discord.ui.Button):
+            count = 0
+            for member in interaction.guild.members:
+                if not member.bot and role not in member.roles:
+                    try:
+                        await member.add_roles(role)
+                        count += 1
+                    except:
+                        pass
+            await interaction.response.send_message(f"Assigned {role.mention} to {count} existing members", ephemeral=True)
+    
+    status = "enabled" if enable else "disabled"
+    await interaction.response.send_message(
+        f"Autorole {status} for {role.mention}. Assign to existing members?", 
+        view=AutoroleView(), 
+        ephemeral=True
+    )
+    
 # === Flask Runner in Thread ===
 def run_flask():
     port = int(os.environ.get("PORT", 13455))

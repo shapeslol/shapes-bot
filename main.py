@@ -659,6 +659,31 @@ async def on_message(message):
         await message.channel.send(embed=invite_embed)
 
 @bot.event
+async def on_message_delete(message):
+    print(f"Message by {message.author} deleted in channel {message.channel}: {message.content}")
+
+    if message.guild:
+        server = message.guild
+        counting = countingDB.get(f"{server.id}")
+        if counting:
+            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content):
+                nextnumber = counting['number'] + 1
+                await message.channel.send(f"{message.author.mention} deleted their message containing the last number. The next number is {nextnumber}")
+
+@bot.event
+async def on_message_edit(before, after):
+    if before.author.bot:
+        return
+
+    if before.guild:
+        server = before.guild
+        counting = countingDB.get(f"{server.id}")
+        if counting:
+            if before.author.id == counting['lastcounter'] and before.channel.id == counting['channel'] and IsInteger(before.content):
+                nextnumber = counting['number'] + 1
+                await before.channel.send(f"{before.author.mention} edited their message containing the last number. The next number is {nextnumber}")
+
+@bot.event
 async def on_ready():
     global bot_ready
     global BotInfo

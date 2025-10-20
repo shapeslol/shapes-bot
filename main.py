@@ -24,8 +24,8 @@ import base64
 import urllib
 import re
 import socket
-from typing
-import typing import Dict, Any, Optional
+import typing
+from typing import Dict, Any, Optional
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
@@ -578,7 +578,7 @@ async def on_message(message):
                     InputNumber += val
                 elif op == '-':
                     InputNumber -= val
-                elif op == '*':
+                elif op == '*' or op == 'x':
                     InputNumber *= val
                 elif op == '/':
                     result = InputNumber / val

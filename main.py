@@ -525,26 +525,12 @@ def IsInteger(s):
 
 # === Bot Events ===
 @bot.event
-async def on_message_delete(message):
-    print(f"Message by {message.author} deleted in channel {message.channel}: {message.content}")
-
-    if message.guild: # Check if the message was in a guild
-        server = message.guild
-        counting = countingDB.get(f"{server.id}")
-        if counting:
-            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content):
-                nextnumber = counting['number'] + 1
-                await message.channel.send(f"{message.author.mention} deleted their message containing the last number. The next number is {nextnumber}")
-
-@bot.event
 async def on_message(message):
-    # Ignore messages sent by the bot to prevent infinite loops
     if message.author == bot.user:
         return
     if message.author.bot:
         return
 
-    #print(f'Message from {message.author} in #{message.channel}: {message.content}')
     if message.guild:
         server = message.guild
         countingjson = countingDB.get(server.id)
@@ -580,6 +566,8 @@ async def on_message(message):
                     num = ''
             parts.append(num)
         
+            if not IsInteger(parts[0]):
+                return
             InputNumber = int(parts[0])
             i = 1
             while i < len(parts):
@@ -598,13 +586,10 @@ async def on_message(message):
         
                 i += 2
         
-        # Print the content of the message
-        #print(next_number)
         if str(InputNumber) == str(next_number) and message.author.id != LastCounter:
             await message.add_reaction('👍')
             LastCounter = message.author.id
             number = next_number
-            #print(number)
             if number > HighestNumber:
                 HighestNumber = number
             counting_data['highestnumber'] = HighestNumber

@@ -26,12 +26,18 @@ import re
 import socket
 import typing
 from typing import Dict, Any, Optional
+from openai import OpenAI
+
+# OpenAI client
+chatgpt = OpenAI(api_key=os.getenv("OpenAI_KEY"))
+
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
 embedDB = PickleDB('embed.db')
 usersDB = PickleDB('users.db')
 autoroleDB = PickleDB('autorole.db')
+AI_DB('ai.db')
 
 # === Discord Bot Setup ===
 intents = discord.Intents.default()
@@ -1249,6 +1255,76 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
                 await interaction.edit_original_response(embed=failedembed2)
                 # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
                 return
+
+@bot.tree.command(name="ai", description="Chat with an AI assistant.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def ai(interaction: discord.Interaction, *, prompt: str):
+    await interaction.response.defer(thinking=True)
+
+    loading = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Getting AI Response From {prompt}",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+
+    await interaction.followup.send(embed=loading)
+    
+    user_id = str(interaction.user.id)
+    username = interaction.user.name
+
+    # Load or initialize user data
+    user_data = AI_DB.get(user_id) or {"username": username, "user_messages": [], "ai_responses": []}
+    user_data["username"] = username
+    user_data["user_messages"].append(prompt)
+    
+    # Keep last 5 messages for context
+    user_data["user_messages"] = user_data["user_messages"][-5:]
+    user_data["ai_responses"] = user_data["ai_responses"][-5:]
+
+    # System instructions for the AI
+    messages_for_ai = [
+        {
+            "role": "system",
+            "content": (
+                f"You are a helpful Discord assistant chatting with {username}. "
+                "Always respond in a single concise paragraph. "
+                "Follow Discord TOS. Do not provide instructions for illegal activity. "
+                "Stay safe, respectful, and friendly."
+            )
+        }
+    ]
+
+    # Include previous conversation
+    for u_msg, a_msg in zip(user_data["user_messages"], user_data["ai_responses"]):
+        messages_for_ai.append({"role": "user", "content": u_msg})
+        messages_for_ai.append({"role": "assistant", "content": a_msg})
+
+    # Add latest message
+    messages_for_ai.append({"role": "user", "content": prompt})
+
+    try:
+        response = chatgpt.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages_for_ai
+        )
+        ai_reply = response.choices[0].message.content.strip()
+    except Exception as e:
+        ai_reply = f"⚠️ API error: {e}"
+
+    # Save AI response
+    user_data["ai_responses"].append(ai_reply)
+    AI_DB.set(user_id, user_data)
+
+    # Create embed
+    embed = discord.Embed(
+        title=f"💬 Chat with {username}",
+        color=embedDB.get(user_id) or discord.Color.blue()
+    )
+    embed.add_field(name="🧍 You said:", value=prompt[:1024], inline=False)
+    embed.add_field(name="🤖 AI replied:", value=ai_reply[:1024], inline=False)
+    embed.set_footer(text=f"{MainURL} | Requested by {username}")
+
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="google", description="Search Something On Google.")
 @app_commands.allowed_installs(guilds=True, users=True)

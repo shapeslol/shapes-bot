@@ -2555,7 +2555,14 @@ class BadgesView(discord.ui.View):
         self.start_time = start_time
         self.badge_service = badge_service
         self.message = None
+        self.thumbnail_cache = {}
         self.update_buttons()
+    
+    async def preload_thumbnails(self):
+        for i, badge in enumerate(self.badges):
+            thumbnail_url = await self.badge_service.get_badge_thumbnail(badge)
+            if thumbnail_url:
+                self.thumbnail_cache[i] = thumbnail_url
     
     async def create_embed(self) -> discord.Embed:
         badge = self.badges[self.current_page]
@@ -2567,7 +2574,7 @@ class BadgesView(discord.ui.View):
             url=f"https://www.roblox.com/users/{self.user_id}/badges"
         )
         
-        thumbnail_url = await self.badge_service.get_badge_thumbnail(badge)
+        thumbnail_url = self.thumbnail_cache.get(self.current_page)
         if thumbnail_url:
             embed.set_thumbnail(url=thumbnail_url)
         
@@ -2750,6 +2757,7 @@ async def recent_badges(interaction: discord.Interaction, user_input: str):
                 badge['awardedDate'] = awarded_dates.get(badge_id)
             
             view = BadgesView(badges, username, user_id, interaction.user, start_time, badge_service)
+            await view.preload_thumbnails()
             embed = await view.create_embed()
             view.update_buttons()
             message = await interaction.edit_original_response(embed=embed, view=view)

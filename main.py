@@ -524,11 +524,11 @@ async def on_message(message):
         messagecontent = messagecontent.replace(" ", "")
         InputNumber = None
         
-        if not any(op in messagecontent for op in "+-x*/"):
+        if not any(op in messagecontent for op in "+-*/x"):
             if IsInteger(messagecontent):
                 InputNumber = int(messagecontent)
             else:
-                print("stop")
+                ##print("stop")
                 return
         else:
             num = ''
@@ -601,7 +601,7 @@ async def on_message(message):
                 countingDB.save()
                 return
             if warnings >= 3:
-                await message.add_reaction('❌️')
+                await message.add_reaction('❌')
                 if number > HighestNumber:
                     HighestNumber = number
                 counting_data['highestnumber'] = HighestNumber
@@ -707,20 +707,12 @@ def get_bot_info():
 @app.route('/clb', methods=["GET"])
 def countinglb():
     if bot.is_ready():
-        countingnumbers = []
+        lb = {}
         for server in countingDB.all():
-            countingdata = countingDB.get(server)
-            countingnumbers.append((server, countingdata['highestnumber']))
-        countingnumbers.sort(key=lambda x: x[1], reverse=True)
-        top10 = countingnumbers[:10]
-        lb = []
-        for entry in top10:
-            guild_id = entry[0]
-            highest_number = entry[1]
-            guild = bot.get_guild(int(guild_id))
-            if guild:
-                lb.append({"Server": guild.name, "HighestNumber": highest_number})
-        return jsonify(str(lb)), 200
+            data = countingDB.get(f"{server}")
+            lb[f"{server}"] = {"currentnumber": data['number'],"highestnumber": data['highestnumber'], "serverName": bot.get_guild(int(server)).name if bot.get_guild(int(server)) else "Unknown"}
+        FullLB = sorted(lb.items(), key=lambda x: x[1]['highestnumber'], reverse=True)
+        return {"Leaderboard":FullLB}, 200
     else:
         return {"Unknown"}, 503
 

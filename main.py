@@ -37,7 +37,7 @@ countingDB = PickleDB('counting.db')
 embedDB = PickleDB('embed.db')
 usersDB = PickleDB('users.db')
 autoroleDB = PickleDB('autorole.db')
-AI_DB('ai.db')
+AI_DB = PickleDB('ai.db')
 
 # === Discord Bot Setup ===
 intents = discord.Intents.default()

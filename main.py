@@ -469,10 +469,12 @@ async def update_db():
             embedDB.save()
             usersDB.save()
             autoroleDB.save()
+            AI_DB.save()
             print(f"Saved EmbedDB {embedDB.all()}")
             print(f"Saved CountingDB {countingDB.all()}")
             print(f"Saved UsersDB {usersDB.all()}")
             print(f"Saved AutoRoleDB {autoroleDB.all()}")
+            print(f"Saved AI_DB {AI_DB.all()}")
             print("Bot Closed, Shutting Down Flask Server.")
             os._exit(0)
 
@@ -523,7 +525,7 @@ async def on_message(message):
         LastCounter = counting_data['lastcounter']
         HighestNumber = counting_data['highestnumber']
         next_number = number + 1
-        if enabled == False and message.channel.id != channel:
+        if enabled == False or message.channel.id != channel:
             return
         
         messagecontent = message.content
@@ -1263,7 +1265,7 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
     await interaction.response.defer(thinking=True)
 
     loading = discord.Embed(
-        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Getting AI Response From {prompt}",
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Getting AI Response For: {prompt}",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
 
@@ -1314,6 +1316,7 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
     # Save AI response
     user_data["ai_responses"].append(ai_reply)
     AI_DB.set(user_id, user_data)
+    AI_DB.save()
 
     # Create embed
     embed = discord.Embed(

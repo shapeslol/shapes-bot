@@ -1443,52 +1443,60 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             UserID = userinfo["id"]
             Display = userinfo["displayName"]
             hasVerifiedBadge = userinfo.get("hasVerifiedBadge", False)
-            print(f"UserInfo: {userinfo}")
 
-            rolimons_headers = {
-                'accept-encoding': 'gzip, deflate, br, zstd',
-                'accept-language': 'en-US,en;q=0.9',
-                'content-type': 'application/json',
-                'referer': 'https://www.rolimons.com/',
-                'origin': 'https://www.rolimons.com/',
-                'user-agent': 'shapes.lol'
-            }
-            
-            rolimons_payload = {
-                "player_name": user
-            }
+            rap_value = 0
+            value_value = 0
+            rolimons_last_online = None
+            badge_last_online = None
             
             try:
-                rolimons_response = requests.post(
-                    "https://api.rolimons.com/players/v1/addplayerbyname",
-                    headers=rolimons_headers,
-                    json=rolimons_payload
-                )
-                rolimons_response.raise_for_status()
-                rolimons_data = rolimons_response.json()
-                print(f"Rolimons API Response: {rolimons_data}")
-                
-                if rolimons_data.get("success") == True:
-                    print(f"Successfully added {user} to Rolimons with ID: {rolimons_data.get('player_id')}")
-                elif rolimons_data.get("code") == 12:
-                    print(f"Player {user} already exists on Rolimons")
-                else:
-                    print(f"Rolimons API returned: {rolimons_data}")
+                connector = aiohttp.TCPConnector(family=socket.AF_INET)
+                async with aiohttp.ClientSession(connector=connector) as session:
+                    rolimons_stats_url = f"https://api.rolimons.com/players/v1/playerinfo/{UserID}"
+                    async with session.get(rolimons_stats_url, headers={'User-Agent': 'shapes.lol'}) as response:
+                        if response.status == 200:
+                            rolimons_stats_data = await response.json()
+                            if rolimons_stats_data.get('success'):
+                                rap_value = rolimons_stats_data.get('rap', 0) or 0
+                                value_value = rolimons_stats_data.get('value', 0) or 0
+                                rolimons_last_online = rolimons_stats_data.get('last_online')
                     
-            except requests.exceptions.RequestException as e:
-                print(f"Error calling Rolimons API: {e}")
+                    user_badges_url = f"https://badges.roblox.com/v1/users/{UserID}/badges?sortOrder=Desc&limit=10"
+                    async with session.get(user_badges_url) as response:
+                        if response.status == 200:
+                            user_badges_result = await response.json()
+                            if user_badges_result and user_badges_result.get('data'):
+                                recent_badge = user_badges_result['data'][0]
+                                badge_id = recent_badge.get('id')
+                                
+                                if badge_id:
+                                    badge_awarded_url = f"https://badges.roblox.com/v1/users/{UserID}/badges/awarded-dates?badgeIds={badge_id}"
+                                    async with session.get(badge_awarded_url) as badge_response:
+                                        if badge_response.status == 200:
+                                            badge_awarded_result = await badge_response.json()
+                                            if badge_awarded_result and badge_awarded_result.get('data'):
+                                                awarded_date = badge_awarded_result['data'][0].get('awardedDate')
+                                                if awarded_date:
+                                                    try:
+                                                        dt = datetime.fromisoformat(awarded_date.replace('Z', '+00:00'))
+                                                        badge_last_online = int(dt.timestamp())
+                                                    except (ValueError, AttributeError):
+                                                        pass
+            except Exception as e:
+                print(f"Error fetching Rolimons stats: {e}")
+
+            rolimonsurl = f"https://rolimons.com/player/{UserID}"
 
             url = f"https://users.roblox.com/v1/users/{UserID}"
             try:
                 response = requests.get(url)
                 response.raise_for_status()
                 playerdata = response.json()
-                print(playerdata)
                 Description = playerdata["description"]
                 Banned = playerdata["isBanned"]
                 user = playerdata["name"]
                 JoinDate = playerdata["created"]
-                RobloxJoinDate_DiscordTimestamp = isotodiscordtimestamp(JoinDate, "F")
+                created_timestamp = isotodiscordtimestamp(JoinDate)
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching user data for ID {UserID}: {e}")
                 failedembed = discord.Embed(
@@ -1506,7 +1514,22 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             if hasVerifiedBadge:
                 Username += " <:RobloxVerified:1416951927513677874>"
 
-            if Banned:
+            avatar_url = f"https://thumbnails.roblox.com/v1/users/avatar?userIds={UserID}&size=420x420&format=Png&isCircular=false"
+            is_terminated = False
+            avatar_image = None
+            
+            try:
+                response = requests.get(avatar_url)
+                response.raise_for_status()
+                data = response.json()
+                if data and data.get("data") and len(data["data"]) > 0:
+                    avatar_image = data["data"][0].get("imageUrl")
+                    if avatar_image and avatar_image.startswith("https://t7.rbxcdn.com"):
+                        is_terminated = True
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching avatar: {e}")
+
+            if is_terminated:
                 Username = f":warning: [Account Deleted] {Username}"
 
             url = f"https://api.ropro.io/getUserInfoTest.php?userid={UserID}"
@@ -1514,23 +1537,35 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 response = requests.get(url)
                 response.raise_for_status()
                 RoProData = response.json()
-                print(RoProData)
                 Discord = RoProData["discord"]
-            
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching RoPro data for ID {UserID}: {e}")
-                failedembed2 = discord.Embed(
-                    title=f"Error retrieving Discord User from {url}",
-                    color=discord.Color.red()
-                )
-                await interaction.edit_original_response(embed=failedembed2)
-                return
+                Discord = ""
 
             profileurl = f"https://www.roblox.com/users/{UserID}/profile"
-            rolimonsurl = f"https://rolimons.com/player/{UserID}"
+
+            last_online_timestamp = None
+            last_online_source = "Unknown"
+            
+            if badge_last_online and rolimons_last_online:
+                last_online_timestamp = max(badge_last_online, rolimons_last_online)
+                last_online_source = "Recent Activity"
+            elif badge_last_online:
+                last_online_timestamp = badge_last_online
+                last_online_source = "Badge Activity"
+            elif rolimons_last_online:
+                last_online_timestamp = rolimons_last_online
+                last_online_source = "Rolimons Data"
+
+            formatted_last_online = "Unknown"
+            if last_online_timestamp:
+                try:
+                    formatted_last_online = f"<t:{last_online_timestamp}:D>"
+                except (ValueError, AttributeError):
+                    formatted_last_online = "Unknown"
 
             view = discord.ui.View()
-            if not Banned:
+            if not is_terminated:
                 view.add_item(discord.ui.Button(
                     label="View Profile",
                     style=discord.ButtonStyle.link,
@@ -1550,6 +1585,11 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 description=Description,
                 color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
+            
+            embed.add_field(name="RAP", value=f"[`{rap_value:,}`]({rolimonsurl})", inline=True)
+            embed.add_field(name="Value", value=f"[`{value_value:,}`]({rolimonsurl})", inline=True)
+            embed.add_field(name="Last Online", value=formatted_last_online, inline=True)
+            
             if Discord != "":
                 embed.add_field(
                     name="Discord (RoPro)",
@@ -1558,54 +1598,25 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 )
             
             embed.add_field(name="Username", value=user, inline=False)
-            embed.add_field(name="UserID", value=UserID, inline=False)
-            embed.add_field(name="Join Date", value=RobloxJoinDate_DiscordTimestamp, inline=False)
+            embed.add_field(name="ID", value=UserID, inline=False)
+            embed.add_field(name="Terminated", value="True" if is_terminated else "False", inline=False)
+            
+            if created_timestamp:
+                embed.add_field(name="Join Date", value=f"<t:{created_timestamp}:F>", inline=False)
+            else:
+                embed.add_field(name="Join Date", value="Unknown", inline=False)
 
-            url = f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={UserID}&size=420x420&format=Png&is=false"
-            try:
-                response = requests.get(url)
-                response.raise_for_status()
-                data = response.json()
-                if data and data.get("data") and len(data["data"]) > 0:
-                    HeadShot = data["data"][0].get("imageUrl")
-                    embed.set_author(name=user, url=profileurl, icon_url=HeadShot)
-                    print(data)
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching avatar headshot: {e}")
-                failedembed4 = discord.Embed(
-                    title=f"Failed To Retrieve {user}'s Headshot!",
-                    color=discord.Color.red()
-                )
-                await interaction.edit_original_response(embed=failedembed4)
+            if avatar_image:
+                embed.set_thumbnail(url=avatar_image)
+                embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                await interaction.edit_original_response(embed=embed, view=view)
                 return
-
-            url = f"https://thumbnails.roblox.com/v1/users/avatar-bust?userIds={UserID}&size=150x150&format=Png&isCircular=false"
-            try:
-                response = requests.get(url)
-                response.raise_for_status()
-                data = response.json()
-                if data and data.get("data") and len(data["data"]) > 0:
-                    AvatarBust = data["data"][0].get("imageUrl")
-                    embed.set_thumbnail(url=AvatarBust)
-                    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-                    print(data)
-                    await interaction.edit_original_response(embed=embed, view=view)
-                    return
-                else:
-                    print(f"Error fetching avatar bust: {e}")
-                    failedembed5 = discord.Embed(
-                        title=f"Failed To Retrieve {user}'s avatar bust!",
-                        color=discord.Color.red()
-                )
-                    await interaction.edit_original_response(embed=failedembed5)
-                    return
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching avatar bust: {e}")
-                failedembed6 = discord.Embed(
-                    title=f"Failed To Retrieve {user}'s avatar bust!",
+            else:
+                failedembed5 = discord.Embed(
+                    title=f"Failed To Retrieve {user}'s avatar!",
                     color=discord.Color.red()
                 )
-                await interaction.edit_original_response(embed=failedembed6)
+                await interaction.edit_original_response(embed=failedembed5)
                 return
         else:
             print(f"{user} not found.")
@@ -1623,7 +1634,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
         )
         await interaction.edit_original_response(embed=failedembed8)
         return
-
+        
 @bot.tree.command(name="britishuser", description="Check if a user has their language set to British English")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)

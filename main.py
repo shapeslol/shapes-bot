@@ -2325,6 +2325,21 @@ async def help_command(interaction: discord.Interaction):
     
     view = HelpView()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+@bot.tree.command(name="countingleaderboard", description="View the counting leaderboard website")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def countingleaderboard(interaction: discord.Interaction):
+    """Send the counting leaderboard website link"""
+    
+    embed = discord.Embed(
+        title="Counting Leaderboard",
+        description=f"[Click here to view the counting leaderboard](https://shapes.lol/counting/leaderboard/)",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    
+    await interaction.response.send_message(embed=embed)
     
 # === Flask Runner in Thread ===
 def run_flask():

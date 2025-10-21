@@ -2416,6 +2416,145 @@ async def countingleaderboard(interaction: discord.Interaction):
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     
     await interaction.response.send_message(embed=embed)
+
+async def get_badge_thumbnail(session, badge):
+    icon_image_id = badge.get('iconImageId') or badge.get('displayIconImageId')
+    if not icon_image_id:
+        return None
+        
+    icon_url = f"https://thumbnails.roblox.com/v1/assets?assetIds={icon_image_id}&size=150x150&format=Png&isCircular=false"
+    
+    try:
+        async with session.get(icon_url) as response:
+            if response.status == 200:
+                data = await response.json()
+                if data.get('data') and len(data['data']) > 0:
+                    return data['data'][0]['imageUrl']
+    except Exception:
+        pass
+    return None
+
+@bot.tree.command(name="recentbadges", description="Get a user's most recently earned Roblox badges")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def recentbadges(interaction: discord.Interaction, user_input: str = "Roblox"):
+    await interaction.response.defer(thinking=True)
+    
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user_input}'s Recent Badges!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
+    connector = aiohttp.TCPConnector(family=socket.AF_INET)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        try:
+            user_id = user_input
+            if not user_input.isdigit():
+                url = "https://users.roblox.com/v1/usernames/users"
+                request_payload = {
+                    "usernames": [user_input],
+                    "excludeBannedUsers": False
+                }
+                
+                async with session.post(url, json=request_payload) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get("data") and len(data["data"]) > 0:
+                            user_id = str(data["data"][0]["id"])
+                        else:
+                            failedembed = discord.Embed(
+                                title=f":warning: {user_input} not found.",
+                                color=discord.Color.yellow()
+                            )
+                            await interaction.edit_original_response(embed=failedembed)
+                            return
+                    else:
+                        failedembed = discord.Embed(
+                            title=f":x: Error fetching user data",
+                            color=discord.Color.red()
+                        )
+                        await interaction.edit_original_response(embed=failedembed)
+                        return
+
+            badges_url = f"https://badges.roblox.com/v1/users/{user_id}/badges?sortOrder=Desc&limit=10"
+            
+            async with session.get(badges_url) as response:
+                if response.status == 403:
+                    embed = discord.Embed(
+                        title=f"{user_input}'s Recent Badges",
+                        description=":lock: This user's badges are private.",
+                        color=discord.Color.orange()
+                    )
+                    await interaction.edit_original_response(embed=embed)
+                    return
+                elif response.status != 200:
+                    failedembed = discord.Embed(
+                        title=f":x: Error fetching badges (Status: {response.status})",
+                        color=discord.Color.red()
+                    )
+                    await interaction.edit_original_response(embed=failedembed)
+                    return
+                
+                data = await response.json()
+                badges = data.get('data', [])
+                
+                if not badges:
+                    embed = discord.Embed(
+                        title=f"{user_input}'s Recent Badges",
+                        description="This user has no badges.",
+                        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+                    )
+                    await interaction.edit_original_response(embed=embed)
+                    return
+
+                badge_ids = [badge['id'] for badge in badges]
+                awarded_dates_url = f"https://badges.roblox.com/v1/users/{user_id}/badges/awarded-dates?badgeIds={','.join(map(str, badge_ids))}"
+                
+                awarded_dates = {}
+                async with session.get(awarded_dates_url) as date_response:
+                    if date_response.status == 200:
+                        date_data = await date_response.json()
+                        awarded_dates = {item['badgeId']: item.get('awardedDate') for item in date_data.get('data', [])}
+
+                description_parts = []
+                for i, badge in enumerate(badges[:5], 1):
+                    badge_name = badge.get('displayName') or badge.get('name', 'Unknown Badge')
+                    badge_id = badge.get('id', 'N/A')
+                    awarded_date = awarded_dates.get(badge['id'])
+                    
+                    date_display = "Unknown date"
+                    if awarded_date:
+                        unix_timestamp = isotodiscordtimestamp(awarded_date)
+                        if unix_timestamp:
+                            date_display = f"<t:{unix_timestamp}:R>"
+                    
+                    description_parts.append(f"**{i}. [{badge_name}](https://www.roblox.com/badges/{badge_id})**\n└ Earned {date_display}")
+
+                embed = discord.Embed(
+                    title=f"{user_input}'s Recent Badges",
+                    description="\n\n".join(description_parts),
+                    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue(),
+                    url=f"https://www.roblox.com/users/{user_id}/badges"
+                )
+
+                if badges:
+                    thumbnail_url = await get_badge_thumbnail(session, badges[0])
+                    if thumbnail_url:
+                        embed.set_thumbnail(url=thumbnail_url)
+
+                embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                await interaction.edit_original_response(embed=embed)
+
+        except Exception as e:
+            print(f"Error in recentbadges command: {e}")
+            errorembed = discord.Embed(
+                title=":x: Unexpected Error",
+                description="An error occurred while fetching badge information.",
+                color=discord.Color.red()
+            )
+            errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=errorembed)
     
 # === Flask Runner in Thread ===
 def run_flask():

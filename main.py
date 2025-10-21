@@ -1324,7 +1324,7 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
     embed.add_field(name="🤖 AI replied:", value=ai_reply[:1024], inline=False)
     embed.set_footer(text=f"{MainURL} | Requested by {username}")
 
-    await interaction.followup.send(embed=embed)
+    await interaction.edit_original_response(embed=embed)
 
 @bot.tree.command(name="google", description="Search Something On Google.")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -1332,7 +1332,7 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
 async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}!",
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)

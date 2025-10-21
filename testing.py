@@ -20,11 +20,24 @@ from discord.gateway import DiscordWebSocket, _log
 from discord.ext.commands import Bot
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 from flask_cors import CORS
+import base64
+import urllib
+import re
+import socket
+import typing
+from typing import Dict, Any, Optional
+from openai import OpenAI
+
+# OpenAI client
+chatgpt = OpenAI(api_key=os.getenv("OpenAI_KEY"))
+
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
 embedDB = PickleDB('embed.db')
 usersDB = PickleDB('users.db')
+autoroleDB = PickleDB('autorole.db')
+AI_DB = PickleDB('ai.db')
 
 # === Discord Bot Setup ===
 intents = discord.Intents.default()
@@ -433,43 +446,16 @@ bot = MyBot(command_prefix="/", intents=discord.Intents.all())
             #print("Bot Closed, Shutting Down Flask Server.")
             #os._exit(0)
 
-# == update databases every second == #
-async def update_db():
-    while True:
-        await asyncio.sleep(1)
-        if not bot.is_closed():
-            countingDB.save()
-            embedDB.save()
-            usersDB.save()
-            #print(f"EmbedDB = {embedDB.all()}")
-            #print(f"CountingDB = {countingDB.all()}")
-            #print(f"UsersDB = {usersDB.all()}")
-            for guild in bot.guilds:
-                if not countingDB.get(f"{guild.id}"):
-                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber": 0})
-                    countingDB.save()
-            #for embed in embedDB.all():
-                #print(1)
-                #print(f"EmbedDB Key: {embed}, Value: {embedDB.get(embed)}")
-            #for info in countingDB.all():
-                #print(2)
-                #print(f"CountingDB Key: {info}, Value: {countingDB.get(info)}")
-            #for users in usersDB.all():
-                #print(3)
-                #print(f"UsersDB Key: {users}, Value: {usersDB.get(users)}")
-            #for user in bot.users:
-                #if not usersDB.get(f"{user.id}"):
-                    #usersDB.set(f"{user.id}", user.name)
-                    #usersDB.save()
-# == update databases every second == #
+# == update databases 0.5 seconds == #
 
 async def update_db():
     while True:
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
         if not bot.is_closed():
             countingDB.save()
             embedDB.save()
             usersDB.save()
+            autoroleDB.save()
             #print(f"EmbedDB = {embedDB.all()}")
             #print(f"CountingDB = {countingDB.all()}")
             #print(f"UsersDB = {usersDB.all()}")
@@ -482,24 +468,26 @@ async def update_db():
             countingDB.save()
             embedDB.save()
             usersDB.save()
+            autoroleDB.save()
             print(f"Saved EmbedDB {embedDB.all()}")
             print(f"Saved CountingDB {countingDB.all()}")
             print(f"Saved UsersDB {usersDB.all()}")
+            print(f"Saved AutoRoleDB {autoroleDB.all()}")
             print("Bot Closed, Shutting Down Flask Server.")
             os._exit(0)
 
 
-# === Background task to update cached guilds every 30 seconds ===
+# === Background task to update cached guilds every 2 seconds ===
 async def update_guild_cache():
     global cached_guilds
     while True:
-        await bot.tree.sync()
+        #await bot.tree.sync()
         BotInfo = await bot.application_info()
         cached_guilds = list(bot.guilds)
-        print(f"[SYSTEM] Watching {len(cached_guilds)} guilds! Updated List At {time.strftime('%X')}")
-        print(f"[SYSTEM] Watching {BotInfo.approximate_user_install_count} Users! As of {time.strftime('%X')}")
+        print(f"[SYSTEM] Watching {len(cached_guilds)} Servers!")
+        print(f"[SYSTEM] Watching {BotInfo.approximate_user_install_count} Users!")
         await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 shapes.lol/discord"))
-        await asyncio.sleep(2.5)
+        await asyncio.sleep(2)
         #if len(bot.guilds) == 1:
             #print(bot.guilds[0].name)
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
@@ -507,7 +495,6 @@ async def update_guild_cache():
             #print(f"Watching {len(bot.guilds)} Servers")
             #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
 
-        cached_guilds = []
         await asyncio.sleep(30)
 
 def IsInteger(s):
@@ -519,34 +506,36 @@ def IsInteger(s):
 
 # === Bot Events ===
 @bot.event
-async def on_message_delete(message):
-    print(f"Message by {message.author} deleted in channel {message.channel}: {message.content}")
-
-    if message.guild: # Check if the message was in a guild
-        server = message.guild
-        counting = countingDB.get(f"{server.id}")
-        if counting:
-            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content) and counting['number'] == message.content:
-                nextnumber = counting['number'] + 1
-                await message.channel.send(f"{message.author.mention} deleted their message containing the last number. The next number is {nextnumber}")
-
-@bot.event
 async def on_message(message):
-    # Ignore messages sent by the bot to prevent infinite loops
     if message.author == bot.user:
         return
     if message.author.bot:
         return
 
-    #print(f'Message from {message.author} in #{message.channel}: {message.content}')
     if message.guild:
+        server = message.guild
+        countingjson = countingDB.get(server.id)
+        counting_data = countingjson
+        enabled = counting_data['enabled']
+        number = counting_data['number']
+        channel = counting_data['channel']
+        warnings = counting_data['warnings']
+        LastCounter = counting_data['lastcounter']
+        HighestNumber = counting_data['highestnumber']
+        next_number = number + 1
+        if enabled == False and message.channel.id != channel:
+            return
+        
         messagecontent = message.content
         messagecontent = messagecontent.replace(" ", "")
-        if not any(op in messagecontent for op in "+-*/"):
+        InputNumber = None
+        
+        if not any(op in messagecontent for op in "+-*/x"):
             if IsInteger(messagecontent):
                 InputNumber = int(messagecontent)
             else:
-                print("stop")
+                ##print("stop")
+                return
         else:
             num = ''
             parts = []
@@ -559,6 +548,8 @@ async def on_message(message):
                     num = ''
             parts.append(num)
         
+            if not IsInteger(parts[0]):
+                return
             InputNumber = int(parts[0])
             i = 1
             while i < len(parts):
@@ -569,7 +560,7 @@ async def on_message(message):
                     InputNumber += val
                 elif op == '-':
                     InputNumber -= val
-                elif op == '*':
+                elif op == '*' or op == 'x':
                     InputNumber *= val
                 elif op == '/':
                     result = InputNumber / val
@@ -577,23 +568,10 @@ async def on_message(message):
         
                 i += 2
         
-        # Print the content of the message
-        server = message.guild
-        countingjson = countingDB.get(server.id)
-        counting_data = countingjson
-        number = counting_data['number']
-        enabled = counting_data['enabled']
-        channel = counting_data['channel']
-        warnings = counting_data['warnings']
-        LastCounter = counting_data['lastcounter']
-        HighestNumber = counting_data['highestnumber']
-        next_number = number + 1
-        print(next_number)
-        if str(InputNumber) == str(next_number) and message.channel.id == channel and enabled == True and message.author.id != LastCounter:
+        if str(InputNumber) == str(next_number) and message.author.id != LastCounter:
             await message.add_reaction('👍')
             LastCounter = message.author.id
             number = next_number
-            #print(number)
             if number > HighestNumber:
                 HighestNumber = number
             counting_data['highestnumber'] = HighestNumber
@@ -602,6 +580,8 @@ async def on_message(message):
             countingDB.set(server.id, counting_data)
             countingDB.save()
         else:
+            if InputNumber == None:
+                return
             if enabled == False:
                 return
             
@@ -627,7 +607,7 @@ async def on_message(message):
                 countingDB.save()
                 return
             if warnings >= 3:
-                message.add_reaction(':x:')
+                await message.add_reaction('❌')
                 if number > HighestNumber:
                     HighestNumber = number
                 counting_data['highestnumber'] = HighestNumber
@@ -660,6 +640,31 @@ async def on_message(message):
         await message.channel.send(embed=invite_embed)
 
 @bot.event
+async def on_message_delete(message):
+    print(f"Message by {message.author} deleted in channel {message.channel}: {message.content}")
+
+    if message.guild:
+        server = message.guild
+        counting = countingDB.get(f"{server.id}")
+        if counting:
+            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content):
+                nextnumber = counting['number'] + 1
+                await message.channel.send(f"{message.author.mention} deleted their message containing the last number. The next number is {nextnumber}")
+
+@bot.event
+async def on_message_edit(before, after):
+    if before.author.bot:
+        return
+
+    if before.guild:
+        server = before.guild
+        counting = countingDB.get(f"{server.id}")
+        if counting:
+            if before.author.id == counting['lastcounter'] and before.channel.id == counting['channel'] and IsInteger(before.content):
+                nextnumber = counting['number'] + 1
+                await before.channel.send(f"{before.author.mention} edited their message containing the last number. The next number is {nextnumber}")
+
+@bot.event
 async def on_ready():
     global bot_ready
     global BotInfo
@@ -681,22 +686,41 @@ async def on_ready():
     bot.loop.create_task(update_db())
     #bot.loop.create_task(update_db_on_close())
 
-@app.route('/server-count', methods=["GET"])
-def get_server_count():
+@bot.event
+async def on_member_join(member):
+    if member.bot:
+        return
+        
+    autorole_data = autoroleDB.get(f"{member.guild.id}")
+    if autorole_data and autorole_data.get("enabled"):
+        role_id = autorole_data.get("role_id")
+        if role_id:
+            role = member.guild.get_role(role_id)
+            if role:
+                await member.add_roles(role)
+
+@app.route('/botinfo', methods=["GET"])
+def get_bot_info():
     # Ensure the bot is ready before accessing guilds
     if bot.is_ready():
         server_count = len(bot.guilds)
-        return str(server_count), 200
+        jsonData = {"Servers":str(server_count),"Users":str(BotInfo.approximate_user_install_count)}
+        return jsonify(jsonData), 200
     else:
-        return "Unknown", 503
+        jsonData = {"Servers":"Unknown","Users":"Unknown"}
+        return jsonify(jsonData), 503
 
-@app.route('/user-count', methods=["GET"])
-def get_user_count():
+@app.route('/clb', methods=["GET"])
+def countinglb():
     if bot.is_ready():
-        user_count = BotInfo.approximate_user_install_count
-        return str(user_count), 200
+        lb = {}
+        for server in countingDB.all():
+            data = countingDB.get(f"{server}")
+            lb[f"{server}"] = {"currentnumber": data['number'],"highestnumber": data['highestnumber'], "serverName": bot.get_guild(int(server)).name if bot.get_guild(int(server)) else "Unknown"}
+        FullLB = sorted(lb.items(), key=lambda x: x[1]['highestnumber'], reverse=True)
+        return {"Leaderboard":FullLB}, 200
     else:
-        return "Unknown", 503
+        return {"Unknown"}, 503
 
 async def restartbot():
     print("Bot Restarting.")
@@ -704,46 +728,28 @@ async def restartbot():
     await asyncio.sleep(20)
     bot.run(token)
 
-
 def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str:
-    """
-    Converts an ISO 8601 formatted UTC timestamp string to Discord's timestamp markdown.
-
-    Args:
-        iso_timestamp_str: The ISO 8601 formatted timestamp string (e.g., "2023-10-27T10:30:00Z").
-        format_type: The Discord timestamp format type (e.g., "t", "T", "d", "D", "f", "F", "R").
-                    Defaults to "f" (short date/time).
-
-    Returns:
-        A string formatted for Discord's timestamp display.
-    """
     try:
-        # 1. Parse the ISO 8601 string into a datetime object.
-        # Use fromisoformat for modern Python versions (3.7+)
-        dt_object = datetime.fromisoformat(iso_timestamp_str.replace('Z', '+00:00'))
+        if '.' in iso_timestamp_str and iso_timestamp_str.endswith('Z'):
+            main_part = iso_timestamp_str.split('.')[0]
+            iso_timestamp_str = main_part + '+00:00'
+        elif '.' in iso_timestamp_str and '+00:00' in iso_timestamp_str:
+            main_part = iso_timestamp_str.split('.')[0]
+            iso_timestamp_str = main_part + '+00:00'
+        elif iso_timestamp_str.endswith('Z'):
+            iso_timestamp_str = iso_timestamp_str.replace('Z', '+00:00')
+        
+        dt_object = datetime.fromisoformat(iso_timestamp_str)
 
-        # Ensure the datetime object is timezone-aware and in UTC
         if dt_object.tzinfo is None:
             dt_object = pytz.utc.localize(dt_object)
         else:
             dt_object = dt_object.astimezone(pytz.utc)
 
-        # 2. Convert the datetime object to a Unix timestamp.
         unix_timestamp = int(dt_object.timestamp())
-
-        # 3. Format the Unix timestamp into Discord's special timestamp markdown.
-        return f"<t:{unix_timestamp}:{format_type}>"
+        return unix_timestamp  
     except ValueError as e:
-        return f"Error parsing timestamp: {e}"
-
-# TESTING
-#iso_time_utc = "2025-12-25T14:30:00Z"
-#discord_time_short = iso_to_discord_time(iso_time_utc, "f")
-#discord_time_relative = iso_to_discord_time(iso_time_utc, "R")
-
-#print(f"Short date/time: {discord_time_short}")
-#print(f"Long date/time: {discord_time_long}")
-#print(f"Relative time: {discord_time_relative}")
+        return None
 
 DiscordColors = [
     discord.Color.blue(),
@@ -1045,7 +1051,7 @@ async def restart(interaction: discord.Interaction):
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
 
 @bot.tree.command(name="counting", description="Counting Settings")
-@commands.has_permissions(administrator=True)
+@app_commands.default_permissions(administrator=True)
 @commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
 @app_commands.allowed_installs(guilds=True, users=False)
 @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
@@ -1056,7 +1062,7 @@ async def counting(interaction: discord.Interaction):
     countingData = counting_json
     print(countingData)
     if not countingData:
-        countingDB.set(server.id, {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None})
+        countingDB.set(server.id, {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber":0})
         countingDB.save()
         counting_json = countingDB.get(server.id)
         countingData = counting_json
@@ -1075,7 +1081,7 @@ async def counting(interaction: discord.Interaction):
             channel_options.append(discord.SelectOption(label=channel.name, value=str(channel.id)))
     class CountingView(discord.ui.View):
         def __init__(self):
-            super().__init__(timeout=None)  # No timeout
+            super().__init__(timeout=None)
 
         @discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting", emoji="🔢")
         async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1101,12 +1107,11 @@ async def counting(interaction: discord.Interaction):
             await interaction.response.send_message(f"Counting channel set to <#{selected_channel_id}>.", ephemeral=True)
     embed = discord.Embed(
         title="Counting Settings",
-        description=f"**Current Settings:**\n- Counting Enabled: `{countingData['enabled']}`\n- Counting Channel: `<#{countingData['channel']}>`\n- Current Number: `{countingData['number']}`\n- Highest Number: `{countingData['highestnumber']}`\n- Warnings: `{countingData['warnings']}`\n- Last Counter: `{countingData['lastcounter']}`",
+        description=f"**Current Settings:**\n- Counting Enabled: `{countingData['enabled']}`\n- Counting Channel: `<#{countingData['channel']}>`\n- Current Number: `{countingData['number']}`\n- Highest Number: `{countingData.get('highestnumber', 0)}`\n- Warnings: `{countingData['warnings']}`\n- Last Counter: `{countingData['lastcounter']}`",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.response.send_message(embed=embed, view=CountingView(), ephemeral=True)
-
 
 @bot.tree.command(name="spookpfp", description="Get a pfp from a user's spook.bio profile.")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -1251,13 +1256,83 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
                 # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
                 return
 
+@bot.tree.command(name="ai", description="Chat with an AI assistant.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def ai(interaction: discord.Interaction, *, prompt: str):
+    await interaction.response.defer(thinking=True)
+
+    loading = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Getting AI Response From {prompt}",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+
+    await interaction.followup.send(embed=loading)
+    
+    user_id = str(interaction.user.id)
+    username = interaction.user.name
+
+    # Load or initialize user data
+    user_data = AI_DB.get(user_id) or {"username": username, "user_messages": [], "ai_responses": []}
+    user_data["username"] = username
+    user_data["user_messages"].append(prompt)
+    
+    # Keep last 5 messages for context
+    user_data["user_messages"] = user_data["user_messages"][-5:]
+    user_data["ai_responses"] = user_data["ai_responses"][-5:]
+
+    # System instructions for the AI
+    messages_for_ai = [
+        {
+            "role": "system",
+            "content": (
+                f"You are a helpful Discord assistant chatting with {username}. "
+                "Always respond in a single concise paragraph. "
+                "Follow Discord TOS. Do not provide instructions for illegal activity. "
+                "Stay safe, respectful, and friendly."
+            )
+        }
+    ]
+
+    # Include previous conversation
+    for u_msg, a_msg in zip(user_data["user_messages"], user_data["ai_responses"]):
+        messages_for_ai.append({"role": "user", "content": u_msg})
+        messages_for_ai.append({"role": "assistant", "content": a_msg})
+
+    # Add latest message
+    messages_for_ai.append({"role": "user", "content": prompt})
+
+    try:
+        response = chatgpt.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages_for_ai
+        )
+        ai_reply = response.choices[0].message.content.strip()
+    except Exception as e:
+        ai_reply = f"⚠️ API error: {e}"
+
+    # Save AI response
+    user_data["ai_responses"].append(ai_reply)
+    AI_DB.set(user_id, user_data)
+
+    # Create embed
+    embed = discord.Embed(
+        title=f"💬 Chat with {username}",
+        color=embedDB.get(user_id) or discord.Color.blue()
+    )
+    embed.add_field(name="🧍 You said:", value=prompt[:1024], inline=False)
+    embed.add_field(name="🤖 AI replied:", value=ai_reply[:1024], inline=False)
+    embed.set_footer(text=f"{MainURL} | Requested by {username}")
+
+    await interaction.edit_original_response(embed=embed)
+
 @bot.tree.command(name="google", description="Search Something On Google.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}!",
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1685,7 +1760,7 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
         item_id = item_query
 
     url = f"https://catalog.roblox.com/v1/catalog/items/{item_id}/details?itemType=Asset"
-    
+
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -1697,33 +1772,20 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
         creator_name = item_data.get("creatorName", "Unknown Creator")
         creator_type = item_data.get("creatorType", "User")
         creator_verified = item_data.get("creatorHasVerifiedBadge", False)
+        creator_target_id = item_data.get("creatorTargetId")
+        favorite_count = item_data.get("favoriteCount", 0)
         lowest_price = item_data.get("lowestPrice", 0)
         is_purchasable = item_data.get("isPurchasable", False)
         item_type = item_data.get("itemType", "Asset")
         
-        details_url = f"https://economy.roblox.com/v2/assets/{item_id}/details"
-        try:
-            details_response = requests.get(details_url)
-            details_response.raise_for_status()
-            details_data = details_response.json()
-            
-            created_date = details_data.get("Created")
-            updated_date = details_data.get("Updated")
-            
-            if created_date:
-                created_timestamp = isotodiscordtimestamp(created_date, "F")
-            else:
-                created_timestamp = "Unknown"
-                
-            if updated_date:
-                updated_timestamp = isotodiscordtimestamp(updated_date, "F")
-            else:
-                updated_timestamp = "Unknown"
-                
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching item details: {e}")
+        created_date = item_data.get("itemCreatedUtc")
+        
+        if created_date:
+            created_timestamp = isotodiscordtimestamp(created_date, "F")
+        else:
             created_timestamp = "Unknown"
-            updated_timestamp = "Unknown"
+        
+        updated_timestamp = created_timestamp
 
         creator_display = creator_name
         if creator_verified:
@@ -1762,8 +1824,8 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
         embed.add_field(name="Item Type", value=item_type, inline=True)
         embed.add_field(name="Price", value=price_display, inline=True)
         embed.add_field(name="Creator", value=creator_display, inline=True)
+        embed.add_field(name="Favorites", value=f"{favorite_count:,}", inline=True)
         embed.add_field(name="Created", value=created_timestamp, inline=True)
-        embed.add_field(name="Updated", value=updated_timestamp, inline=True)
 
         view = discord.ui.View()
         view.add_item(discord.ui.Button(
@@ -1815,14 +1877,21 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
         owner_id = owner_data.get("userId")
         owner_name = owner_data.get("username", "Unknown")
 
-        # Force verified badges for specific group and user
         if group_id == "5544706":
             group_verified = True
         
-        if str(owner_id) == "124767284":
-            owner_verified = True
-        else:
-            owner_verified = owner_data.get("hasVerifiedBadge", False)
+        owner_verified = False
+        if owner_id:
+            try:
+                user_url = f"https://users.roblox.com/v1/users/{owner_id}"
+                user_response = requests.get(user_url)
+                user_response.raise_for_status()
+                user_data = user_response.json()
+                owner_verified = user_data.get("hasVerifiedBadge", False)
+                if user_data.get("id") == 124767284:
+                    owner_verified = True
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching owner data: {e}")
 
         group_display = name
         if group_verified:
@@ -1882,6 +1951,472 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
         await interaction.edit_original_response(embed=failedembed)
         return
 
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="placeinfo", description="Get detailed information about a Roblox place")
+@app_commands.describe(game_input="Roblox place ID or game URL")
+async def placeinfo(interaction: discord.Interaction, game_input: str):
+    await interaction.response.defer(thinking=True)
+    
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For Place Information!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+
+    try:
+        connector = aiohttp.TCPConnector(family=socket.AF_INET)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            place_id = None
+            
+            if "roblox.com/games/" in game_input:
+                match = re.search(r'roblox\.com/games/(\d+)', game_input)
+                if match:
+                    place_id = match.group(1)
+                else:
+                    errorembed = discord.Embed(
+                        title=":x: Invalid URL :x:",
+                        description="Could not extract place ID from the URL",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=errorembed)
+                    return
+            else:
+                if not game_input.isdigit():
+                    errorembed = discord.Embed(
+                        title=":x: Invalid Input :x:",
+                        description="Please provide a valid place ID or Roblox game URL",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=errorembed)
+                    return
+                place_id = game_input
+            
+            universe_url = f"https://apis.roblox.com/universes/v1/places/{place_id}/universe"
+            async with session.get(universe_url) as response:
+                if response.status != 200:
+                    errorembed = discord.Embed(
+                        title=":x: API Error :x:",
+                        description=f"Failed to fetch universe information (Status: {response.status})",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=errorembed)
+                    return
+                
+                universe_data = await response.json()
+                universe_id = universe_data.get('universeId')
+                
+                if not universe_id:
+                    errorembed = discord.Embed(
+                        title=":x: Not Found :x:",
+                        description="Could not find universe for this place ID",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=errorembed)
+                    return
+            
+            games_url = f"https://games.roblox.com/v1/games?universeIds={universe_id}"
+            async with session.get(games_url) as response:
+                if response.status != 200:
+                    errorembed = discord.Embed(
+                        title=":x: API Error :x:",
+                        description=f"Failed to fetch game details (Status: {response.status})",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=errorembed)
+                    return
+                
+                games_data = await response.json()
+                if not games_data.get('data') or len(games_data['data']) == 0:
+                    errorembed = discord.Embed(
+                        title=":x: Not Found :x:",
+                        description="Could not find game details for this universe",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=errorembed)
+                    return
+                
+                game_info = games_data['data'][0]
+            
+            name = game_info.get('name', 'Unknown')
+            description = game_info.get('description', 'No description available')
+            creator_id = game_info.get('creator', {}).get('id', 'Unknown')
+            creator_name = game_info.get('creator', {}).get('name', 'Unknown')
+            creator_type = game_info.get('creator', {}).get('type', 'User')
+            current_players = game_info.get('playing', 0)
+            visits = game_info.get('visits', 0)
+            max_players = game_info.get('maxPlayers', 0)
+            created = game_info.get('created', 'Unknown')
+            updated = game_info.get('updated', 'Unknown')
+            genre = game_info.get('genre', 'Unknown')
+            favorites_count = game_info.get('favoritedCount', 0)
+        
+            created_timestamp = isotodiscordtimestamp(created, "F") if created != 'Unknown' else "Unknown"
+            updated_timestamp = isotodiscordtimestamp(updated, "F") if updated != 'Unknown' else "Unknown"
+            
+            thumbnail_url = f"https://thumbnails.roblox.com/v1/games/icons?universeIds={universe_id}&size=512x512&format=Png&isCircular=false"
+            thumbnail_image = None
+            async with session.get(thumbnail_url) as response:
+                if response.status == 200:
+                    thumbnail_data = await response.json()
+                    if thumbnail_data.get('data') and len(thumbnail_data['data']) > 0:
+                        thumbnail_image = thumbnail_data['data'][0]['imageUrl']
+            
+            embed = discord.Embed(
+                title=name,
+                url=f"https://www.roblox.com/games/{place_id}/",
+                description=description,
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+            )
+        
+            embed.add_field(name="Place ID", value=f"`{place_id}`", inline=True)
+            embed.add_field(name="Universe ID", value=f"`{universe_id}`", inline=True)
+            
+            if creator_type.lower() == "user":
+                creator_display = f"[{creator_name}](https://www.roblox.com/users/{creator_id}/profile)"
+            else:
+                creator_display = f"[{creator_name}](https://www.roblox.com/groups/{creator_id}/)"
+            embed.add_field(name="Creator", value=creator_display, inline=True)
+
+            embed.add_field(name="Visits", value=f"{visits:,}", inline=True)
+            embed.add_field(name="Current Players", value=f"{current_players:,}", inline=True)
+            embed.add_field(name="Max Players", value=f"{max_players}", inline=True)
+            
+            embed.add_field(name="Favorites", value=f"{favorites_count:,}", inline=True)
+            embed.add_field(name="Genre", value=genre, inline=True)
+            
+            embed.add_field(name="Created", value=created_timestamp, inline=True)
+            embed.add_field(name="Updated", value=updated_timestamp, inline=True)
+            
+            if description and description != "No description available":
+                if len(description) > 1024:
+                    description = description[:1021] + "..."
+                if len(embed.fields) % 3 != 0:
+                    embed.add_field(name="\u200b", value="\u200b", inline=True)
+                embed.add_field(name="Description", value=description, inline=False)
+            
+            if thumbnail_image:
+                embed.set_thumbnail(url=thumbnail_image)
+            
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="View Game",
+                style=discord.ButtonStyle.link,
+                emoji="<:RobloxLogo:1416951004607418398>",
+                url=f"https://www.roblox.com/games/{place_id}/"
+            ))
+            
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed, view=view)
+            
+    except Exception as e:
+        print(f"Error in placeinfo command: {e}")
+        errorembed = discord.Embed(
+            title=":x: Unexpected Error :x:",
+            description=f"An error occurred while fetching place information: {str(e)}",
+            color=discord.Color.red()
+        )
+        errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=errorembed)
+
+async def send_error_embed(interaction: discord.Interaction, title: str, description: str):
+    embed = discord.Embed(
+        title=f":x: {title}",
+        description=description,
+        color=discord.Color.red()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.followup.send(embed=embed)
+
+async def get_badge_thumbnail(session: aiohttp.ClientSession, badge_id: str) -> Optional[str]:
+    thumbnail_url = f"https://thumbnails.roblox.com/v1/badges/icons?badgeIds={badge_id}&size=150x150&format=Png"
+    
+    try:
+        async with session.get(thumbnail_url) as response:
+            if response.status == 200:
+                thumbnail_data = await response.json()
+                if thumbnail_data.get('data') and len(thumbnail_data['data']) > 0:
+                    return thumbnail_data['data'][0].get('imageUrl')
+    except Exception:
+        pass
+    return None
+
+async def create_badge_embed(badge_data: dict, thumbnail_url: Optional[str], badge_id: str, 
+                           start_time: float, requester: discord.User) -> discord.Embed:
+    badge_id = badge_data.get('id', 'N/A')
+    name = badge_data.get('name', 'Unknown')
+    display_name = badge_data.get('displayName', name)
+    description = badge_data.get('description') or badge_data.get('displayDescription') or "No description"
+    
+    statistics = badge_data.get('statistics', {})
+    past_day_awarded = statistics.get('pastDayAwardedCount', 0)
+    awarded_count = statistics.get('awardedCount', 0)
+    win_rate = statistics.get('winRatePercentage', 0)
+    
+    created = badge_data.get('created', 'Unknown')
+    updated = badge_data.get('updated', 'Unknown')
+    
+    awarding_universe = badge_data.get('awardingUniverse', {})
+    universe_name = awarding_universe.get('name', 'Unknown')
+    universe_id = awarding_universe.get('id', 'N/A')
+    root_place_id = awarding_universe.get('rootPlaceId', 'N/A')
+    
+    embed_color = embedDB.get(f"{requester.id}") if embedDB.get(f"{requester.id}") else discord.Color.blue()
+    
+    embed = discord.Embed(
+        title=f"Badge: {display_name}",
+        color=embed_color,
+        timestamp=datetime.now(),
+        url=f"https://www.roblox.com/badges/{badge_id}"
+    )
+    
+    if thumbnail_url:
+        embed.set_thumbnail(url=thumbnail_url)
+    
+    embed.add_field(name="Badge ID", value=f"`{badge_id}`", inline=True)
+    embed.add_field(name="Internal Name", value=name, inline=True)
+    embed.add_field(name="Enabled", value="Yes" if badge_data.get('enabled') else "No", inline=True)
+    
+    embed.add_field(name="Description", value=description, inline=False)
+    
+    embed.add_field(name="Awarded Today", value=f"{past_day_awarded:,}", inline=True)
+    embed.add_field(name="Obtained Total", value=f"{awarded_count:,}", inline=True)
+    embed.add_field(name="Win Rate", value=f"{win_rate}%", inline=True)
+    
+    created_timestamp = isotodiscordtimestamp(created)
+    updated_timestamp = isotodiscordtimestamp(updated)
+    
+    if created_timestamp:
+        embed.add_field(
+            name="Created", 
+            value=f"{created_timestamp} {created_timestamp})", 
+            inline=True
+        )
+    else:
+        embed.add_field(name="Created", value=created, inline=True)
+    
+    if updated_timestamp:
+        embed.add_field(
+            name="Last Updated", 
+            value=f"<t:{updated_timestamp}:f> (<t:{updated_timestamp}:R>)", 
+            inline=True
+        )
+    else:
+        embed.add_field(name="Last Updated", value=updated, inline=True)
+    
+    if universe_id != 'N/A':
+        universe_field = f"[{universe_name}](https://www.roblox.com/games/{root_place_id}/)"
+        universe_field += f"\nUniverse ID: `{universe_id}`"
+        if root_place_id != 'N/A':
+            universe_field += f"\nPlace ID: `{root_place_id}`"
+        
+        embed.add_field(name="Awarding Universe", value=universe_field, inline=False)
+    
+    elapsed_time = asyncio.get_event_loop().time() - start_time
+    embed.set_footer(text=f"Load time: {elapsed_time:.2f}s • Requested by {requester.display_name} | {MainURL}")
+    
+    return embed
+
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="badge", description="Get detailed information about a Roblox badge")
+@app_commands.describe(badge_id="The ID of the Roblox badge")
+async def badge_info(interaction: discord.Interaction, badge_id: str):
+    await interaction.response.defer(thinking=True)
+    start_time = asyncio.get_event_loop().time()
+    
+    thinkingembed = discord.Embed(
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For Badge ID {badge_id}!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
+    if not badge_id.isdigit():
+        await send_error_embed(
+            interaction,
+            "Invalid Badge ID",
+            "Please provide a valid numeric badge ID."
+        )
+        return
+    
+    connector = aiohttp.TCPConnector(family=socket.AF_INET)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        try:
+            badge_url = f"https://badges.roblox.com/v1/badges/{badge_id}"
+            
+            async with session.get(badge_url) as response:
+                if response.status == 404:
+                    await send_error_embed(
+                        interaction,
+                        "Badge Not Found",
+                        f"Could not find a badge with ID `{badge_id}`"
+                    )
+                    return
+                elif response.status != 200:
+                    await send_error_embed(
+                        interaction,
+                        "API Error",
+                        f"Failed to fetch badge information (Status: {response.status})"
+                    )
+                    return
+                
+                badge_data = await response.json()
+            
+            thumbnail_url = await get_badge_thumbnail(session, badge_id)
+            
+            embed = await create_badge_embed(badge_data, thumbnail_url, badge_id, start_time, interaction.user)
+            
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="View Badge",
+                style=discord.ButtonStyle.link,
+                emoji="<:RobloxLogo:1416951004607418398>",
+                url=f"https://www.roblox.com/badges/{badge_id}"
+            ))
+            
+            await interaction.edit_original_response(embed=embed, view=view)
+            
+        except Exception as e:
+            await send_error_embed(interaction, "Unexpected Error", f"An error occurred: {str(e)}")
+
+@bot.tree.command(name="autorole", description="Set a role to be automatically given to members")
+@app_commands.default_permissions(administrator=True)
+@commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
+@app_commands.allowed_installs(guilds=True, users=False)
+@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+@app_commands.describe(
+    role="The role to automatically assign to members",
+    enable="Whether to enable or disable autorole (default: True)"
+)
+async def autorole(interaction: discord.Interaction, role: discord.Role, enable: bool = True):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("You need administrator permissions to use this command.", ephemeral=True)
+        return
+    
+    autorole_data = {"role_id": role.id, "enabled": enable}
+    autoroleDB.set(f"{interaction.guild.id}", autorole_data)
+    autoroleDB.save()
+    
+    class AutoroleView(discord.ui.View):
+        @discord.ui.button(label="Assign to Existing Members", style=discord.ButtonStyle.primary)
+        async def assign_existing(self, interaction: discord.Interaction, button: discord.ui.Button):
+            count = 0
+            for member in interaction.guild.members:
+                if not member.bot and role not in member.roles:
+                    try:
+                        await member.add_roles(role)
+                        count += 1
+                    except:
+                        pass
+            await interaction.response.send_message(f"Assigned {role.mention} to {count} existing members", ephemeral=True)
+    
+    status = "enabled" if enable else "disabled"
+    await interaction.response.send_message(
+        f"Autorole {status} for {role.mention}. Assign to existing members?", 
+        view=AutoroleView(), 
+        ephemeral=True
+    )
+
+class HelpDropdown(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Counting Commands", description="Counting game and settings"),
+            discord.SelectOption(label="User Settings", description="Personal bot settings"),
+            discord.SelectOption(label="Roblox Commands", description="Roblox user and item information"),
+            discord.SelectOption(label="Utility Commands", description="General utility commands"),
+            discord.SelectOption(label="Context Menu Commands", description="Right-click context commands")
+        ]
+        super().__init__(placeholder="Choose a command category...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        category = self.values[0]
+        embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+        
+        if category == "Counting Commands":
+            embed = discord.Embed(title="Counting Commands", color=embed_color)
+            embed.add_field(name="Commands", value=
+                "• /counting - Counting in a specific channel", inline=False)
+                
+        elif category == "User Settings":
+            embed = discord.Embed(title="User Settings", color=embed_color)
+            embed.add_field(name="Commands", value=
+                "• /settings - Customize your personal bot settings", inline=False)
+                
+        elif category == "Roblox Commands":
+            embed = discord.Embed(title="Roblox Commands", color=embed_color)
+            embed.add_field(name="Commands", value=
+                "• /robloxinfo - Get detailed Roblox user information\n"
+                "• /roblox2discord - Find a Roblox user's Discord\n"
+                "• /britishuser - Check if user is british\n"
+                "• /iteminfo - Get Roblox item information\n"
+                "• /groupinfo - Get Roblox group information\n"
+                "• /placeinfo - Get Roblox place/game information\n"
+                "• /badge - Get Roblox badge information", inline=False)
+                
+        elif category == "Utility Commands":
+            embed = discord.Embed(title="Utility Commands", color=embed_color)
+            embed.add_field(name="Commands", value=
+                "• /ping - Check bot latency and connection\n"
+                "• /invite - Get bot invite link\n"
+                "• /google - Search something on Google\n"
+                "• /status - Check shapes.lol status\n"
+                "• /userinstalls - Get user installation count\n"
+                "• /servercount - Get server count\n"
+                "• /spookpfp - Get profile picture from spook.bio", inline=False)
+                
+        elif category == "Context Menu Commands":
+            embed = discord.Embed(title="Context Menu Commands", color=embed_color)
+            embed.add_field(name="Commands", value=
+                "• Right-click a user → Apps → sayhitouser - Say hello to a user\n"
+                "• Right-click a user → Apps → discord2spook - Get user's spook.bio profile\n"
+                "• Right-click a message → Apps → google - Search message content on Google", inline=False)
+        
+        embed.set_footer(text="Use slash commands (/) to interact")
+        await interaction.response.edit_message(embed=embed, ephemeral=True)
+
+class HelpView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_item(HelpDropdown())
+
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="help", description="Get help with all available commands")
+async def help_command(interaction: discord.Interaction):
+    """Display help information for all bot commands"""
+    
+    embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    
+    embed = discord.Embed(
+        title="Bot Help & Commands",
+        description="Use the dropdown menu below to browse commands by category.",
+        color=embed_color
+    )
+    
+    view = HelpView()
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+@bot.tree.command(name="countingleaderboard", description="View the counting leaderboard website")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def countingleaderboard(interaction: discord.Interaction):
+    """Send the counting leaderboard website link"""
+    
+    embed = discord.Embed(
+        title="Counting Leaderboard",
+        description=f"[Click here to view the counting leaderboard](https://shapes.lol/counting/leaderboard/)",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    
+    await interaction.response.send_message(embed=embed)
+    
 # === Flask Runner in Thread ===
 def run_flask():
     port = int(os.environ.get("PORT", 13455))

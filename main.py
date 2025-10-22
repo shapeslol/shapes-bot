@@ -44,7 +44,7 @@ Emojis = [
                                                                                                                             ["game"] = "<:RobloxInGame:1430640335393915041>",
                                                                                                                                     ["studio"] = "<:RobloxInStudio:1430627885261262869>",
                                                                                                                                             ["online"] = "<:RobloxOnline:1430627882912190608>",
-                                                                                                                                                    ["offline"] = "<:RobloxOffline:
+                                                                                                                                                    ["offline"] = "<:RobloxOffline:1
 ]
 
 

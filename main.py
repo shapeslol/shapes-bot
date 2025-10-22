@@ -28,9 +28,25 @@ import typing
 from typing import Dict, Any, Optional
 from openai import OpenAI
 
+# Setup Emojis
+loading = "<a:loading:1416950730094542881>"
+
+RobloxEmojis = [
+    ["rolimons"] = ":RolimonsLogo:",
+    ["logo"] = ":RobloxLogo:"
+    ["verified"] =":RobloxVerified:",
+    ["admin"] = ":RobloxAdmin:",
+    ["inviter"] = ":RobloxInviter:",
+    ["modelmaker"] =":RobloxModelMaker:", 
+    ["veteran"] = ":RobloxVeteran:",
+    ["onekvisits"] = ":Roblox1000Visits:",
+    ["onehundredvisits"] = ":Roblox100Visits:",
+    ["in_game"] = None
+]
+
+
 # OpenAI client
 chatgpt = OpenAI(api_key=os.getenv("OpenAI_KEY"))
-
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
@@ -749,7 +765,7 @@ def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "f") -> str
             dt_object = dt_object.astimezone(pytz.utc)
 
         unix_timestamp = int(dt_object.timestamp())
-        return unix_timestamp  
+        return f"<t:{unix_timestamp}:{format_type}>"
     except ValueError as e:
         return None
 
@@ -1280,8 +1296,8 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
     user_data["user_messages"].append(prompt)
     
     # Keep last 5 messages for context
-    user_data["user_messages"] = user_data["user_messages"][-5:]
-    user_data["ai_responses"] = user_data["ai_responses"][-5:]
+    user_data["user_messages"] = user_data["user_messages"][-50:]
+    user_data["ai_responses"] = user_data["ai_responses"][-50:]
 
     # System instructions for the AI
     messages_for_ai = [
@@ -1422,7 +1438,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     print(f"Searching For {user}'s profile")
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-                title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}'s Roblox Profile!",
+                title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}'s Roblox profile!",
                 color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
     await interaction.followup.send(embed=thinkingembed)
@@ -1567,13 +1583,13 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             view = discord.ui.View()
             if not is_terminated:
                 view.add_item(discord.ui.Button(
-                    label="View Profile",
+                    label="Roblox Profile",
                     style=discord.ButtonStyle.link,
                     emoji="<:RobloxLogo:1416951004607418398>",
                     url=profileurl
             ))
             view.add_item(discord.ui.Button(
-                label="View Profile On Rolimons",
+                label="View Rolimons",
                 style=discord.ButtonStyle.link,
                 emoji="<:RolimonsLogo:1417258794974711901>",
                 url=rolimonsurl
@@ -1602,7 +1618,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             embed.add_field(name="Terminated", value="True" if is_terminated else "False", inline=False)
             
             if created_timestamp:
-                embed.add_field(name="Join Date", value=f"<t:{created_timestamp}:F>", inline=False)
+                embed.add_field(name="Join Date", value=created_timestamp, inline=False)
             else:
                 embed.add_field(name="Join Date", value="Unknown", inline=False)
 
@@ -1627,7 +1643,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             await interaction.edit_original_response(embed=failedembed7)
             return
     except requests.exceptions.RequestException as e:
-        print(f"An error occurred during the API request: {e}")
+        print(f"An error occurred during the request: {e}")
         failedembed8 = discord.Embed(
             title=f":warning: {user} not found.",
             color=discord.Color.yellow()
@@ -1635,7 +1651,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
         await interaction.edit_original_response(embed=failedembed8)
         return
         
-@bot.tree.command(name="britishuser", description="Check if a user has their language set to British English")
+@bot.tree.command(name="britishuser", description="Check if a user has their language set to British")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def british_check(interaction: discord.Interaction, user_input: str):

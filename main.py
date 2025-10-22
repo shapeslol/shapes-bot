@@ -29,19 +29,21 @@ from typing import Dict, Any, Optional
 from openai import OpenAI
 
 # Setup Emojis
-loading = "<a:loading:1416950730094542881>"
-
-RobloxEmojis = [
-    ["rolimons"] = ":RolimonsLogo:",
-    ["logo"] = ":RobloxLogo:"
-    ["verified"] =":RobloxVerified:",
-    ["admin"] = ":RobloxAdmin:",
-    ["inviter"] = ":RobloxInviter:",
-    ["modelmaker"] =":RobloxModelMaker:", 
-    ["veteran"] = ":RobloxVeteran:",
-    ["onekvisits"] = ":Roblox1000Visits:",
-    ["onehundredvisits"] = ":Roblox100Visits:",
-    ["in_game"] = None
+Emojis = [
+        ["Loading"] = "<a:loading:1416950730094542881>"
+            ["Roblox"] = [
+                    ["rolimons"] = "<:RolimonsLogo:1417258794974711901>",
+                            ["logo"] = "<:RobloxLogo:1416951004607418398>"
+                                    ["verified"] ="<:RobloxVerified:1416951927513677874>",
+                                            ["premium"] = "<:RobloxPremium:1416951078200541378>",
+                                                    ["admin"] = "<:RobloxAdmin:1416951128876122152>",
+                                                            ["inviter"] = "<:RobloxInviter:1416952415772479559>",
+                                                                    ["modelmaker"] ="<:RobloxModelMaker:1416952360852mith"] = "<:Roblox1000Visits:1416952101229170698>",
+                                                                                            ["homestead"] = "<:Roblox100Visits:1416952056324952184>",
+                                                                                                    ["ambassador"] = "<:Ambassador:1430627877337960548>",
+                                                                                                            ["friendship"] = "<:Friendship:1430641140679577630>",
+                                                                                                                    ["warrior"] = "<:Warrior:1430640757403943063>",           
+                                                                                                                            ["game"] = "<:RobloxInGame:14306403353939150
 ]
 
 
@@ -856,7 +858,7 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
     await interaction.response.defer(thinking=True)
     query = message.content
     thinkingembed = discord.Embed(
-        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}!",
+        title=f"{Emojis["Loading"] interaction.user.mention} Searching Google For {query}!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1195,7 +1197,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
     print(f"Searching For {user}")
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}!",
+        title=f"{Emojis["Loading"] interaction.user.mention} Searching For {user}!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1351,7 +1353,7 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
 async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching Google For {query}",
+        title=f"{Emojis["Loading"] interaction.user.mention} Searching Google For {query}",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1438,7 +1440,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     print(f"Searching For {user}'s profile")
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-                title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user}'s Roblox profile!",
+                title=f"{Emojis["Loading"] interaction.user.mention} Searching For {user}'s Roblox profile!",
                 color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
     await interaction.followup.send(embed=thinkingembed)
@@ -1526,6 +1528,9 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 Username = Display
             else:
                 Username = f"{Display} (@{user})"
+
+            if UserID == 124767284:
+                hasVerifiedBadge = True
             
             if hasVerifiedBadge:
                 Username += " <:RobloxVerified:1416951927513677874>"
@@ -1546,7 +1551,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 print(f"Error fetching avatar: {e}")
 
             if is_terminated:
-                Username = f":warning: [Account Deleted] {Username}"
+                Username = f":warning: [Banned] {Username}"
 
             url = f"https://api.ropro.io/getUserInfoTest.php?userid={UserID}"
             try:
@@ -1609,7 +1614,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             if Discord != "":
                 embed.add_field(
                     name="Discord (RoPro)",
-                    value=f"```\n{Discord}\n```",
+                    value=f"```txt\n{Discord}\n```",
                     inline=False
                 )
             
@@ -1660,7 +1665,7 @@ async def british_check(interaction: discord.Interaction, user_input: str):
     embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     
     thinkingembed = discord.Embed(
-        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Checking if {user_input} is British!",
+        title=f"{Emojis["Loading"] interaction.user.mention} Checking if {user_input} is British!",
         color=embed_color
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1740,7 +1745,7 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
     print(f"Searching For {item_query}'s item info")
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {item_query}'s Item Information!",
+        title=f"{Emojis["Loading"] interaction.user.mention} Searching For {item_query}'s Item Information!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1809,6 +1814,12 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
         item_type = item_data.get("itemType", "Asset")
         
         created_date = item_data.get("itemCreatedUtc")
+        
+        if creator_type == "Group" and creator_target_id == 5544706:
+            creator_verified = True
+
+        if creator_type == "User" and creator_target_id == 124767284:
+            creator_verified = True
         
         if created_date:
             created_timestamp = isotodiscordtimestamp(created_date, "F")
@@ -1885,7 +1896,7 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
     print(f"Searching For group ID {group_id}")
     await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For Group ID {group_id}!",
+        title=f"{Emojis["Loading"] interaction.user.mention} Searching For Group ID {group_id}!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1965,7 +1976,7 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
         view.add_item(discord.ui.Button(
             label="View Group",
             style=discord.ButtonStyle.link,
-            emoji="<:RobloxLogo:1416951004607418398>",
+            emoji=Emojis["Roblox"]["logo"],
             url=f"https://www.roblox.com/communities/{group_id}"
         ))
 
@@ -1989,7 +2000,7 @@ async def placeinfo(interaction: discord.Interaction, game_input: str):
     await interaction.response.defer(thinking=True)
     
     thinkingembed = discord.Embed(
-        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For Place Information!",
+        title=f"{Emojis["Loading"] interaction.user.mention} Searching For Place Information!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -2009,7 +2020,7 @@ async def placeinfo(interaction: discord.Interaction, game_input: str):
                         description="Could not extract place ID from the URL",
                         color=discord.Color.red()
                     )
-                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    #errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     await interaction.edit_original_response(embed=errorembed)
                     return
             else:
@@ -2019,7 +2030,7 @@ async def placeinfo(interaction: discord.Interaction, game_input: str):
                         description="Please provide a valid place ID or Roblox game URL",
                         color=discord.Color.red()
                     )
-                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    #errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     await interaction.edit_original_response(embed=errorembed)
                     return
                 place_id = game_input
@@ -2032,7 +2043,7 @@ async def placeinfo(interaction: discord.Interaction, game_input: str):
                         description=f"Failed to fetch universe information (Status: {response.status})",
                         color=discord.Color.red()
                     )
-                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    #errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     await interaction.edit_original_response(embed=errorembed)
                     return
                 
@@ -2045,7 +2056,7 @@ async def placeinfo(interaction: discord.Interaction, game_input: str):
                         description="Could not find universe for this place ID",
                         color=discord.Color.red()
                     )
-                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    #errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     await interaction.edit_original_response(embed=errorembed)
                     return
             
@@ -2138,7 +2149,7 @@ async def placeinfo(interaction: discord.Interaction, game_input: str):
             view.add_item(discord.ui.Button(
                 label="View Game",
                 style=discord.ButtonStyle.link,
-                emoji="<:RobloxLogo:1416951004607418398>",
+                emoji=Emojis["Roblox"]["logo"],
                 url=f"https://www.roblox.com/games/{place_id}/"
             ))
             
@@ -2152,7 +2163,7 @@ async def placeinfo(interaction: discord.Interaction, game_input: str):
             description=f"An error occurred while fetching place information: {str(e)}",
             color=discord.Color.red()
         )
-        errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        #errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=errorembed)
 
 async def send_error_embed(interaction: discord.Interaction, title: str, description: str):
@@ -2161,7 +2172,7 @@ async def send_error_embed(interaction: discord.Interaction, title: str, descrip
         description=description,
         color=discord.Color.red()
     )
-    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    #embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.followup.send(embed=embed)
 
 async def get_badge_thumbnail(session: aiohttp.ClientSession, badge_id: str) -> Optional[str]:

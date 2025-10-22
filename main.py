@@ -30,26 +30,24 @@ from openai import OpenAI
 
 # Setup Emojis
 Emojis = {
-    ["loading"] = "<a:loading:1416950730094542881>",
-    ["RobloxEmojis"] = {
-        ["rolimons"] = "<:RolimonsLogo:1417258794974711901>",
-        ["logo"] = "<:RobloxLogo:1416951004607418398>",
-        ["verified"] = "<:RobloxVerified:1416951927513677874>",
-        ["premium"] = "<:RobloxPremium:1416951078200541378>",
-        ["admin"] = "<:RobloxAdmin:1416951128876122152>",
-        ["inviter"] = "<:RobloxInviter:1416952415772479559>",
-        ["homestead"] = "<:Roblox100Visits:1416952056324952184>",
-        ["ambassador"] = "<:Ambassador:1430627877337960548>",
-        ["friendship"] = "<:Friendship:1430641140679577630>",
-        ["warrior"] = "<:Warrior:1430640757403943063>",
-        ["game"] = "<:RobloxInGame:1430640335393915041>",
-        ["studio"] = "<:RobloxInStudio:1430627885261262869>",
-        ["online"] = "<:RobloxOnline:1430627882912190608>",
-        ["offline"] = "<:RobloxOffline:1430627883809902632>"
+    "loading": "<a:loading:1416950730094542881>",
+    "RobloxEmojis": {
+        "rolimons": "<:RolimonsLogo:1417258794974711901>",
+        "logo": "<:RobloxLogo:1416951004607418398>",
+        "verified": "<:RobloxVerified:1416951927513677874>",
+        "premium": "<:RobloxPremium:1416951078200541378>",
+        "admin": "<:RobloxAdmin:1416951128876122152>",
+        "inviter": "<:RobloxInviter:1416952415772479559>",
+        "homestead": "<:Roblox100Visits:1416952056324952184>",
+        "ambassador": "<:Ambassador:1430627877337960548>",
+        "friendship": "<:Friendship:1430641140679577630>",
+        "warrior": "<:Warrior:1430640757403943063>",
+        "game": "<:RobloxInGame:1430640335393915041>",
+        "studio": "<:RobloxInStudio:1430627885261262869>",
+        "online": "<:RobloxOnline:1430627882912190608>",
+        "offline": "<:RobloxOffline:1430627883809902632>"
     }
 }
-
-
 
 # OpenAI client
 chatgpt = OpenAI(api_key=os.getenv("OpenAI_KEY"))

@@ -860,7 +860,7 @@ async def google(interaction: discord.Interaction, message: discord.Message = "s
     await interaction.response.defer(thinking=True)
     query = message.content
     thinkingembed = discord.Embed(
-        title=f"{Emojis["Loading"] interaction.user.mention} Searching Google For {query}!",
+        title = f"{Emojis.get('loading')} {interaction.user.mention} Searching Google For {query}!"
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)

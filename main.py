@@ -856,11 +856,11 @@ async def discord2spook(interaction: discord.Interaction, user: discord.Member):
 @bot.tree.context_menu(name="google")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def google(interaction: discord.Interaction, message: discord.Message = "shapes.lol"):
+async def google(interaction: discord.Interaction, message: discord.Message):
     await interaction.response.defer(thinking=True)
     query = message.content
     thinkingembed = discord.Embed(
-        title = f"{Emojis.get('loading')} {interaction.user.mention} Searching Google For {query}!"
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching Google For {query}!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)

@@ -1447,7 +1447,8 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     thinkingembed = discord.Embed(
     title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}'s Roblox profile!",
     color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-)
+   )
+    await interaction.followup.send(embed=thinkingembed)
 
     url = "https://users.roblox.com/v1/usernames/users"
     
@@ -1455,6 +1456,34 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
         "usernames": [user],
         "excludeBannedUsers": False
     }
+
+    async def check_ownership(session: aiohttp.ClientSession, user_id: str, asset_id: str) -> bool:
+        url = f"https://inventory.roblox.com/v1/users/{user_id}/items/0/{asset_id}/is-owned"
+        try:
+            async with session.get(url, headers={
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+                'accept': 'application/json',
+            }) as response:
+                data = await response.json()
+                return data is True
+        except Exception:
+            return False
+
+    async def check_verification_items(session: aiohttp.ClientSession, user_id: str) -> bool:
+        items = {
+            'hats': ['18824203', '93078560', '102611803'],
+            'sign': '1567446'
+        }
+        
+        has_sign = await check_ownership(session, user_id, items['sign'])
+        if has_sign:
+            return True
+        
+        for hat_id in items['hats']:
+            if await check_ownership(session, user_id, hat_id):
+                return True
+        
+        return False
 
     try:
         response = requests.post(url, json=request_payload)
@@ -1470,10 +1499,34 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             value_value = 0
             rolimons_last_online = None
             badge_last_online = None
+            is_premium = False
+            is_verified = False
             
             try:
                 connector = aiohttp.TCPConnector(family=socket.AF_INET)
                 async with aiohttp.ClientSession(connector=connector) as session:
+                    premium_check_url = f"https://premiumfeatures.roblox.com/v1/users/{UserID}/validate-membership"
+                    
+                    async def make_premium_request(session, url, **kwargs):
+                        try:
+                            with open('roblosecuritytoken.txt', 'r') as f:
+                                roblosecurity_token = f.read().strip()
+                            
+                            cookies = kwargs.get('cookies', {})
+                            cookies['.ROBLOSECURITY'] = roblosecurity_token
+                            kwargs['cookies'] = cookies
+                            
+                            async with session.get(url, **kwargs) as response:
+                                if response.status == 200:
+                                    response_text = await response.text()
+                                    return response_text.strip().lower() == 'true'
+                                return False
+                        except Exception:
+                            return False
+                    
+                    is_premium = await make_premium_request(session, premium_check_url)
+                    is_verified = await check_verification_items(session, UserID)
+                    
                     rolimons_stats_url = f"https://api.rolimons.com/players/v1/playerinfo/{UserID}"
                     async with session.get(rolimons_stats_url, headers={'User-Agent': 'shapes.lol'}) as response:
                         if response.status == 200:
@@ -1538,6 +1591,9 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             
             if hasVerifiedBadge:
                 Username += " <:RobloxVerified:1416951927513677874>"
+
+            if is_premium:
+                Username += " <:RobloxPremium:1416951078200541378>"
 
             avatar_url = f"https://thumbnails.roblox.com/v1/users/avatar?userIds={UserID}&size=420x420&format=Png&isCircular=false"
             is_terminated = False
@@ -1611,9 +1667,11 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
             
+            embed.add_field(name="ID", value=f"{UserID}", inline=False)
             embed.add_field(name="RAP", value=f"[`{rap_value:,}`]({rolimonsurl})", inline=True)
             embed.add_field(name="Value", value=f"[`{value_value:,}`]({rolimonsurl})", inline=True)
             embed.add_field(name="Last Online", value=formatted_last_online, inline=True)
+            embed.add_field(name="Verified", value="Hat" if is_verified else "False", inline=True)
             
             if Discord != "":
                 embed.add_field(
@@ -1621,10 +1679,6 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     value=f"```txt\n{Discord}\n```",
                     inline=False
                 )
-            
-            embed.add_field(name="Username", value=user, inline=False)
-            embed.add_field(name="ID", value=UserID, inline=False)
-            embed.add_field(name="Terminated", value="True" if is_terminated else "False", inline=False)
             
             if created_timestamp:
                 embed.add_field(name="Join Date", value=created_timestamp, inline=False)
@@ -1669,8 +1723,8 @@ async def british_check(interaction: discord.Interaction, user_input: str):
     embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     
     thinkingembed = discord.Embed(
-        title=f"{Emojis['Loading']} {interaction.user.mention} Checking if {user_input} is British!",
-        color=embed_color
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Checking if {user_input} is British!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
 
@@ -1749,9 +1803,10 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
     
     print(f"Searching For {item_query}'s item info")
     thinkingembed = discord.Embed(
-    title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {item_query}'s Item Information!",
-    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-)
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {item_query}'s Item Information!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
 
     if not item_query.isdigit():
         search_url = f"https://catalog.roblox.com/v1/search/items?category=All&limit=10&keyword={urllib.parse.quote(item_query)}"
@@ -2003,10 +2058,11 @@ async def placeinfo(interaction: discord.Interaction, game_input: str):
     await interaction.response.defer(thinking=True)
     
     thinkingembed = discord.Embed(
-    title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For Place Information!",
-    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-)
-
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For Place Information!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
     try:
         connector = aiohttp.TCPConnector(family=socket.AF_INET)
         async with aiohttp.ClientSession(connector=connector) as session:

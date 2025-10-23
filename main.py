@@ -1746,14 +1746,14 @@ async def british_check(interaction: discord.Interaction, user_input: str):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def item(interaction: discord.Interaction, item_query: str = "Dominus Empyreus"):
+    await interaction.response.defer(thinking=True)
     
     print(f"Searching For {item_query}'s item info")
-    await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-    title=f"{Emojis['Loading']} {interaction.user.mention} Searching For {item_query}'s Item Information!",
-    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-)
-await interaction.followup.send(embed=thinkingembed)
+        title=f"{Emojis['Loading']} {interaction.user.mention} Searching For {item_query}'s Item Information!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
 
     if not item_query.isdigit():
         search_url = f"https://catalog.roblox.com/v1/search/items?category=All&limit=10&keyword={urllib.parse.quote(item_query)}"
@@ -1892,7 +1892,7 @@ await interaction.followup.send(embed=thinkingembed)
         )
         await interaction.edit_original_response(embed=failedembed)
         return
-
+        
 @bot.tree.command(name="groupinfo", description="Get information about a Roblox group")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)

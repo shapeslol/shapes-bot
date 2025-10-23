@@ -1355,11 +1355,13 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
+    await interaction.response.defer()
+    
     thinkingembed = discord.Embed(
-    title=f"{Emojis['Loading']} {interaction.user.mention} Searching Google For {query}",
-    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-)
-await interaction.followup.send(embed=thinkingembed)
+        title=f"{Emojis['Loading']} {interaction.user.mention} Searching Google For {query}",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
     
     # replace spaces with + in query for google search link
     properquery = query.replace(" ", "+")

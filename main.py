@@ -1445,10 +1445,9 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     
     print(f"Searching For {user}'s profile")
     thinkingembed = discord.Embed(
-        title=f"{Emojis['Loading']} {interaction.user.mention} Searching For {user}'s Roblox profile!",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    await interaction.followup.send(embed=thinkingembed)
+    title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}'s Roblox profile!",
+    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+)
 
     url = "https://users.roblox.com/v1/usernames/users"
     
@@ -1750,10 +1749,9 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
     
     print(f"Searching For {item_query}'s item info")
     thinkingembed = discord.Embed(
-        title=f"{Emojis['Loading']} {interaction.user.mention} Searching For {item_query}'s Item Information!",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    await interaction.followup.send(embed=thinkingembed)
+    title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {item_query}'s Item Information!",
+    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+)
 
     if not item_query.isdigit():
         search_url = f"https://catalog.roblox.com/v1/search/items?category=All&limit=10&keyword={urllib.parse.quote(item_query)}"
@@ -1892,19 +1890,19 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
         )
         await interaction.edit_original_response(embed=failedembed)
         return
-        
+
 @bot.tree.command(name="groupinfo", description="Get information about a Roblox group")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def groupinfo(interaction: discord.Interaction, group_id: str):
+    await interaction.response.defer(thinking=True)
     
     print(f"Searching For group ID {group_id}")
-    await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-    title=f"{Emojis['Loading']} {interaction.user.mention} Searching For Group ID {group_id}!",
-    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-)
-await interaction.followup.send(embed=thinkingembed)
+        title=f"{Emojis['Loading']} {interaction.user.mention} Searching For Group ID {group_id}!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
 
     url = f"https://groups.roblox.com/v1/groups/{group_id}"
     
@@ -2005,10 +2003,9 @@ async def placeinfo(interaction: discord.Interaction, game_input: str):
     await interaction.response.defer(thinking=True)
     
     thinkingembed = discord.Embed(
-    title=f"{Emojis['Loading']} {interaction.user.mention} Searching For Place Information!",
+    title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For Place Information!",
     color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
 )
-await interaction.followup.send(embed=thinkingembed)
 
     try:
         connector = aiohttp.TCPConnector(family=socket.AF_INET)
@@ -2025,7 +2022,6 @@ await interaction.followup.send(embed=thinkingembed)
                         description="Could not extract place ID from the URL",
                         color=discord.Color.red()
                     )
-                    #errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     await interaction.edit_original_response(embed=errorembed)
                     return
             else:
@@ -2035,7 +2031,6 @@ await interaction.followup.send(embed=thinkingembed)
                         description="Please provide a valid place ID or Roblox game URL",
                         color=discord.Color.red()
                     )
-                    #errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     await interaction.edit_original_response(embed=errorembed)
                     return
                 place_id = game_input
@@ -2048,7 +2043,6 @@ await interaction.followup.send(embed=thinkingembed)
                         description=f"Failed to fetch universe information (Status: {response.status})",
                         color=discord.Color.red()
                     )
-                    #errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     await interaction.edit_original_response(embed=errorembed)
                     return
                 
@@ -2061,7 +2055,6 @@ await interaction.followup.send(embed=thinkingembed)
                         description="Could not find universe for this place ID",
                         color=discord.Color.red()
                     )
-                    #errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     await interaction.edit_original_response(embed=errorembed)
                     return
             
@@ -2154,7 +2147,7 @@ await interaction.followup.send(embed=thinkingembed)
             view.add_item(discord.ui.Button(
                 label="View Game",
                 style=discord.ButtonStyle.link,
-                emoji=Emojis["Roblox"]["logo"],
+                emoji="<:RobloxLogo:1416951004607418398>",
                 url=f"https://www.roblox.com/games/{place_id}/"
             ))
             
@@ -2164,12 +2157,13 @@ await interaction.followup.send(embed=thinkingembed)
     except Exception as e:
         print(f"Error in placeinfo command: {e}")
         errorembed = discord.Embed(
-            title=":x: Unexpected Error :x:",
-            description=f"An error occurred while fetching place information: {str(e)}",
+            title=":x: An error occurred :x:",
+            description="Failed to fetch place information. Please try again later.",
             color=discord.Color.red()
         )
-        #errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=errorembed)
+        return
 
 async def send_error_embed(interaction: discord.Interaction, title: str, description: str):
     embed = discord.Embed(
@@ -2276,12 +2270,12 @@ async def create_badge_embed(badge_data: dict, thumbnail_url: Optional[str], bad
 async def badge_info(interaction: discord.Interaction, badge_id: str):
     await interaction.response.defer(thinking=True)
     start_time = asyncio.get_event_loop().time()
-    
+
     thinkingembed = discord.Embed(
-    title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For Badge ID {badge_id}!",
+    title=f"{Emojis['Loading']} {interaction.user.mention} Searching For Place Information!",
     color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-)
-await interaction.followup.send(embed=thinkingembed)
+    )
+    await interaction.followup.send(embed=thinkingembed)
     
     if not badge_id.isdigit():
         await send_error_embed(
@@ -2330,7 +2324,7 @@ await interaction.followup.send(embed=thinkingembed)
             
         except Exception as e:
             await send_error_embed(interaction, "Unexpected Error", f"An error occurred: {str(e)}")
-
+            
 @bot.tree.command(name="autorole", description="Set a role to be automatically given to members")
 @app_commands.default_permissions(administrator=True)
 @commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
@@ -2728,10 +2722,10 @@ async def recent_badges(interaction: discord.Interaction, user_input: str):
     await interaction.response.defer()
     
     thinkingembed = discord.Embed(
-    title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user_input}'s Recent Badges!",
-    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-)
-await interaction.followup.send(embed=thinkingembed)
+        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user_input}'s Recent Badges!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
     
     start_time = asyncio.get_event_loop().time()
     

@@ -1441,14 +1441,14 @@ async def invite(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
+    await interaction.response.defer(thinking=True)
     
     print(f"Searching For {user}'s profile")
-    await interaction.response.defer(thinking=True)
     thinkingembed = discord.Embed(
-    title=f"{Emojis['Loading']} {interaction.user.mention} Searching For {user}'s Roblox profile!",
-    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-)
-await interaction.followup.send(embed=thinkingembed)
+        title=f"{Emojis['Loading']} {interaction.user.mention} Searching For {user}'s Roblox profile!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
 
     url = "https://users.roblox.com/v1/usernames/users"
     
@@ -1597,7 +1597,7 @@ await interaction.followup.send(embed=thinkingembed)
                     style=discord.ButtonStyle.link,
                     emoji="<:RobloxLogo:1416951004607418398>",
                     url=profileurl
-            ))
+                ))
             view.add_item(discord.ui.Button(
                 label="View Rolimons",
                 style=discord.ButtonStyle.link,

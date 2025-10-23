@@ -736,13 +736,15 @@ def get_bot_info():
 def countinglb():
     if bot.is_ready():
         lb = {}
+        unknownlb = {"currentnumber": "Failed To Load Data","highestnumber": "Failed To Load Data", "serverName": "Unknown"}
         for server in countingDB.all():
             data = countingDB.get(f"{server}")
-            lb[f"{server}"] = {"currentnumber": data['number'],"highestnumber": data['highestnumber'], "serverName": bot.get_guild(int(server)).name if bot.get_guild(int(server)) else "Unknown"}
+            if data["enabled"] == True:
+                lb[f"{server}"] = {"currentnumber": data['number'],"highestnumber": data['highestnumber'], "serverName": bot.get_guild(int(server)).name if bot.get_guild(int(server)) else "Unknown"}
         FullLB = sorted(lb.items(), key=lambda x: x[1]['highestnumber'], reverse=True)
         return {"Leaderboard":FullLB}, 200
     else:
-        return {"Unknown"}, 503
+        return jsonify(unknownlb), 503
 
 async def restartbot():
     print("Bot Restarting.")

@@ -1195,13 +1195,14 @@ async def ping(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox"):
-
+    await interaction.response.defer()
+    
     print(f"Searching For {user}")
     thinkingembed = discord.Embed(
-    title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}!",
-    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-)
-await interaction.followup.send(embed=thinkingembed)
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
 
     url = "https://users.roblox.com/v1/usernames/users"
     # print(f"Fetching Data From {url}")
@@ -1268,14 +1269,14 @@ await interaction.followup.send(embed=thinkingembed)
             #await interaction.edit_original_response(f"{user} does not have Discord linked to their profile!")
             return    
     except requests.exceptions.RequestException as e:
-                print(f"Error fetching RoPro data for ID {UserID}: {e}")
-                failedembed2 = discord.Embed(
-                    title=f"Error retrieving Discord User from {user}",
-                    color=discord.Color.red()
-                )
-                await interaction.edit_original_response(embed=failedembed2)
-                # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
-                return
+        print(f"Error fetching RoPro data for ID {UserID}: {e}")
+        failedembed2 = discord.Embed(
+            title=f"Error retrieving Discord User from {user}",
+            color=discord.Color.red()
+        )
+        await interaction.edit_original_response(embed=failedembed2)
+        # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
+        return
 
 @bot.tree.command(name="ai", description="Chat with an AI assistant.")
 @app_commands.allowed_installs(guilds=True, users=True)

@@ -1445,9 +1445,9 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     
     print(f"Searching For {user}'s profile")
     thinkingembed = discord.Embed(
-    title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}'s Roblox profile!",
-    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-   )
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}'s Roblox profile!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
     await interaction.followup.send(embed=thinkingembed)
 
     url = "https://users.roblox.com/v1/usernames/users"
@@ -1485,6 +1485,114 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
         
         return False
 
+    async def get_user_games_visits(session: aiohttp.ClientSession, user_id: str) -> int:
+        """Get total visits for all user's games"""
+        try:
+            user_games_url = f"https://games.roblox.com/v2/users/{user_id}/games?accessFilter=2&limit=50"
+            async with session.get(user_games_url) as response:
+                if response.status == 200:
+                    games_data = await response.json()
+                    total_visits = 0
+                    
+                    if games_data.get('data'):
+                        games_list = games_data.get('data', [])
+                        universe_ids = [game.get('id') for game in games_list if game.get('id') is not None]
+                        
+                        if universe_ids:
+                            visit_tasks = []
+                            chunk_size = 50
+                            for i in range(0, len(universe_ids), chunk_size):
+                                chunk = universe_ids[i:i + chunk_size]
+                                universe_ids_str = ",".join(map(str, chunk))
+                                games_info_url = f"https://games.roblox.com/v1/games?universeIds={universe_ids_str}"
+                                visit_tasks.append(session.get(games_info_url))
+                            
+                            visit_responses = await asyncio.gather(*visit_tasks)
+                            for response in visit_responses:
+                                if response.status == 200:
+                                    result = await response.json()
+                                    for game in result.get('data', []):
+                                        total_visits += game.get('visits', 0) or 0
+                    
+                    return total_visits
+        except Exception as e:
+            print(f"Error fetching user games visits: {e}")
+        return 0
+
+    async def check_inventory_visibility(session: aiohttp.ClientSession, user_id: str) -> str:
+        """Check if user's inventory is public"""
+        try:
+            inventory_url = f"https://inventory.roblox.com/v1/users/{user_id}/can-view-inventory"
+            async with session.get(inventory_url) as response:
+                if response.status == 200:
+                    inventory_data = await response.json()
+                    return "Public" if inventory_data.get('canView', False) else "Private"
+        except Exception as e:
+            print(f"Error checking inventory visibility: {e}")
+        return "Private"
+
+    async def get_friends_count(session: aiohttp.ClientSession, user_id: str) -> int:
+        """Get user's friends count"""
+        try:
+            friends_url = f"https://friends.roblox.com/v1/users/{user_id}/friends/count"
+            async with session.get(friends_url) as response:
+                if response.status == 200:
+                    friends_data = await response.json()
+                    return friends_data.get('count', 0)
+        except Exception as e:
+            print(f"Error fetching friends count: {e}")
+        return 0
+
+    async def get_followers_count(session: aiohttp.ClientSession, user_id: str) -> int:
+        """Get user's followers count"""
+        try:
+            followers_url = f"https://friends.roblox.com/v1/users/{user_id}/followers/count"
+            async with session.get(followers_url) as response:
+                if response.status == 200:
+                    followers_data = await response.json()
+                    return followers_data.get('count', 0)
+        except Exception as e:
+            print(f"Error fetching followers count: {e}")
+        return 0
+
+    async def get_followings_count(session: aiohttp.ClientSession, user_id: str) -> int:
+        """Get user's followings count"""
+        try:
+            followings_url = f"https://friends.roblox.com/v1/users/{user_id}/followings/count"
+            async with session.get(followings_url) as response:
+                if response.status == 200:
+                    followings_data = await response.json()
+                    return followings_data.get('count', 0)
+        except Exception as e:
+            print(f"Error fetching followings count: {e}")
+        return 0
+
+    async def check_presence(session: aiohttp.ClientSession, user_id: str) -> int:
+        """Check user's presence status and return userPresenceType"""
+        try:
+            # Read ROBLOSECURITY token from file
+            try:
+                with open('roblosecuritytoken.txt', 'r') as f:
+                    roblosecurity_token = f.read().strip()
+            except FileNotFoundError:
+                print("ROBLOSECURITY token file not found")
+                return 0
+            
+            presence_url = 'https://presence.roblox.com/v1/presence/users'
+            headers = {
+                "Content-Type": "application/json",
+                "Cookie": f".ROBLOSECURITY={roblosecurity_token}"
+            }
+            
+            async with session.post(presence_url, headers=headers, json={'userIds': [user_id]}) as response:
+                if response.status == 200:
+                    presence_data = await response.json()
+                    if presence_data.get('userPresences') and len(presence_data['userPresences']) > 0:
+                        return presence_data['userPresences'][0].get('userPresenceType', 0)
+        except Exception as e:
+            print(f"Error checking presence: {e}")
+        return 0
+
     try:
         response = requests.post(url, json=request_payload)
         response.raise_for_status()
@@ -1501,6 +1609,13 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             badge_last_online = None
             is_premium = False
             is_verified = False
+            roblox_badges = []
+            total_visits = 0
+            inventory_visibility = "Private"
+            friends_count = 0
+            followers_count = 0
+            followings_count = 0
+            presence_type = 0
             
             try:
                 connector = aiohttp.TCPConnector(family=socket.AF_INET)
@@ -1524,8 +1639,33 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                         except Exception:
                             return False
                     
-                    is_premium = await make_premium_request(session, premium_check_url)
-                    is_verified = await check_verification_items(session, UserID)
+                    tasks = [
+                        make_premium_request(session, premium_check_url),
+                        check_verification_items(session, UserID),
+                        get_user_games_visits(session, UserID),
+                        check_inventory_visibility(session, UserID),
+                        get_friends_count(session, UserID),
+                        get_followers_count(session, UserID),
+                        get_followings_count(session, UserID),
+                        check_presence(session, UserID)
+                    ]
+                    
+                    results = await asyncio.gather(*tasks)
+                    is_premium = results[0]
+                    is_verified = results[1]
+                    total_visits = results[2]
+                    inventory_visibility = results[3]
+                    friends_count = results[4]
+                    followers_count = results[5]
+                    followings_count = results[6]
+                    presence_type = results[7]
+                    
+                    # Fetch Roblox badges
+                    badges_url = f"https://accountinformation.roblox.com/v1/users/{UserID}/roblox-badges"
+                    async with session.get(badges_url) as response:
+                        if response.status == 200:
+                            badges_data = await response.json()
+                            roblox_badges = badges_data
                     
                     rolimons_stats_url = f"https://api.rolimons.com/players/v1/playerinfo/{UserID}"
                     async with session.get(rolimons_stats_url, headers={'User-Agent': 'shapes.lol'}) as response:
@@ -1645,6 +1785,43 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 except (ValueError, AttributeError):
                     formatted_last_online = "Unknown"
 
+            badges = {
+                "Combat Initiation": "<:CombatInitiation:1430627878898368632>",
+                "Administrator": "<:RobloxAdmin:1416951128876122152>",
+                "Bloxxer": "<:Bloxxer:1430627881301704736>",
+                "Warrior": "<:Warrior:1430640757403943063>",
+                "Official Model Maker": "<:RobloxModelMaker:1416952360852263013>",
+                "Bricksmith": "<:Roblox1000Visits:1416952101229170698>",
+                "Homestead": "<:Roblox100Visits:1416952056324952184>",
+                "Inviter": "<:RobloxInviter:1416952415772479559>",
+                "Ambassador": "<:Ambassador:1430627877337960548>",
+                "Friendship": "<:Friendship:1430641140679577630>",
+                "Veteran": "<:RobloxVeteran:1416952185094406264>",
+                "Welcome To The Club": "<:WelcomeToTheClub:1430627875337273525>"
+            }
+
+            badges_display = "None"
+            if roblox_badges and len(roblox_badges) > 0:
+                badge_emojis = []
+                for badge in roblox_badges:
+                    badge_name = badge.get("name", "")
+                    if badge_name in badges:
+                        badge_emojis.append(badges[badge_name])
+                
+                if badge_emojis:
+                    badges_display = " ".join(badge_emojis)
+                else:
+                    badges_display = "None"
+
+            presence_status_map = {
+                0: {'icon_url': 'https://files.catbox.moe/tjiecu.png', 'text': 'Offline'},
+                1: {'icon_url': 'https://files.catbox.moe/h69xeq.png', 'text': 'Online'},
+                2: {'icon_url': 'https://files.catbox.moe/80ta5t.png', 'text': 'In Game'},
+                3: {'icon_url': 'https://files.catbox.moe/72opoa.png', 'text': 'In Studio'}
+            }
+
+            current_status = presence_status_map.get(presence_type, presence_status_map[0])
+
             view = discord.ui.View()
             if not is_terminated:
                 view.add_item(discord.ui.Button(
@@ -1660,18 +1837,28 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 url=rolimonsurl
             ))
 
+            friends_followers_text = f"-# **{friends_count:,}** Friends | **{followers_count:,}** Followers | **{followings_count:,}** Followings"
+            
+            full_description = f"{friends_followers_text}\n\n{Description}"
+
             embed = discord.Embed(
                 title=Username,
                 url=profileurl,
-                description=Description,
+                description=full_description,
                 color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
             
-            embed.add_field(name="ID", value=f"{UserID}", inline=False)
+            embed.add_field(name="ID", value=f"{UserID}", inline=True)
+            embed.add_field(name="Verified", value="Hat" if is_verified else "False", inline=True)
+            embed.add_field(name="Inventory", value=inventory_visibility, inline=True)
+            
             embed.add_field(name="RAP", value=f"[`{rap_value:,}`]({rolimonsurl})", inline=True)
             embed.add_field(name="Value", value=f"[`{value_value:,}`]({rolimonsurl})", inline=True)
+            embed.add_field(name="Visits", value=f"{total_visits:,}", inline=True)
+            
+            embed.add_field(name="Created", value=created_timestamp if created_timestamp else "Unknown", inline=True)
             embed.add_field(name="Last Online", value=formatted_last_online, inline=True)
-            embed.add_field(name="Verified", value="Hat" if is_verified else "False", inline=True)
+            embed.add_field(name="Badges", value=badges_display, inline=True)
             
             if Discord != "":
                 embed.add_field(
@@ -1679,24 +1866,17 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     value=f"```txt\n{Discord}\n```",
                     inline=False
                 )
-            
-            if created_timestamp:
-                embed.add_field(name="Join Date", value=created_timestamp, inline=False)
-            else:
-                embed.add_field(name="Join Date", value="Unknown", inline=False)
 
             if avatar_image:
                 embed.set_thumbnail(url=avatar_image)
-                embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-                await interaction.edit_original_response(embed=embed, view=view)
-                return
-            else:
-                failedembed5 = discord.Embed(
-                    title=f"Failed To Retrieve {user}'s avatar!",
-                    color=discord.Color.red()
-                )
-                await interaction.edit_original_response(embed=failedembed5)
-                return
+            
+            embed.set_footer(
+                text=f"{current_status['text']} | Requested by {interaction.user.name} | https://shapes.lol",
+                icon_url=current_status['icon_url']
+            )
+            
+            await interaction.edit_original_response(embed=embed, view=view)
+            return
         else:
             print(f"{user} not found.")
             failedembed7 = discord.Embed(

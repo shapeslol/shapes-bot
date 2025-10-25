@@ -591,7 +591,7 @@ async def on_message(message):
                 i += 2
         
         if str(InputNumber) == str(next_number) and message.author.id != LastCounter:
-            await message.add_reaction('👍')
+            
             LastCounter = message.author.id
             number = next_number
             if number > HighestNumber:
@@ -601,6 +601,7 @@ async def on_message(message):
             counting_data["lastcounter"] = LastCounter
             countingDB.set(server.id, counting_data)
             countingDB.save()
+            await message.add_reaction('👍')
         else:
             if InputNumber == None:
                 return
@@ -736,7 +737,6 @@ def get_bot_info():
 def countinglb():
     if bot.is_ready():
         lb = {}
-        unknownlb = {"currentnumber": "Failed To Load Data","highestnumber": "Failed To Load Data", "serverName": "Unknown"}
         for server in countingDB.all():
             data = countingDB.get(f"{server}")
             if data["enabled"] == True:
@@ -744,7 +744,19 @@ def countinglb():
         FullLB = sorted(lb.items(), key=lambda x: x[1]['highestnumber'], reverse=True)
         return {"Leaderboard":FullLB}, 200
     else:
-        return jsonify(unknownlb), 503
+        return jsonify("Bot is still starting"), 503
+
+def mutualservers():
+    if bot.is_ready():
+        servers = {}
+        for s in bot.guilds:
+            servers[s.id] = {"name": s.name, "membercount": s.member_count, "iconurl": str(s.icon.url) if s.icon else None, "owner": str(s.owner), "ownerid": s.owner.id, "members": [], "bots": [], "totalmembers": s.member_count, "verificationlevel": str(s.verification_level), "createdat": str(s.created_at), "joinedat": str(s.me.joined_at), "roles": len(s.roles), "channels": len(s.channels), "emojis": len(s.emojis), "features": s.features, "region": str(s.region), "boostlevel": str(s.premium_tier), "boostcount": s.premium_subscription_count, "afkchannel": str(s.afk_channel), "afktimeout": s.afk_timeout, "systemchannel": str(s.system_channel), "ruleschannel": str(s.rules_channel), "publicupdateschannel": str(s.public_updates_channel), "preferredlocale": str(s.preferred_locale), "vanityurlcode": str(s.vanity_url_code), "bannerurl": str(s.banner.url) if s.banner else None}
+            for m in s.members:
+                if m.bot:
+                    servers[s.id]["bots"].append({"name": str(m), "id": m.id})
+                else:
+                    servers[s.id]["members"].append({"name": str(m), "id": m.id})
+        return {"Servers":servers}, 200
 
 async def restartbot():
     print("Bot Restarting.")
@@ -838,7 +850,7 @@ async def sayhitouser(interaction: discord.Interaction, member: discord.Member):
 @bot.tree.context_menu(name="discord2spook")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
+async def discord2spook(interaction: discord.Interaction, user: discord.User): # = <@481295611417853982>):
     url = f"https://api.prp.bio/discord/{user.name}"
     print(url)
     print(user.id)
@@ -916,9 +928,10 @@ async def google(interaction: discord.Interaction, message: discord.Message):
                 title=":x: Not enough results found! :x:",
                 description=f"Please search on google yourself as there wasn't enough results to generate an embed | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
                 color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+                noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                await interaction.edit_original_response(embed=notenoughresultsembed)
+                return
             )
-            noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=notenoughresultsembed)
             noresultembed = discord.Embed(
                 title=":x: No results found! :x:",
                 description=f"No Results for {query} | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
@@ -945,7 +958,7 @@ async def userinstalls(interaction: discord.Interaction):
 @bot.tree.command(name="servercount", description="Get The Server Count For Shapes!")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def userinstalls(interaction: discord.Interaction):
+async def servercount(interaction: discord.Interaction):
     await interaction.response.send_message(f"{len(bot.guilds)} Servers Use Shapes!")
 
 @bot.tree.command(name="getdata", description="Get The Data From One Of Our Databases")
@@ -962,6 +975,9 @@ async def getdata(interaction: discord.Interaction, database: str, key: str):
         data = str(edata)
     if database == "Users":
         edata = usersDB.get(f"{key}")
+        data = str(edata)
+    if database == "autorole":
+        edata = autoroleDB.get(f"{key}")
         data = str(edata)
     if data:
         await interaction.response.send_message(data, ephemeral=True)
@@ -1051,7 +1067,7 @@ async def settings(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(f"[shapes.lol Status Page](https://spookbio.statuspage.io)")
+    await interaction.response.send_message(f"[shapes.lol Status Page](https://shapes.lol/status)")
 
 @bot.tree.command(name="stop", description="Stop the bot.")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -1060,6 +1076,7 @@ async def stop(interaction: discord.Interaction):
     if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip" or interaction.user.name == "38013":
         await interaction.response.send_message(":white_check_mark: Shutdown Successfully!", ephemeral=False)
         await bot.close()
+        request.environ.get('werkzeug.server.shutdown')
         sys.exit("Bot Stopped.")
     else:
         await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
@@ -1153,7 +1170,7 @@ async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
 @bot.tree.command(name="discord2spook", description="Get a spook.bio profile from a discord user.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discord2spook(interaction: discord.Interaction, user: discord.Member): # = <@481295611417853982>):
+async def discord2spook(interaction: discord.Interaction, user: discord.User): # = <@481295611417853982>):
     url = f"https://api.prp.bio/discord/{user.name}"
     print(user.id)
     print(url)
@@ -1182,7 +1199,7 @@ async def ping(interaction: discord.Interaction):
     )
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.response.send_message(embed=embed)
-    await asyncio.sleep(10)
+    await asyncio.sleep(2)
     updatedlatency = bot.latency * 1000
     updatedconnection = "Good" if updatedlatency < 200 else "Average" if updatedlatency < 400 else "Poor"
     embed = discord.Embed(
@@ -1201,7 +1218,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
     
     print(f"Searching For {user}")
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}!",
+        title=f"{Emojis.get('loading') interaction.user.mention} Searching For {user}!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1287,7 +1304,7 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
     await interaction.response.defer(thinking=True)
 
     loading = discord.Embed(
-    title=f"<a:loading:1416950730094542881> {interaction.user.mention} Getting AI Response For: {prompt}",
+    title=f"{Emojis.get('loading') interaction.user.mention} Getting AI Response For: {prompt}",
     color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
 )
 
@@ -1311,7 +1328,7 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
             "role": "system",
             "content": (
                 f"You are a helpful Discord assistant chatting with {username}. "
-                "Always respond in a single concise paragraph. "
+                "Always respond in a single concise paragraph. Otherwise your response will not be recieved due to the embed text limit"
                 "Follow Discord TOS. Do not provide instructions for illegal activity. "
                 "Stay safe, respectful, and friendly."
             )
@@ -1328,7 +1345,7 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
 
     try:
         response = chatgpt.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=messages_for_ai
         )
         ai_reply = response.choices[0].message.content.strip()
@@ -1347,7 +1364,7 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
     )
     embed.add_field(name="🧍 You said:", value=prompt[:1024], inline=False)
     embed.add_field(name="🤖 AI replied:", value=ai_reply[:1024], inline=False)
-    embed.set_footer(text=f"{MainURL} | Requested by {username}")
+    embed.set_footer(text=f"Requested by {username} | {MainURL}")
 
     await interaction.edit_original_response(embed=embed)
 
@@ -1358,7 +1375,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     await interaction.response.defer()
     
     thinkingembed = discord.Embed(
-        title=f"{Emojis['Loading']} {interaction.user.mention} Searching Google For {query}",
+        title=f"{Emojis.get('loading') interaction.user.mention} Searching Google For {query}",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1445,7 +1462,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     
     print(f"Searching For {user}'s profile")
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}'s Roblox profile!",
+        title=f"{Emojis.get('loading') interaction.user.mention} Searching For {user}'s Roblox profile!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1932,7 +1949,7 @@ async def british_check(interaction: discord.Interaction, user_input: str):
     embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Checking if {user_input} is British!",
+        title=f"{Emojis.get('loading') interaction.user.mention} Checking if {user_input} is British!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -2012,7 +2029,7 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
     
     print(f"Searching For {item_query}'s item info")
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {item_query}'s Item Information!",
+        title=f"{Emojis.get('loading') interaction.user.mention} Searching For {item_query}'s Item Information!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -2163,7 +2180,7 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
     
     print(f"Searching For group ID {group_id}")
     thinkingembed = discord.Embed(
-        title=f"{Emojis['Loading']} {interaction.user.mention} Searching For Group ID {group_id}!",
+        title=f"{Emojis.get('loading') interaction.user.mention} Searching For Group ID {group_id}!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -2226,7 +2243,7 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
 
         embed = discord.Embed(
             title=group_display,
-            url=f"https://www.roblox.com/communities/{group_id}",
+            url=f"https://roblox.com/communities/{group_id}",
             description=description,
             color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
         )
@@ -2243,7 +2260,7 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
         view.add_item(discord.ui.Button(
             label="View Group",
             style=discord.ButtonStyle.link,
-            emoji=Emojis["Roblox"]["logo"],
+            emoji=Emojis.get('Roblox').get('logo'),
             url=f"https://www.roblox.com/communities/{group_id}"
         ))
 
@@ -2267,7 +2284,7 @@ async def placeinfo(interaction: discord.Interaction, game_input: str):
     await interaction.response.defer(thinking=True)
     
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For Place Information!",
+        title=f"{Emojis.get('loading') interaction.user.mention} Searching For Place Information!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -2537,7 +2554,7 @@ async def badge_info(interaction: discord.Interaction, badge_id: str):
     start_time = asyncio.get_event_loop().time()
 
     thinkingembed = discord.Embed(
-    title=f"{Emojis['Loading']} {interaction.user.mention} Searching For Place Information!",
+    title=f"{Emojis.get('loading') interaction.user.mention} Searching For Place Information!",
     color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -3080,7 +3097,7 @@ async def outfits(interaction: discord.Interaction, user: str = "Roblox"):
     
     print(f"Searching For {user}'s outfits")
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}'s Roblox outfits!",
+        title=f"{Emojis.get('loading') interaction.user.mention} Searching For {user}'s Roblox outfits!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -3324,7 +3341,7 @@ async def badges(interaction: discord.Interaction, username: str, badge_id: str 
     await interaction.response.defer(thinking=True)
     
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Checking {username}'s badges!",
+        title=f"{Emojis.get('loading') interaction.user.mention} Checking {username}'s badges!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)

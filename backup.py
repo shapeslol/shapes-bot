@@ -751,12 +751,12 @@ def mutualservers():
     if bot.is_ready():
         servers = {}
         for s in bot.guilds:
-            servers[s.id] = {"name": s.name, "membercount": s.member_count, "iconurl": str(s.icon.url) if s.icon else None, "owner": str(s.owner), "ownerid": s.owner.id, "members": [], "bots": [], "totalmembers": s.member_count, "verificationlevel": str(s.verification_level), "createdat": str(s.created_at), "joinedat": str(s.me.joined_at), "roles": len(s.roles), "channels": len(s.channels), "emojis": len(s.emojis), "features": s.features, "region": str(s.region), "boostlevel": str(s.premium_tier), "boostcount": s.premium_subscription_count, "afkchannel": str(s.afk_channel), "afktimeout": s.afk_timeout, "systemchannel": str(s.system_channel), "ruleschannel": str(s.rules_channel), "publicupdateschannel": str(s.public_updates_channel), "preferredlocale": str(s.preferred_locale), "vanityurlcode": str(s.vanity_url_code), "bannerurl": str(s.banner.url) if s.banner else None}
+            servers[s.id] = {"name": s.name, "membercount": s.member_count, "iconurl": str(s.icon.url) if s.icon else None, "owner": str(s.owner), "ownerid": s.owner.id, "members": [], "bots": [], "verificationlevel": str(s.verification_level), "createdat": str(s.created_at), "joinedat": str(s.me.joined_at), "roles": len(s.roles), "channels": len(s.channels),"bannerurl": str(s.banner.url) if s.banner else None}
             for m in s.members:
                 if m.bot:
-                    servers[s.id]["bots"].append({"name": str(m), "id": m.id})
+                    servers[s.id]["bots"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else None})
                 else:
-                    servers[s.id]["members"].append({"name": str(m), "id": m.id})
+                    servers[s.id]["members"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else None})
         return {"Servers":servers}, 200
 
 async def restartbot():
@@ -929,10 +929,11 @@ async def google(interaction: discord.Interaction, message: discord.Message):
                 title=":x: Not enough results found! :x:",
                 description=f"Please search on google yourself as there wasn't enough results to generate an embed | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
                 color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+                )
                 noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+
                 await interaction.edit_original_response(embed=notenoughresultsembed)
                 return
-            )
             noresultembed = discord.Embed(
                 title=":x: No results found! :x:",
                 description=f"No Results for {query} | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
@@ -1219,7 +1220,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
     
     print(f"Searching For {user}")
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading') interaction.user.mention} Searching For {user}!",
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1305,7 +1306,7 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
     await interaction.response.defer(thinking=True)
 
     loading = discord.Embed(
-    title=f"{Emojis.get('loading') interaction.user.mention} Getting AI Response For: {prompt}",
+    title=f"{Emojis.get('loading')} {interaction.user.mention} Getting AI Response For: {prompt}",
     color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
 )
 
@@ -1376,7 +1377,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     await interaction.response.defer()
     
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading') interaction.user.mention} Searching Google For {query}",
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching Google For {query}",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1463,7 +1464,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
     
     print(f"Searching For {user}'s profile")
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading') interaction.user.mention} Searching For {user}'s Roblox profile!",
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}'s Roblox profile!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -1950,7 +1951,7 @@ async def british_check(interaction: discord.Interaction, user_input: str):
     embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading') interaction.user.mention} Checking if {user_input} is British!",
+        title=f"{Emojis.get('loading')}  {interaction.user.mention} Checking if {user_input} is British!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -2030,7 +2031,7 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
     
     print(f"Searching For {item_query}'s item info")
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading') interaction.user.mention} Searching For {item_query}'s Item Information!",
+        title=f"{Emojis.get('loading')}  {interaction.user.mention} Searching For {item_query}'s Item Information!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -2181,7 +2182,7 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
     
     print(f"Searching For group ID {group_id}")
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading') interaction.user.mention} Searching For Group ID {group_id}!",
+        title=f"{Emojis.get('loading')}  {interaction.user.mention} Searching For Group ID {group_id}!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -2285,7 +2286,7 @@ async def placeinfo(interaction: discord.Interaction, game_input: str):
     await interaction.response.defer(thinking=True)
     
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading') interaction.user.mention} Searching For Place Information!",
+        title=f"{Emojis.get('loading')}  {interaction.user.mention} Searching For Place!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -2555,7 +2556,7 @@ async def badge_info(interaction: discord.Interaction, badge_id: str):
     start_time = asyncio.get_event_loop().time()
 
     thinkingembed = discord.Embed(
-    title=f"{Emojis.get('loading') interaction.user.mention} Searching For Place Information!",
+    title=f"{Emojis.get('loading')}  {interaction.user.mention} Searching For Place!",
     color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -3098,7 +3099,7 @@ async def outfits(interaction: discord.Interaction, user: str = "Roblox"):
     
     print(f"Searching For {user}'s outfits")
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading') interaction.user.mention} Searching For {user}'s Roblox outfits!",
+        title=f"{Emojis.get('loading')}  {interaction.user.mention} Searching For {user}'s Roblox outfits!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
@@ -3342,7 +3343,7 @@ async def badges(interaction: discord.Interaction, username: str, badge_id: str 
     await interaction.response.defer(thinking=True)
     
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading') interaction.user.mention} Checking {username}'s badges!",
+        title=f"{Emojis.get('loading')}  {interaction.user.mention} Checking {username}'s badges!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)

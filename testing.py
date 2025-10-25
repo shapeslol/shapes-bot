@@ -3739,6 +3739,332 @@ async def badges(interaction: discord.Interaction, username: str, badge_id: str 
         )
         errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=errorembed)
+
+@bot.tree.command(name="discorduser", description="Get information about a user")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def discorduser(interaction: discord.Interaction, user: discord.User = None):
+    await interaction.response.defer()
+    
+    if user is None:
+        user = interaction.user
+    
+    target_member = None
+    guild = interaction.guild
+    
+    if guild:
+        target_member = guild.get_member(user.id)
+    
+    created_at = isotodiscordtimestamp(user.created_at.isoformat(), "D")
+    
+    BADGE_FLAGS = {
+        4194304: "<:activedeveloper:1431764482312372385>",
+        512: "<:earlysupporter:1431764483000504351>",
+        64: "<:hypesquadp:1431764484179099788>",
+        128: "<:hypesquadr:1431764485374214267>",
+        256: "<:hypesquadg:1431764486636830780>",
+    }
+    
+    badges = []
+    public_flags = user.public_flags.value if user.public_flags else 0
+    
+    for flag, emoji in BADGE_FLAGS.items():
+        if public_flags & flag:
+            badges.append(emoji)
+    
+    has_nitro = False
+    if user.avatar:
+        if user.avatar.is_animated():
+            has_nitro = True
+            badges.append("<:Nitro:1431740129726300191>")
+    
+    try:
+        user_data = await bot.fetch_user(user.id)
+        if user_data.banner:
+            has_nitro = True
+            if "<:Nitro:1431740129726300191>" not in badges:
+                badges.append("<:Nitro:1431740129726300191>")
+    except:
+        pass
+    
+    badges_display = " ".join(badges) if badges else "None"
+    
+    embed = discord.Embed(
+        title=f"{user.name}",
+        url=f"https://discord.com/users/{user.id}",
+        color=discord.Color.blue(),
+        timestamp=interaction.created_at
+    )
+    
+    if user.avatar:
+        embed.set_thumbnail(url=user.avatar.url)
+    
+    user_info = f"""
+    > **Username:** `{user.name}`
+    > **ID:** `{user.id}`
+    > **Created:** {created_at}
+    > **Bot:** `{user.bot}`
+    > **Nitro:** `{has_nitro}`
+    > **Badges:** {badges_display}
+    """
+    
+    embed.add_field(
+        name="User Information",
+        value=user_info,
+        inline=False
+    )
+    
+    if guild and target_member:
+        if target_member.joined_at:
+            joined_at = isotodiscordtimestamp(target_member.joined_at.isoformat(), "D")
+        else:
+            joined_at = "Unknown"
+        
+        roles = [role.mention for role in target_member.roles[1:][:10]]
+        roles_display = ", ".join(roles) if roles else "None"
+        if len(target_member.roles) > 11:
+            roles_display += f" (+{len(target_member.roles) - 11} more)"
+        
+        server_info = f"""
+        > **Joined:** {joined_at}
+        > **Nickname:** `{target_member.nick or 'None'}`
+        > **Top Role:** {target_member.top_role.mention}
+        """
+        
+        embed.add_field(
+            name="Server Info",
+            value=server_info,
+            inline=False
+        )
+        
+        embed.add_field(
+            name=f"Roles ({len(target_member.roles)})",
+            value=f"> {roles_display}",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"Requested by {interaction.user.display_name} | {MainURL}")
+
+    class MutualServersView(discord.ui.View):
+        def __init__(self, user_id, username, requester_id, main_embed):
+            super().__init__(timeout=60)
+            self.user_id = user_id
+            self.username = username
+            self.requester_id = requester_id
+            self.main_embed = main_embed
+
+        async def interaction_check(self, interaction: discord.Interaction) -> bool:
+            return interaction.user.id == self.requester_id
+
+        @discord.ui.button(label="View Mutual Servers", style=discord.ButtonStyle.blurple)
+        async def mutuals_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+            await interaction.response.defer()
+            
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.get("https://bot.shapes.lol/mutuals") as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            
+                            if not data or "Servers" not in data:
+                                class NoServersView(discord.ui.View):
+                                    def __init__(self, main_embed, requester_id, user_id, username):
+                                        super().__init__(timeout=120)
+                                        self.main_embed = main_embed
+                                        self.requester_id = requester_id
+                                        self.user_id = user_id
+                                        self.username = username
+
+                                    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                                        return interaction.user.id == self.requester_id
+
+                                    @discord.ui.button(label="Back to User Info", style=discord.ButtonStyle.gray)
+                                    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                                        view = MutualServersView(self.user_id, self.username, self.requester_id, self.main_embed)
+                                        await interaction.response.edit_message(content="", embed=self.main_embed, view=view)
+                                
+                                no_servers_view = NoServersView(self.main_embed, self.requester_id, self.user_id, self.username)
+                                await interaction.edit_original_response(content="No mutual servers data available.", embed=None, view=no_servers_view)
+                                return
+
+                            user_servers = []
+                            for server_id, server_data in data["Servers"].items():
+                                members = server_data.get("members", [])
+                                for member in members:
+                                    if str(member.get("id")) == str(self.user_id):
+                                        user_servers.append({
+                                            "server_id": server_id,
+                                            "server_name": server_data.get("name", "Unknown Server"),
+                                            "member_count": server_data.get("membercount", 0),
+                                            "channel_count": server_data.get("channels", 0),
+                                            "icon_url": server_data.get("iconurl"),
+                                            "created_at": server_data.get("createdat"),
+                                            "roles": server_data.get("roles", 0),
+                                            "verification_level": server_data.get("verificationlevel", "Unknown"),
+                                            "owner": server_data.get("owner", "Unknown"),
+                                            "owner_id": server_data.get("ownerid", "Unknown")
+                                        })
+                                        break
+
+                            if not user_servers:
+                                class NoMutualServersView(discord.ui.View):
+                                    def __init__(self, main_embed, requester_id, user_id, username):
+                                        super().__init__(timeout=120)
+                                        self.main_embed = main_embed
+                                        self.requester_id = requester_id
+                                        self.user_id = user_id
+                                        self.username = username
+
+                                    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                                        return interaction.user.id == self.requester_id
+
+                                    @discord.ui.button(label="Back to User Info", style=discord.ButtonStyle.gray)
+                                    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                                        view = MutualServersView(self.user_id, self.username, self.requester_id, self.main_embed)
+                                        await interaction.response.edit_message(content="", embed=self.main_embed, view=view)
+                                
+                                no_mutual_view = NoMutualServersView(self.main_embed, self.requester_id, self.user_id, self.username)
+                                await interaction.edit_original_response(content="No mutual servers found for this user.", embed=None, view=no_mutual_view)
+                                return
+
+                            pages = []
+                            for server in user_servers:
+                                server_embed = discord.Embed(
+                                    title=f"Mutual Server: {server['server_name']}",
+                                    color=discord.Color.green(),
+                                    timestamp=discord.utils.utcnow()
+                                )
+                                
+                                if server['icon_url']:
+                                    server_embed.set_thumbnail(url=server['icon_url'])
+                                
+                                if server['created_at']:
+                                    created_at_display = isotodiscordtimestamp(server['created_at'], "D")
+                                else:
+                                    created_at_display = "Unknown"
+                                
+                                server_info = f"""
+                                > **Name:** {server['server_name']}
+                                > **ID:** `{server['server_id']}`
+                                > **Created:** {created_at_display}
+                                > **Owner:** {server['owner']} (`{server['owner_id']}`)
+                                > **Verification:** {server['verification_level'].title()}
+                                """
+                                
+                                server_stats = f"""
+                                > **Members:** {server['member_count']}
+                                > **Channels:** {server['channel_count']}
+                                > **Roles:** {server['roles']}
+                                """
+                                
+                                server_embed.add_field(
+                                    name="Server Information",
+                                    value=server_info,
+                                    inline=False
+                                )
+                                
+                                server_embed.add_field(
+                                    name="Server Stats",
+                                    value=server_stats,
+                                    inline=False
+                                )
+                                
+                                server_embed.set_footer(text=f"Page {len(pages) + 1}/{len(user_servers)} | {MainURL}")
+                                pages.append(server_embed)
+
+                            if len(pages) == 1:
+                                class SingleServerView(discord.ui.View):
+                                    def __init__(self, main_embed, requester_id, user_id, username):
+                                        super().__init__(timeout=120)
+                                        self.main_embed = main_embed
+                                        self.requester_id = requester_id
+                                        self.user_id = user_id
+                                        self.username = username
+
+                                    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                                        return interaction.user.id == self.requester_id
+
+                                    @discord.ui.button(label="Back to User Info", style=discord.ButtonStyle.gray)
+                                    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                                        view = MutualServersView(self.user_id, self.username, self.requester_id, self.main_embed)
+                                        await interaction.response.edit_message(content="", embed=self.main_embed, view=view)
+                                
+                                single_view = SingleServerView(self.main_embed, self.requester_id, self.user_id, self.username)
+                                await interaction.edit_original_response(content="", embed=pages[0], view=single_view)
+                            else:
+                                class PaginationView(discord.ui.View):
+                                    def __init__(self, pages, main_embed, requester_id, user_id, username):
+                                        super().__init__(timeout=120)
+                                        self.pages = pages
+                                        self.current_page = 0
+                                        self.main_embed = main_embed
+                                        self.requester_id = requester_id
+                                        self.user_id = user_id
+                                        self.username = username
+
+                                    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                                        return interaction.user.id == self.requester_id
+
+                                    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.gray)
+                                    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                                        self.current_page = (self.current_page - 1) % len(self.pages)
+                                        await interaction.response.edit_message(content="", embed=self.pages[self.current_page], view=self)
+                                    
+                                    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.gray)
+                                    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                                        self.current_page = (self.current_page + 1) % len(self.pages)
+                                        await interaction.response.edit_message(content="", embed=self.pages[self.current_page], view=self)
+                                    
+                                    @discord.ui.button(label="Back to User Info", style=discord.ButtonStyle.gray)
+                                    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                                        view = MutualServersView(self.user_id, self.username, self.requester_id, self.main_embed)
+                                        await interaction.response.edit_message(content="", embed=self.main_embed, view=view)
+                                
+                                pagination_view = PaginationView(pages, self.main_embed, self.requester_id, self.user_id, self.username)
+                                await interaction.edit_original_response(content="", embed=pages[0], view=pagination_view)
+                                
+                        else:
+                            class ErrorView(discord.ui.View):
+                                def __init__(self, main_embed, requester_id, user_id, username):
+                                    super().__init__(timeout=120)
+                                    self.main_embed = main_embed
+                                    self.requester_id = requester_id
+                                    self.user_id = user_id
+                                    self.username = username
+
+                                async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                                    return interaction.user.id == self.requester_id
+
+                                @discord.ui.button(label="Back to User Info", style=discord.ButtonStyle.gray)
+                                async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                                    view = MutualServersView(self.user_id, self.username, self.requester_id, self.main_embed)
+                                    await interaction.response.edit_message(content="", embed=self.main_embed, view=view)
+                            
+                            error_view = ErrorView(self.main_embed, self.requester_id, self.user_id, self.username)
+                            await interaction.edit_original_response(content="Failed to fetch mutual servers data.", embed=None, view=error_view)
+            except Exception as e:
+                class ExceptionView(discord.ui.View):
+                    def __init__(self, main_embed, requester_id, user_id, username):
+                        super().__init__(timeout=120)
+                        self.main_embed = main_embed
+                        self.requester_id = requester_id
+                        self.user_id = user_id
+                        self.username = username
+
+                    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                        return interaction.user.id == self.requester_id
+
+                    @discord.ui.button(label="Back to User Info", style=discord.ButtonStyle.gray)
+                    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                        view = MutualServersView(self.user_id, self.username, self.requester_id, self.main_embed)
+                        await interaction.response.edit_message(content="", embed=self.main_embed, view=view)
+                
+                exception_view = ExceptionView(self.main_embed, self.requester_id, self.user_id, self.username)
+                await interaction.edit_original_response(content=f"Error fetching mutual servers: {str(e)}", embed=None, view=exception_view)
+
+    view = MutualServersView(user.id, user.name, interaction.user.id, embed)
+    await interaction.followup.send(content="", embed=embed, view=view)
     
 # === Flask Runner in Thread ===
 def run_flask():

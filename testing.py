@@ -3784,8 +3784,8 @@ async def discorduser(interaction: discord.Interaction, user: discord.User = Non
         user_data = await bot.fetch_user(user.id)
         if user_data.banner:
             has_nitro = True
-            if "<:Nitro:1431740129726300191>" not in badges:
-                badges.append("<:Nitro:1431740129726300191>")
+            if "<:Nitro:1431777332552536155>" not in badges:
+                badges.append("<:Nitro:1431777332552536155>")
     except:
         pass
     
@@ -3899,6 +3899,7 @@ async def discorduser(interaction: discord.Interaction, user: discord.User = Non
                                             "server_id": server_id,
                                             "server_name": server_data.get("name", "Unknown Server"),
                                             "member_count": server_data.get("membercount", 0),
+                                            "bot_count": server_data.get("botcount", 0),
                                             "channel_count": server_data.get("channels", 0),
                                             "icon_url": server_data.get("iconurl"),
                                             "created_at": server_data.get("createdat"),
@@ -3956,6 +3957,7 @@ async def discorduser(interaction: discord.Interaction, user: discord.User = Non
                                 
                                 server_stats = f"""
                                 > **Members:** {server['member_count']}
+                                > **Bots:** {server['bot_count']}
                                 > **Channels:** {server['channel_count']}
                                 > **Roles:** {server['roles']}
                                 """

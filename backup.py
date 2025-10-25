@@ -746,6 +746,7 @@ def countinglb():
     else:
         return jsonify("Bot is still starting"), 503
 
+@app.route('/mutuals', methods=["GET"])
 def mutualservers():
     if bot.is_ready():
         servers = {}

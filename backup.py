@@ -751,12 +751,14 @@ def mutualservers():
     if bot.is_ready():
         servers = {}
         for s in bot.guilds:
-            servers[s.id] = {"name": s.name, "membercount": s.member_count, "iconurl": str(s.icon.url) if s.icon else None, "owner": str(s.owner), "ownerid": s.owner.id, "members": [], "bots": [], "verificationlevel": str(s.verification_level), "createdat": str(s.created_at), "joinedat": str(s.me.joined_at), "roles": len(s.roles), "channels": len(s.channels),"bannerurl": str(s.banner.url) if s.banner else None}
+            servers[s.id] = {"name": s.name, "botcount": 0, "membercount": 0, "iconurl": str(s.icon.url) if s.icon else None, "owner": str(s.owner), "ownerid": s.owner.id, "members": [], "bots": [], "verificationlevel": str(s.verification_level), "createdat": str(s.created_at), "joinedat": str(s.me.joined_at), "roles": len(s.roles), "channels": len(s.channels),"bannerurl": str(s.banner.url) if s.banner else None}
             for m in s.members:
                 if m.bot:
                     servers[s.id]["bots"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else None})
+                    servers[s.id]["botcount"] += 1
                 else:
                     servers[s.id]["members"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else None})
+                    servers[s.id]["membercount"] += 1
         return {"Servers":servers}, 200
 
 async def restartbot():

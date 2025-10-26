@@ -51,6 +51,7 @@ Emojis = {
 
 # OpenAI client
 chatgpt = OpenAI(api_key=os.getenv("OpenAI_KEY"))
+AIModel = "gpt-oss-20b"
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
@@ -1349,7 +1350,7 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
 
     try:
         response = chatgpt.chat.completions.create(
-            model="gpt-4o",
+            model=AIModel,
             messages=messages_for_ai
         )
         ai_reply = response.choices[0].message.content.strip()

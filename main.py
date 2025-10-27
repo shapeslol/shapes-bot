@@ -51,7 +51,7 @@ Emojis = {
 
 # OpenAI client
 chatgpt = OpenAI(api_key=os.getenv("OpenAI_KEY"))
-AIModel = "gpt-oss-20b"
+AIModel = "gpt-4o"
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
@@ -93,6 +93,15 @@ try:
         GoogleAPIKey = f.read()
 except FileNotFoundError:
     print("Error: The file 'GoogleToken.txt' was not found.")
+except Exception as e:
+    print(f"An error occurred: {e}")
+
+# get the API url from APIBaseURL.txt
+try:
+    with open('APIBaseURL.txt', 'r') as f:
+        APIBaseURL = f.read()
+except FileNotFoundError:
+    print("Error: The file 'APIBaseURL.txt' was not found.")
 except Exception as e:
     print(f"An error occurred: {e}")
 
@@ -1218,7 +1227,7 @@ async def ping(interaction: discord.Interaction):
 @bot.tree.command(name="roblox2discord", description="Get a roblox user's Discord from their username.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox"):
+async def roblox2discord(interaction: discord.Interaction, user: str = "LCJUNIOR1220"):
     await interaction.response.defer()
     
     print(f"Searching For {user}")
@@ -1265,33 +1274,36 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
         await interaction.edit_original_response(embed=failedembed8)
         return
 
-    url = f"https://api.ropro.io/getUserInfoTest.php?userid={UserID}"
+    url = APIDataURL
 
     try:
         response = requests.get(url)
         response.raise_for_status()
-        RoProData = response.json()
-        print(RoProData)
-        Discord = RoProData["discord"]    
-        if Discord != "":
-            embed = discord.Embed(
-                title=f"{user}'s Discord Username",
-                description=f"```{Discord}```",
-                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-            )
-            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=embed)
-            #await interaction.edit_original_response(f"{user}'s Discord (RoPro): ```{Discord}```")
-            return
-        else:
-            embed = discord.Embed(
-                title=f":x: {user} does not have Discord linked to their profile! :x:",
-                color=discord.Color.red()
-            )
-            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=embed)
-            #await interaction.edit_original_response(f"{user} does not have Discord linked to their profile!")
-            return    
+        APIData = response.json()
+        print(APIData)
+        Discord = "Unknown"
+        for d in APIData:
+            if str(d.get("roblox_id", "Unknown")) == str(UserID):
+                DiscordID = d.get("discord_id", "Unknown")
+                if DiscordID != "Unknown":
+                    Discord = f"https://discord.com/users/{DiscordID}"
+                    print(f"Found Discord User: {Discord} for {user}")
+                    successembed2 = discord.Embed(
+                        title=f"Discord User for Roblox User {Display} ({user})",
+                        description=f"[Click Here To View Discord Profile For {user}]({Discord})",
+                        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+                    )
+                    successembed2.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=successembed2)
+                    return
+        # If no matching Discord user found
+        print(f"No Discord User found for {user}")
+        failedembed2 = discord.Embed(
+            title=f"No Discord User found for Roblox User {Display} ({user})",
+            color=discord.Color.red()
+        )
+        await interaction.edit_original_response(embed=failedembed2)
+        return
     except requests.exceptions.RequestException as e:
         print(f"Error fetching RoPro data for ID {UserID}: {e}")
         failedembed2 = discord.Embed(
@@ -1300,6 +1312,50 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "Roblox")
         )
         await interaction.edit_original_response(embed=failedembed2)
         # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
+        return
+
+@bot.tree.command(name="discord2roblox", description="Get a roblox profile from their Discord UserID.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def discord2roblox(interaction: discord.Interaction, userid: str = "481295611417853982"):
+    await interaction.response.defer(thinking=True)
+
+    loading = discord.Embed(
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Getting Roblox Profile For Discord UserID: {userid}",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+
+    await interaction.followup.send(embed=loading)
+
+    url = APIDataURL
+
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        APIData = response.json()
+        print(APIData)
+        Roblox = "Unknown"
+        for d in APIData:
+            if str(d.get("discord_id", "Unknown")) == str(userid):
+                RobloxID = d.get("roblox_id", "Unknown")
+                if RobloxID != "Unknown":
+                    Roblox = f"https://roblox.com/users/{RobloxID}/profile"
+                    print(f"Found Roblox User: {Roblox} for Discord UserID {userid}")
+                    successembed3 = discord.Embed(
+                        title=f"Roblox Profile for Discord UserID {userid}",
+                        description=f"[Click Here To View Roblox Profile For {userid}]({Roblox})",
+                        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+                    )
+                    successembed3.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    await interaction.edit_original_response(embed=successembed3)
+                    return
+        # If no matching Roblox user found
+        print(f"No Roblox User found for {userid}")
+        failedembed3 = discord.Embed(
+            title=f"No Roblox User found for {userid}",
+            color=discord.Color.red()
+        )
+        await interaction.edit_original_response(embed=failedembed3)
         return
 
 @bot.tree.command(name="ai", description="Chat with an AI assistant.")

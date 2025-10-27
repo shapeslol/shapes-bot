@@ -1184,7 +1184,7 @@ async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
 @bot.tree.command(name="discord2spook", description="Get a spook.bio profile from a discord user.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discord2spook(interaction: discord.Interaction, user: discord.User): # = <@481295611417853982>):
+async def discord2spook(interaction: discord.Interaction, user: discord.User = 481295611417853982):
     url = f"https://api.prp.bio/discord/{user.name}"
     print(user.id)
     print(url)
@@ -1317,7 +1317,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "LCJUNIOR
 @bot.tree.command(name="discord2roblox", description="Get a roblox profile from their Discord UserID.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discord2roblox(interaction: discord.Interaction, userid: str = "481295611417853982"):
+async def discord2roblox(interaction: discord.Interaction, user: discord.User = 481295611417853982):
     await interaction.response.defer(thinking=True)
 
     loading = discord.Embed(
@@ -1328,6 +1328,7 @@ async def discord2roblox(interaction: discord.Interaction, userid: str = "481295
     await interaction.followup.send(embed=loading)
 
     url = APIDataURL
+    userid = user.id
 
     try:
         response = requests.get(url)
@@ -1340,19 +1341,27 @@ async def discord2roblox(interaction: discord.Interaction, userid: str = "481295
                 RobloxID = d.get("roblox_id", "Unknown")
                 if RobloxID != "Unknown":
                     Roblox = f"https://roblox.com/users/{RobloxID}/profile"
-                    print(f"Found Roblox User: {Roblox} for Discord UserID {userid}")
+                    print(f"Found Roblox User: {Roblox} for {user.name}")
                     successembed3 = discord.Embed(
-                        title=f"Roblox Profile for Discord UserID {userid}",
-                        description=f"[Click Here To View Roblox Profile For {userid}]({Roblox})",
+                        title=f"Roblox Profile for {user.name}",
+                        description=f"[Click Here To View Roblox Profile For {user.name}]({Roblox})",
                         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
                     )
                     successembed3.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
                     await interaction.edit_original_response(embed=successembed3)
                     return
         # If no matching Roblox user found
-        print(f"No Roblox User found for {userid}")
+        print(f"No Roblox User found for {user.name}")
         failedembed3 = discord.Embed(
-            title=f"No Roblox User found for {userid}",
+            title=f"No Roblox User found for {user.name}",
+            color=discord.Color.red()
+        )
+        await interaction.edit_original_response(embed=failedembed3)
+        return
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching RoPro data for {user.name}: {e}")
+        failedembed3 = discord.Embed(
+            title=f"Error retrieving Roblox Profile for {user.name}",
             color=discord.Color.red()
         )
         await interaction.edit_original_response(embed=failedembed3)

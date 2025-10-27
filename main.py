@@ -1193,7 +1193,7 @@ async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
 @bot.tree.command(name="discord2spook", description="Get a spook.bio profile from a discord user.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discord2spook(interaction: discord.Interaction, user: discord.User = 481295611417853982):
+async def discord2spook(interaction: discord.Interaction, user: discord.User): # = 481295611417853982):
     url = f"https://api.prp.bio/discord/{user.name}"
     print(user.id)
     print(url)
@@ -1326,18 +1326,18 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "LCJUNIOR
 @bot.tree.command(name="discord2roblox", description="Get a roblox profile from their Discord UserID.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discord2roblox(interaction: discord.Interaction, user: discord.User = 481295611417853982):
+async def discord2roblox(interaction: discord.Interaction, user: discord.User): # = 481295611417853982):
+    userid = user.id
     await interaction.response.defer(thinking=True)
 
     loading = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Getting Roblox Profile For Discord UserID: {userid}",
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Getting Roblox Profile For {user.name}",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
 
     await interaction.followup.send(embed=loading)
 
     url = APIDataURL
-    userid = user.id
 
     try:
         response = requests.get(url)
@@ -4155,3 +4155,4 @@ def run_flask():
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
     bot.run(token)
+    

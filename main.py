@@ -105,6 +105,15 @@ except FileNotFoundError:
 except Exception as e:
     print(f"An error occurred: {e}")
 
+# get the API data url from APIDataURL.txt
+try:
+    with open('APIDataURL.txt', 'r') as f:
+        APIDataURL = f.read()
+except FileNotFoundError:
+    print("Error: The file 'APIDataURL.txt' was not found.")
+except Exception as e:
+    print(f"An error occurred: {e}")
+
 # === Flask App Setup ===
 app = Flask(__name__)
 CORS(app)

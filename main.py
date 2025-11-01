@@ -777,10 +777,10 @@ def get_server_count():
 def get_user_count():
     if bot.is_ready():
         user_count = BotInfo.approximate_user_install_count
-        jsondata = {"Users":str(user_count)
+        jsondata = {"Users": str(user_count)}
         return jsonify(jsondata), 200
     else:
-        return {"Users":"Unknown"}, 503
+        return {"Users": "Unknown"}, 503
 
 @app.route('/clb', methods=["GET"])
 def countinglb():
@@ -4937,4 +4937,5 @@ def run_flask():
 # === Run Bot + Flask Webserver ===
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
+
     bot.run(token)

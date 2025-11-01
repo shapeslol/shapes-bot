@@ -775,10 +775,13 @@ def get_server_count():
         
 @app.route('/count/users', methods=["GET"])
 def get_user_count():
-    if bot.is_ready():
-        user_count = BotInfo.approximate_user_install_count
-        jsondata = {"Users": str(user_count)}
-        return jsonify(jsondata), 200
+    if bot.is_ready() and hasattr(bot, 'application_info'):
+        try:
+            user_count = BotInfo.approximate_user_install_count
+            jsondata = {"Users": str(user_count)}
+            return jsonify(jsondata), 200
+        except:
+            return {"Users": "Unknown"}, 503
     else:
         return {"Users": "Unknown"}, 503
         
@@ -4939,4 +4942,5 @@ if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
 
     bot.run(token)
+
 

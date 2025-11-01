@@ -768,10 +768,10 @@ def get_bot_info():
 def get_server_count():
     if bot.is_ready():
         server_count = len(bot.guilds)
-        jsondata = {"Servers":str(server_count)}
+        jsondata = {"Servers": str(server_count)}
         return jsonify(jsondata), 200
     else:
-        return {"Servers":"Unknown"}, 503
+        return {"Servers": "Unknown"}, 503
         
 @app.route('/count/users', methods=["GET"])
 def get_user_count():
@@ -781,7 +781,7 @@ def get_user_count():
         return jsonify(jsondata), 200
     else:
         return {"Users": "Unknown"}, 503
-
+        
 @app.route('/clb', methods=["GET"])
 def countinglb():
     if bot.is_ready():
@@ -4939,3 +4939,4 @@ if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
 
     bot.run(token)
+

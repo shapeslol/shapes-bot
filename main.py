@@ -777,7 +777,7 @@ def get_server_count():
 def get_user_count():
     if bot.is_ready():
         user_count = BotInfo.approximate_user_install_count
-        jsondata = {"Users":str(user_count)
+        jsondata = {"Users":str(user_count)}
         return jsonify(jsondata), 200
     else:
         return {"Users":"Unknown"}, 503

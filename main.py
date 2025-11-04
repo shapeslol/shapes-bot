@@ -2145,6 +2145,31 @@ async def british_check(interaction: discord.Interaction, user_input: str):
         embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=embed)
 
+@bot.tree.command(name="kittyinfo", description="Get information about a KittyBlox user")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def kittyinfo(interaction: discord.Interaction, user: str = "leandre"):
+    await interaction.response.defer(thinking=True)
+    
+    thinkingembed = discord.Embed(
+        title=f"{Emojis.get('loading')}  {interaction.user.mention} Searching For {user}'s KittyBlox Profile!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
+    kittyAPIURL = f"https://kittys.lol/public-api/v1/users/username/{user}"
+    
+    try:
+	    response = requests.get(kittyAPIURL)
+	    response.raise_for_status()
+	    data = response.json()
+	    
+	    if data.get("data") and len(data["data"]) > 0:
+		    datatable = data.get("data")
+		    UserID = datatable.get("id")
+		    Joindate = datatable.get("createdAt")
+	    
+
 @bot.tree.command(name="iteminfo", description="Get detailed information about a Roblox item")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)

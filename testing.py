@@ -1888,11 +1888,11 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             if is_premium:
                 Username += " <:RobloxPremium:1416951078200541378>"
 
-            avatar_url = f"https://thumbnails.roblox.com/v1/users/avatar?userIds={UserID}&size=420x420&format=Png&isCircular=false"
             is_terminated = False
             avatar_image = None
             
             try:
+                avatar_url = f"https://thumbnails.roblox.com/v1/users/avatar?userIds={UserID}&size=420x420&format=Png&isCircular=false"
                 response = requests.get(avatar_url)
                 response.raise_for_status()
                 data = response.json()
@@ -1900,6 +1900,12 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     avatar_image = data["data"][0].get("imageUrl")
                     if avatar_image and avatar_image.startswith("https://t7.rbxcdn.com"):
                         is_terminated = True
+                        
+                        connector = aiohttp.TCPConnector(family=socket.AF_INET)
+                        async with aiohttp.ClientSession(connector=connector) as session:
+                            custom_avatar = await render_custom_avatar(session, UserID)
+                            if custom_avatar:
+                                avatar_image = custom_avatar
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching avatar: {e}")
 
@@ -2010,17 +2016,26 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
             
-            embed.add_field(name="ID", value=f"{UserID}", inline=True)
-            embed.add_field(name="Verified", value="Hat" if is_verified else "False", inline=True)
-            embed.add_field(name="Inventory", value=inventory_visibility, inline=True)
-            
-            embed.add_field(name="RAP", value=f"[`{rap_value:,}`]({rolimonsurl})", inline=True)
-            embed.add_field(name="Value", value=f"[`{value_value:,}`]({rolimonsurl})", inline=True)
-            embed.add_field(name="Visits", value=f"{total_visits:,}", inline=True)
-            
-            embed.add_field(name="Created", value=created_timestamp if created_timestamp else "Unknown", inline=True)
-            embed.add_field(name="Last Online", value=formatted_last_online, inline=True)
-            embed.add_field(name="Badges", value=badges_display, inline=True)
+            if is_terminated:
+                embed.add_field(name="ID", value=f"{UserID}", inline=True)
+                embed.add_field(name="Terminated", value="True", inline=True)
+                embed.add_field(name="Visits", value=f"{total_visits:,}", inline=True)
+                
+                embed.add_field(name="Created", value=created_timestamp if created_timestamp else "Unknown", inline=True)
+                embed.add_field(name="Last Online", value=formatted_last_online, inline=True)
+                embed.add_field(name="Badges", value=badges_display, inline=True)
+            else:
+                embed.add_field(name="ID", value=f"{UserID}", inline=True)
+                embed.add_field(name="Verified", value="Hat" if is_verified else "False", inline=True)
+                embed.add_field(name="Inventory", value=inventory_visibility, inline=True)
+                
+                embed.add_field(name="RAP", value=f"[`{rap_value:,}`]({rolimonsurl})", inline=True)
+                embed.add_field(name="Value", value=f"[`{value_value:,}`]({rolimonsurl})", inline=True)
+                embed.add_field(name="Visits", value=f"{total_visits:,}", inline=True)
+                
+                embed.add_field(name="Created", value=created_timestamp if created_timestamp else "Unknown", inline=True)
+                embed.add_field(name="Last Online", value=formatted_last_online, inline=True)
+                embed.add_field(name="Badges", value=badges_display, inline=True)
             
             if current_place_id and presence_type == 2:
                 game_url = f"https://www.roblox.com/games/{current_place_id}"
@@ -2299,23 +2314,22 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
 @bot.tree.command(name="groupinfo", description="Get information about a Roblox group")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def groupinfo(interaction: discord.Interaction, group_id: str):
+async def groupinfo(interaction: discord.Interaction, groupid: str):
     await interaction.response.defer(thinking=True)
     
-    print(f"Searching For group ID {group_id}")
+    print(f"Searching For group ID {groupid}")
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')}  {interaction.user.mention} Searching For Group ID {group_id}!",
+        title=f"{Emojis.get('loading')}  {interaction.user.mention} Searching For Group ID {groupid}!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
 
-    url = f"https://groups.roblox.com/v1/groups/{group_id}"
+    url = f"https://groups.roblox.com/v1/groups/{groupid}"
     
     try:
         response = requests.get(url)
         response.raise_for_status()
         group_data = response.json()
-        print(f"GroupData: {group_data}")
 
         name = group_data.get("name", "Unknown Group")
         description = group_data.get("description", "No description available")
@@ -2326,7 +2340,7 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
         owner_id = owner_data.get("userId")
         owner_name = owner_data.get("username", "Unknown")
 
-        if group_id == "5544706":
+        if groupid == "5544706":
             group_verified = True
         
         owner_verified = False
@@ -2342,6 +2356,40 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching owner data: {e}")
 
+        create_time = "Unknown"
+        update_time = "Unknown"
+        
+        try:
+            roseal_url = f"https://apis.roblox.com/cloud/v2/groups/{groupid}?_rosealRequest="
+            
+            try:
+                with open('roblosecuritytoken.txt', 'r') as f:
+                    roblosecurity_token = f.read().strip()
+            except FileNotFoundError:
+                roblosecurity_token = None
+            
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 RoSealExtension (RoSeal/chrome/2.1.24/prod)",
+                "authorization": "Bearer eyJhbGciOiJFUzI1NiIsImtpZCI6IlBOeHhpb2JFNE8zbGhQUUlUZG9QQ3FCTE81amh3aXZFS1pHOWhfTGJNOWMiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiIzMzI2MTk0MSIsImFpZCI6IjcwYTUyNTBmLWU4ZjYtNGYxMi05MTFjLWI3OWNmNzRjZGMwZCIsInNjb3BlIjoib3BlbmlkOnJlYWQgdXNlci5pbnZlbnRvcnktaXRlbTpyZWFkIiwianRpIjoiQVQuRHhoN2RkT2hieDE2Z2hINXpZUGciLCJuYmYiOjE3NjIwOTg5MDksImV4cCI6MTc2MjA5OTgwOSwiaWF0IjoxNzYyMDk4OTA5LCJpc3MiOiJodHRwczovL2FwaXMucm9ibG94LmNvbS9vYXV0aC8iLCJhdWQiOiI1NTUwMTc2OTUwMjA4NDk2MDEwIn0.5YhN0sVCkNc3sa3u7r3KvVZi0JYksoqYlq7faUrS0TLeLwJdMxWOEx-fP1eBZsy3kX96Dl7QjMOWsC8MX4GZBQ"
+            }
+            
+            if roblosecurity_token:
+                headers["Cookie"] = f".ROBLOSECURITY={roblosecurity_token}"
+            
+            roseal_response = requests.get(roseal_url, headers=headers)
+            if roseal_response.status_code == 200:
+                roseal_data = roseal_response.json()
+                create_time_str = roseal_data.get("createTime")
+                update_time_str = roseal_data.get("updateTime")
+                
+                if create_time_str:
+                    create_time = isotodiscordtimestamp(create_time_str, "D") if create_time_str != 'Unknown' else "Unknown"
+                if update_time_str:
+                    update_time = isotodiscordtimestamp(update_time_str, "D") if update_time_str != 'Unknown' else "Unknown"
+                    
+        except Exception as e:
+            print(f"Error fetching RoSeal data: {e}")
+
         group_display = name
         if group_verified:
             group_display += " <:RobloxVerified:1416951927513677874>"
@@ -2352,7 +2400,7 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
 
         entry_status = "Public" if public_entry else "Private"
 
-        thumbnail_url = f"https://thumbnails.roblox.com/v1/groups/icons?groupIds={group_id}&size=150x150&format=Png&isCircular=false"
+        thumbnail_url = f"https://thumbnails.roblox.com/v1/groups/icons?groupIds={groupid}&size=150x150&format=Png&isCircular=false"
         try:
             thumb_response = requests.get(thumbnail_url)
             thumb_response.raise_for_status()
@@ -2367,7 +2415,7 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
 
         embed = discord.Embed(
             title=group_display,
-            url=f"https://roblox.com/communities/{group_id}",
+            url=f"https://roblox.com/communities/{groupid}",
             description=description,
             color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
         )
@@ -2375,26 +2423,28 @@ async def groupinfo(interaction: discord.Interaction, group_id: str):
         if image_url:
             embed.set_thumbnail(url=image_url)
 
-        embed.add_field(name="Group ID", value=group_id, inline=True)
+        embed.add_field(name="Group ID", value=groupid, inline=True)
         embed.add_field(name="Members", value=f"{member_count:,}", inline=True)
         embed.add_field(name="Entry", value=entry_status, inline=True)
         embed.add_field(name="Owner", value=owner_display, inline=True)
+        embed.add_field(name="Created", value=create_time, inline=True)
+        embed.add_field(name="Updated", value=update_time, inline=True)
 
         view = discord.ui.View()
         view.add_item(discord.ui.Button(
             label="View Group",
             style=discord.ButtonStyle.link,
-            emoji=Emojis.get('Roblox').get('logo'),
-            url=f"https://www.roblox.com/communities/{group_id}"
+            emoji="<:RobloxLogo:1416951004607418398>",
+            url=f"https://www.roblox.com/communities/{groupid}"
         ))
 
         embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=embed, view=view)
 
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching group data for ID {group_id}: {e}")
+        print(f"Error fetching group data for ID {groupid}: {e}")
         failedembed = discord.Embed(
-            title=f":x: An error occurred while fetching data for group ID: {group_id}. Please try again later.",
+            title=f":x: An error occurred while fetching data for group ID: {groupid}. Please try again later.",
             color=discord.Color.red()
         )
         await interaction.edit_original_response(embed=failedembed)
@@ -4927,6 +4977,208 @@ async def linkroblox(interaction: discord.Interaction):
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.response.send_message(embed=embed, ephemeral=False)
+    
+roblox_colors = {
+    1: "F2F3F3", 2: "A1A5A2", 3: "F9E999", 5: "D7C59A", 6: "C2DAB8", 9: "E8BAC8",
+    11: "80BBDB", 12: "CB8442", 18: "CC8E69", 21: "C4281C", 22: "C470A0", 23: "0D69AC",
+    24: "F5CD30", 25: "624732", 26: "1B2A35", 27: "6D6E6C", 28: "287F47", 29: "A1C48C",
+    36: "F3CF9B", 37: "4B974B", 38: "A05F35", 39: "C1CADC", 40: "ECECEC", 41: "CD544B",
+    42: "C1DFF0", 43: "7BB6E8", 44: "F7F18D", 45: "B4D2E4", 47: "D9856C", 48: "84B68D",
+    49: "F8F184", 50: "ECE8DE", 100: "EEC4B6", 101: "DA867A", 102: "6E99CA", 103: "C7C1B7",
+    104: "6B327C", 105: "E29B40", 106: "DA8541", 107: "008F9C", 108: "685C43", 110: "435493",
+    111: "BFB7B1", 112: "6874AC", 113: "E5ADCC", 115: "C7D23C", 116: "55A5AF", 118: "B7D7D5",
+    119: "A4BD47", 120: "D9E4A7", 121: "E7AC58", 123: "D36F4C", 124: "923978", 125: "EAB892",
+    126: "A5A5CB", 127: "DCBC81", 128: "AE7A59", 131: "9CA3A8", 133: "D5733D", 134: "D8DD56",
+    135: "74869D", 136: "877C90", 137: "E09864", 138: "958A73", 140: "203A56", 141: "27462D",
+    143: "CFE2F7", 145: "7988A1", 146: "958EA3", 147: "938767", 148: "575857", 149: "161D32",
+    150: "ABADA9", 151: "789082", 153: "957977", 154: "7B2E2F", 157: "FFF67B", 158: "E1A4C2",
+    168: "756C62", 176: "97695B", 178: "B48455", 179: "898788", 180: "D7A94B", 190: "F9D62E",
+    191: "E8AB2D", 192: "694028", 193: "CF6024", 194: "A3A2A5", 195: "4667A4", 196: "23478B",
+    198: "8E4285", 199: "635F62", 200: "828A5D", 208: "E5E4E3", 209: "B08E44", 210: "709578",
+    211: "79B5B5", 212: "9FC3E9", 213: "6C81B7", 216: "904C2A", 217: "7C5C46", 218: "96709F",
+    219: "6B629B", 220: "A7A9CE", 221: "CD6298", 222: "E4ADC8", 223: "DC9095", 224: "F0D5A0",
+    225: "EBB87F", 226: "FDEAA1", 232: "7DBBDD", 268: "342B75", 301: "506D54", 302: "5B5D69",
+    303: "0010B0", 304: "2C651D", 305: "527CAE", 306: "335882", 307: "102ADC", 308: "3D1585",
+    309: "348E40", 310: "5B9A4C", 311: "9FA1AC", 312: "592259", 313: "1F801D", 314: "9FADC0",
+    315: "0989CF", 316: "7B007B", 317: "7C9C6B", 318: "8AAB85", 319: "B9C4B1", 320: "CACBD1",
+    321: "A75E9B", 322: "7B2F7B", 323: "94BE81", 324: "A8BD99", 325: "DFDFDE", 327: "970000",
+    328: "B1E5A6", 329: "98C2DB", 330: "FF98DC", 331: "FF5959", 332: "750000", 333: "EFB838",
+    334: "F8D96D", 335: "E7E7EC", 336: "C7D4E4", 337: "FF9494", 338: "BE6862", 339: "562424",
+    340: "F1E7C7", 341: "FEF3BB", 342: "E0B2D0", 343: "D490BD", 344: "965555", 345: "8F4C2A",
+    346: "D3BE96", 347: "E2DCC6", 348: "EDEDEA", 349: "E9DADA", 350: "883E3E", 351: "BC9B5D",
+    352: "C7AC78", 353: "CAC0A3", 354: "BBB3B2", 355: "6C584B", 356: "A0844F", 357: "958988",
+    358: "ABA89E", 359: "AF9483", 360: "966766", 361: "564236", 362: "7E683F", 363: "69665C",
+    364: "5A4C42", 365: "6A3909", 1001: "F8F8F8", 1002: "CDCDCD", 1003: "111111", 1004: "FF0000",
+    1005: "FFB000", 1006: "B480FF", 1007: "A34B4B", 1008: "C1BE42", 1009: "FFFF00", 1010: "0000FF",
+    1011: "002060", 1012: "2154B9", 1013: "04AFEC", 1014: "AA5500", 1015: "AA00AA", 1016: "FF66CC",
+    1017: "FFAF00", 1018: "12EED4", 1019: "00FFFF", 1020: "00FF00", 1021: "3A7D15", 1022: "7F8E64",
+    1023: "8C5B9F", 1024: "AFDDFF", 1025: "FFC9C9", 1026: "B1A7FF", 1027: "9FF3E9", 1028: "CCFFCC",
+    1029: "FFFFCC", 1030: "FFCC99", 1031: "6225D1", 1032: "FF00BF"
+}
+
+async def get_csrf_token(session):
+    try:
+        with open('roblosecuritytoken.txt', 'r') as f:
+            roblosecurity_token = f.read().strip()
+            
+        async with session.post("https://auth.roblox.com/v2/logout", 
+                              headers={'Cookie': f'.ROBLOSECURITY={roblosecurity_token}'}) as response:
+            token = response.headers.get("x-csrf-token")
+            return token
+    except Exception:
+        return None
+
+async def render_custom_avatar(session, user_id):
+    try:
+        with open('roblosecuritytoken.txt', 'r') as f:
+            roblosecurity_token = f.read().strip()
+        
+        headers = {'Cookie': f'.ROBLOSECURITY={roblosecurity_token}'}
+        
+        async with session.get(f'https://avatar.roblox.com/v1/users/{user_id}/avatar', 
+                             headers=headers) as response:
+            if response.status == 200:
+                v1_avatar_details = await response.json()
+                
+                if v1_avatar_details and 'bodyColors' in v1_avatar_details:
+                    avatar_definition = {
+                        "assets": [{"id": asset["id"]} for asset in v1_avatar_details["assets"]],
+                        "bodyColors": {
+                            "headColor": roblox_colors.get(v1_avatar_details["bodyColors"]["headColorId"], "FFFFFF"),
+                            "torsoColor": roblox_colors.get(v1_avatar_details["bodyColors"]["torsoColorId"], "FFFFFF"),
+                            "leftArmColor": roblox_colors.get(v1_avatar_details["bodyColors"]["leftArmColorId"], "FFFFFF"),
+                            "rightArmColor": roblox_colors.get(v1_avatar_details["bodyColors"]["rightArmColorId"], "FFFFFF"),
+                            "leftLegColor": roblox_colors.get(v1_avatar_details["bodyColors"]["leftLegColorId"], "FFFFFF"),
+                            "rightLegColor": roblox_colors.get(v1_avatar_details["bodyColors"]["rightLegColorId"], "FFFFFF"),
+                        },
+                        "scales": v1_avatar_details["scales"],
+                        "playerAvatarType": {"playerAvatarType": v1_avatar_details["playerAvatarType"]}
+                    }
+                else:
+                    return None
+            else:
+                return None
+
+        render_payload = {
+            "thumbnailConfig": {"thumbnailId": 1, "thumbnailType": "2dWebp", "size": "420x420"},
+            "avatarDefinition": avatar_definition
+        }
+
+        csrf_token = await get_csrf_token(session)
+        if not csrf_token:
+            return None
+
+        request_headers = {
+            'Cookie': f'.ROBLOSECURITY={roblosecurity_token}',
+            'x-csrf-token': csrf_token,
+            'Content-Type': 'application/json'
+        }
+        
+        for i in range(5):
+            async with session.post("https://avatar.roblox.com/v1/avatar/render", 
+                                  json=render_payload, headers=request_headers) as render_response:
+                if render_response.status == 200:
+                    render_data = await render_response.json()
+                    if render_data.get('state') == 'Completed' and render_data.get('imageUrl'):
+                        return render_data['imageUrl']
+            
+            if i < 4:
+                await asyncio.sleep(2)
+        
+        return None
+
+    except Exception:
+        return None
+
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@bot.tree.command(name="avatar", description="Get a Roblox user's avatar")
+@app_commands.describe(user="Roblox username or user ID")
+async def avatar_command(interaction: discord.Interaction, user: str):
+    await interaction.response.defer()
+    
+    async def get_user_id(session, user_input):
+        if user_input.isdigit():
+            return user_input
+        url = "https://users.roblox.com/v1/usernames/users"
+        try:
+            async with session.post(url, json={"usernames": [user_input]}) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data.get("data") and len(data["data"]) > 0:
+                        return str(data["data"][0]["id"])
+        except Exception:
+            pass
+        return None
+
+    async def get_username_from_id(session, user_id):
+        url = f"https://users.roblox.com/v1/users/{user_id}"
+        try:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("name")
+        except Exception:
+            pass
+        return None
+
+    connector = aiohttp.TCPConnector(family=socket.AF_INET)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        user_id = await get_user_id(session, user)
+        
+        if not user_id:
+            await interaction.followup.send("❌ Cannot find user")
+            return
+
+        username = await get_username_from_id(session, user_id)
+        if not username:
+            await interaction.followup.send("❌ Cannot find user")
+            return
+
+        try:
+            user_url = f"https://users.roblox.com/v1/users/{user_id}"
+            async with session.get(user_url) as response:
+                if response.status == 200:
+                    user_data = await response.json()
+                    is_banned = user_data.get("isBanned", False)
+                    
+                    if is_banned:
+                        image_url = await render_custom_avatar(session, user_id)
+                        if image_url:
+                            embed = discord.Embed(
+                                title=f"{username}'s Avatar",
+                                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+                            )
+                            embed.set_image(url=image_url)
+                            embed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
+                            await interaction.followup.send(embed=embed)
+                        else:
+                            await interaction.followup.send("❌ User is terminated")
+                        return
+                    else:
+                        avatar_url = f"https://thumbnails.roblox.com/v1/users/avatar?userIds={user_id}&size=420x420&format=Png&isCircular=false"
+                        async with session.get(avatar_url) as avatar_response:
+                            if avatar_response.status == 200:
+                                avatar_data = await avatar_response.json()
+                                if avatar_data.get('data') and len(avatar_data['data']) > 0:
+                                    image_url = avatar_data['data'][0]['imageUrl']
+                                    embed = discord.Embed(
+                                        title=f"{username}'s Avatar",
+                                        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+                                    )
+                                    embed.set_image(url=image_url)
+                                    embed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
+                                    await interaction.followup.send(embed=embed)
+                                    return
+                        await interaction.followup.send("❌ Failed to fetch avatar")
+                        return
+                else:
+                    await interaction.followup.send("❌ Cannot find user")
+                    return
+                    
+        except Exception:
+            await interaction.followup.send("Failed to fetch user data")
+            return
         
 # === Flask Runner in Thread ===
 def run_flask():

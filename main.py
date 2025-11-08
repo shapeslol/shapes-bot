@@ -5443,7 +5443,8 @@ async def kittyinfo(interaction: discord.Interaction, user: str = "Kittyblox"):
             following_count = datatable.get("following_count", 0)
             friends_count = datatable.get("friends_count", 0)
             is_admin = datatable.get("is_admin", False)
-            
+            is_verified = datatable.get("is_verified", False)
+           
             kitty_profile_url = f"https://kittys.rip/users/{UserID}/profile"
             
             avatar_url = f"https://kittys.rip/Thumbs/Avatar.ashx?x=420&y=420&userId={UserID}"
@@ -5545,7 +5546,7 @@ async def kittyasset(interaction: discord.Interaction, assetid: str):
     )
     await interaction.followup.send(embed=thinkingembed)
     
-    kittyAPIURL = f"https://www.kittys.rip/public-api/v1/asset/{assetid}"
+    kittyAPIURL = f"https://kittys.rip/public-api/v1/asset/{assetid}"
     
     asset_type_map = {
         1: "Image",
@@ -5832,7 +5833,7 @@ async def kittygame(interaction: discord.Interaction, gameid: str):
     await interaction.followup.send(embed=thinkingembed)
     
     gameAPIURL = f"https://kittys.rip/public-api/v1/game-info/{gameid}"
-    assetAPIURL = f"https://www.kittys.rip/public-api/v1/asset/{gameid}"
+    assetAPIURL = f"https://kittys.rip/public-api/v1/asset/{gameid}"
     
     try:
         game_response = requests.get(gameAPIURL)
@@ -5982,10 +5983,10 @@ async def kittyavatar(interaction: discord.Interaction, user: str = "Kittyblox")
     except Exception as e:
         await interaction.followup.send(f"An error occured :{str(e)}")
         
-@bot.tree.command(name="discordkitty", description="find kittyblox user from discord")
+@bot.tree.command(name="discord2kitty", description="Find a Kittyblox user from their discord account")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discordkitty(interaction: discord.Interaction, user: discord.User):
+async def discord2kitty(interaction: discord.Interaction, user: discord.User):
     await interaction.response.defer(thinking=True)
     
     thinkingembed = discord.Embed(
@@ -5995,7 +5996,7 @@ async def discordkitty(interaction: discord.Interaction, user: discord.User):
     await interaction.followup.send(embed=thinkingembed)
     
     discord_id = user.id
-    kittyAPIURL = f"https://www.kittys.rip/public-api/v1/users/discord_id/{discord_id}"
+    kittyAPIURL = f"https://kittys.rip/public-api/v1/users/discord_id/{discord_id}"
     
     try:
         response = requests.get(kittyAPIURL)

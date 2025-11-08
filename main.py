@@ -5179,6 +5179,855 @@ async def avatar_command(interaction: discord.Interaction, user: str):
         except Exception:
             await interaction.followup.send("Failed to fetch user data")
             return
+
+@bot.tree.command(name="kittylims", description="Get limited items from a KittyBlox user's inventory")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def kittylims(interaction: discord.Interaction, user: str = "leandre"):
+    await interaction.response.defer(thinking=True)
+    
+    thinkingembed = discord.Embed(
+        title=f"{interaction.user.mention} Searching For {user}'s Limited Items!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
+    kittyAPIURL = f"https://kittys.rip/public-api/v1/users/username/{user}"
+    
+    try:
+        user_response = requests.get(kittyAPIURL)
+        user_response.raise_for_status()
+        user_data = user_response.json()
+        
+        if not user_data.get("success") or not user_data.get("data"):
+            error_embed = discord.Embed(
+                title="User Not Found",
+                description=f"Could not find a KittyBlox user with the username `{user}`",
+                color=discord.Color.red()
+            )
+            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=error_embed)
+            return
+            
+        user_id = user_data["data"].get("id")
+        username = user_data["data"].get("username")
+        
+        inventory_url = f"https://www.kittys.rip/public-api/v1/inventory/collectibles/{user_id}"
+        inventory_response = requests.get(inventory_url)
+        inventory_response.raise_for_status()
+        inventory_data = inventory_response.json()
+        
+        if not inventory_data.get("success") or not inventory_data.get("data"):
+            error_embed = discord.Embed(
+                title="No Inventory Data",
+                description=f"Could not fetch inventory data for `{username}`",
+                color=discord.Color.orange()
+            )
+            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=error_embed)
+            return
+        
+        limited_items = []
+        for item in inventory_data["data"]:
+            asset = item.get("asset", {})
+            if asset.get("is_limited"):
+                limited_items.append({
+                    "name": asset.get("name", "Unknown Item"),
+                    "description": asset.get("description", "No description available"),
+                    "asset_type": asset.get("asset_type", "Unknown"),
+                    "is_for_sale": asset.get("is_for_sale", False),
+                    "price_robux": asset.get("price_robux", 0),
+                    "price_tickets": asset.get("price_tickets", 0),
+                    "sales": asset.get("sales", 0),
+                    "serial": item.get("serial"),
+                    "uaid": item.get("uaid"),
+                    "is_limited_unique": asset.get("is_limited_unique", False),
+                    "created_at": asset.get("created_at"),
+                    "updated_at": asset.get("updated_at"),
+                    "asset_id": asset.get("id")
+                })
+        
+        if not limited_items:
+            error_embed = discord.Embed(
+                title=f"{username}'s Limited Items",
+                description="No limited items found in inventory",
+                color=discord.Color.blue()
+            )
+            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=error_embed)
+            return
+        
+        class LimitedsView(discord.ui.View):
+            def __init__(self, limited_items, username, user_id, requester_id):
+                super().__init__(timeout=120)
+                self.limited_items = limited_items
+                self.current_page = 0
+                self.username = username
+                self.user_id = user_id
+                self.requester_id = requester_id
+                self.message = None
+                self.update_buttons()
+            
+            async def create_embed(self):
+                item = self.limited_items[self.current_page]
+                catalog_url = f"https://kittys.rip/catalog/{item.get('asset_id')}" if item.get('asset_id') else None
+                
+                embed = discord.Embed(
+                    title=f"{self.username}'s Limited Items",
+                    color=embedDB.get(f"{self.requester_id}") if embedDB.get(f"{self.requester_id}") else discord.Color.blue(),
+                    timestamp=interaction.created_at
+                )
+                
+                name = item.get("name", "Unknown Item")
+                description = item.get("description", "No description available")
+                asset_type = item.get("asset_type", "Unknown")
+                is_for_sale = item.get("is_for_sale", False)
+                price_robux = item.get("price_robux", 0)
+                price_tickets = item.get("price_tickets", 0)
+                sales = item.get("sales", 0)
+                serial = item.get("serial")
+                uaid = item.get("uaid")
+                is_limited_unique = item.get("is_limited_unique", False)
+                asset_id = item.get("asset_id")
+                
+                if asset_id:
+                    thumbnail_url = f"https://kittys.rip/Thumbs/Asset.ashx?x=180&y=180&assetId={asset_id}"
+                    embed.set_thumbnail(url=thumbnail_url)
+                
+                # Make the item name clickable if we have a catalog URL
+                if catalog_url:
+                    name_display = f"[{name}]({catalog_url})"
+                else:
+                    name_display = name
+                
+                embed.add_field(name="Item Name", value=name_display, inline=False)
+                embed.add_field(name="Description", value=description, inline=False)
+                embed.add_field(name="Type", value=asset_type, inline=True)
+                embed.add_field(name="For Sale", value="Yes" if is_for_sale else "No", inline=True)
+                embed.add_field(name="Limited Unique", value="Yes" if is_limited_unique else "No", inline=True)
+                
+                if is_for_sale:
+                    price_text = ""
+                    if price_robux > 0:
+                        price_text += f"{price_robux} Robux"
+                    if price_tickets > 0:
+                        if price_text:
+                            price_text += " / "
+                        price_text += f"{price_tickets} Tickets"
+                    embed.add_field(name="Price", value=price_text, inline=True)
+                
+                embed.add_field(name="Sales", value=str(sales), inline=True)
+                
+                if serial:
+                    embed.add_field(name="Serial", value=f"#{serial}", inline=True)
+                
+                if uaid:
+                    embed.add_field(name="UAID", value=str(uaid), inline=True)
+                
+                created_at = item.get("created_at")
+                if created_at:
+                    embed.add_field(name="Created", value=f"<t:{created_at}:D>", inline=True)
+                
+                updated_at = item.get("updated_at")
+                if updated_at:
+                    embed.add_field(name="Updated", value=f"<t:{updated_at}:D>", inline=True)
+                
+                embed.set_footer(text=f"Item {self.current_page + 1}/{len(self.limited_items)} | Requested by {interaction.user.name} | {MainURL}")
+                return embed
+            
+            def update_buttons(self):
+                self.clear_items()
+                
+                if self.current_page > 0:
+                    previous_btn = discord.ui.Button(style=discord.ButtonStyle.primary, label="Previous", custom_id="previous")
+                    previous_btn.callback = self.previous_callback
+                    self.add_item(previous_btn)
+                
+                if self.current_page < len(self.limited_items) - 1:
+                    next_btn = discord.ui.Button(style=discord.ButtonStyle.primary, label="Next", custom_id="next")
+                    next_btn.callback = self.next_callback
+                    self.add_item(next_btn)
+                
+                current_item = self.limited_items[self.current_page]
+                asset_id = current_item.get("asset_id")
+                if asset_id:
+                    catalog_btn = discord.ui.Button(
+                        style=discord.ButtonStyle.link,
+                        label="View Item",
+                        url=f"https://kittys.rip/catalog/{asset_id}",
+                        emoji="<:KittyBloxLogo:1435371557240438796>"
+                    )
+                    self.add_item(catalog_btn)
+            
+            async def previous_callback(self, interaction: discord.Interaction):
+                if interaction.user.id != self.requester_id:
+                    await interaction.response.send_message("This is not your command!", ephemeral=True)
+                    return
+                
+                self.current_page -= 1
+                embed = await self.create_embed()
+                self.update_buttons()
+                await interaction.response.edit_message(embed=embed, view=self)
+            
+            async def next_callback(self, interaction: discord.Interaction):
+                if interaction.user.id != self.requester_id:
+                    await interaction.response.send_message("This is not your command!", ephemeral=True)
+                    return
+                
+                self.current_page += 1
+                embed = await self.create_embed()
+                self.update_buttons()
+                await interaction.response.edit_message(embed=embed, view=self)
+            
+            async def on_timeout(self):
+                for item in self.children:
+                    if isinstance(item, discord.ui.Button) and item.style != discord.ButtonStyle.link:
+                        item.disabled = True
+                try:
+                    await self.message.edit(view=self)
+                except Exception:
+                    pass
+        
+        view = LimitedsView(limited_items, username, user_id, interaction.user.id)
+        embed = await view.create_embed()
+        message = await interaction.edit_original_response(embed=embed, view=view)
+        view.message = message
+        
+    except requests.exceptions.RequestException as e:
+        error_embed = discord.Embed(
+            title="API Error",
+            description=f"Failed to fetch KittyBlox data: {str(e)}",
+            color=discord.Color.red()
+        )
+        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=error_embed)
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="Unexpected Error",
+            description=f"An unexpected error occurred: {str(e)}",
+            color=discord.Color.red()
+        )
+        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=error_embed)
+            
+@bot.tree.command(name="kittyinfo", description="Get information about a KittyBlox user")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def kittyinfo(interaction: discord.Interaction, user: str = "Kittyblox"):
+    await interaction.response.defer(thinking=True)
+    
+    thinkingembed = discord.Embed(
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}'s KittyBlox Profile!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
+    kittyAPIURL = f"https://kittys.rip/public-api/v1/users/username/{user}"
+    
+    try:
+        response = requests.get(kittyAPIURL)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("success") and data.get("data"):
+            datatable = data["data"]
+            
+            UserID = datatable.get("id")
+            Joindate = datatable.get("created_at")
+            LastOnline = datatable.get("last_online")
+            InventoryRAP = datatable.get("inventory_rap")
+            IsBanned = datatable.get("is_banned")
+            Description = datatable.get("description")
+            Username = datatable.get("username")
+            followers_count = datatable.get("followers_count", 0)
+            following_count = datatable.get("following_count", 0)
+            friends_count = datatable.get("friends_count", 0)
+            is_admin = datatable.get("is_admin", False)
+            
+            kitty_profile_url = f"https://kittys.rip/users/{UserID}/profile"
+            
+            avatar_url = f"https://kittys.rip/Thumbs/Avatar.ashx?x=420&y=420&userId={UserID}"
+            avatar_response = requests.get(avatar_url)
+            
+            if avatar_response.status_code == 200:
+                image_url = avatar_response.url
+            else:
+                image_url = None
+            
+            friends_followers_text = f"-# {friends_count} Friends | {followers_count} Followers | {following_count} Following"
+            
+            full_description = f"{friends_followers_text}\n\n{Description or 'No description available'}"
+            
+            display_name = Username
+            if is_admin:
+                display_name += " <:RobloxAdmin:1416951128876122152>"
+            
+            embed = discord.Embed(
+                title=f"{display_name}",
+                url=kitty_profile_url,
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue(),
+                description=full_description
+            )
+            
+            embed.add_field(name="ID", value=UserID, inline=True)
+            embed.add_field(name="RAP", value=f"{InventoryRAP:,}" if InventoryRAP else "0", inline=True)
+            embed.add_field(name="Staff", value="Yes" if is_admin else "No", inline=True)
+            
+            badges = []
+            if friends_count >= 20:
+                badges.append("<:Friendship:1430641140679577630>")
+            if is_admin:
+                badges.append("<:RobloxAdmin:1416951128876122152>")
+            
+            if badges:
+                embed.add_field(name="Badges", value=" ".join(badges), inline=True)
+            else:
+                embed.add_field(name="Badges", value="None", inline=True)
+            
+            if Joindate:
+                embed.add_field(name="Created", value=f"<t:{Joindate}:D>", inline=True)
+            
+            if LastOnline:
+                embed.add_field(name="Last Online", value=f"<t:{LastOnline}:D>", inline=True)
+            
+            if IsBanned:
+                embed.add_field(name="Terminated", value="Yes", inline=True)
+            
+            if image_url:
+                embed.set_thumbnail(url=image_url)
+            
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="View KittyBlox Profile",
+                style=discord.ButtonStyle.link,
+                url=kitty_profile_url,
+                emoji="<:KittyBloxLogo:1435371557240438796>"
+            ))
+            
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed, view=view)
+            
+        else:
+            error_embed = discord.Embed(
+                title="User Not Found",
+                description=f"Could not find a KittyBlox user with the username `{user}`",
+                color=discord.Color.red()
+            )
+            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=error_embed)
+            
+    except requests.exceptions.RequestException as e:
+        error_embed = discord.Embed(
+            title="Error",
+            description=f"Failed to fetch KittyBlox data: {str(e)}",
+            color=discord.Color.red()
+        )
+        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=error_embed)
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="Unexpected Error",
+            description=f"An unexpected error occurred: {str(e)}",
+            color=discord.Color.red()
+        )
+        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=error_embed)
+        
+@bot.tree.command(name="kittyasset", description="Get information about a KittyBlox asset")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def kittyasset(interaction: discord.Interaction, assetid: str):
+    await interaction.response.defer(thinking=True)
+    
+    thinkingembed = discord.Embed(
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For Asset {assetid}!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
+    kittyAPIURL = f"https://www.kittys.rip/public-api/v1/asset/{assetid}"
+    
+    asset_type_map = {
+        1: "Image",
+        2: "TShirt",
+        3: "Audio",
+        4: "Mesh",
+        5: "Lua",
+        6: "HTML",
+        7: "Text",
+        8: "Hat",
+        9: "Place",
+        10: "Model",
+        11: "Shirt",
+        12: "Pants",
+        13: "Decal",
+        16: "Avatar",
+        17: "Head",
+        18: "Face",
+        19: "Gear",
+        21: "Badge",
+        22: "GroupEmblem",
+        24: "Animation",
+        27: "Torso",
+        28: "RightArm",
+        29: "LeftArm",
+        30: "LeftLeg",
+        31: "RightLeg",
+        32: "Package",
+        33: "YoutubeVideo",
+        34: "GamePass",
+        35: "App",
+        37: "Code",
+        38: "Plugin",
+        39: "SolidModel",
+        40: "MeshPart",
+        41: "HairAccessory",
+        42: "FaceAccessory",
+        43: "NeckAccessory",
+        44: "ShoulderAccessory",
+        45: "FrontAccessory",
+        46: "BackAccessory",
+        47: "WaistAccessory",
+        48: "ClimbAnimation",
+        49: "DeathAnimation",
+        50: "FallAnimation",
+        51: "IdleAnimation",
+        52: "JumpAnimation",
+        53: "RunAnimation",
+        54: "SwimAnimation",
+        55: "WalkAnimation",
+        56: "PoseAnimation",
+        57: "EarAccessory",
+        58: "EyeAccessory",
+        61: "EmoteAnimation",
+        62: "Video",
+        64: "TShirtAccessory",
+        65: "ShirtAccessory",
+        66: "PantsAccessory",
+        67: "JacketAccessory",
+        68: "SweaterAccessory",
+        69: "ShortsAccessory",
+        70: "LeftShoeAccessory",
+        71: "RightShoeAccessory",
+        72: "DressSkirtAccessory",
+        73: "FontFamily",
+        76: "EyebrowAccessory",
+        77: "EyelashAccessory",
+        78: "MoodAnimation",
+        79: "DynamicHead"
+    }
+    
+    try:
+        response = requests.get(kittyAPIURL)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("success") and data.get("data"):
+            asset_data = data["data"]
+            
+            asset_id = asset_data.get("id")
+            name = asset_data.get("name", "Unknown Asset")
+            description = asset_data.get("description", "No description available")
+            asset_type_value = asset_data.get("asset_type_value")
+            asset_type = asset_type_map.get(asset_type_value, "Unknown")
+            is_for_sale = asset_data.get("is_for_sale", False)
+            price_robux = asset_data.get("price_robux", 0)
+            price_tickets = asset_data.get("price_tickets", 0)
+            sales = asset_data.get("sales", 0)
+            created_at = asset_data.get("created_at")
+            updated_at = asset_data.get("updated_at")
+            
+            creator_data = asset_data.get("creator", {})
+            creator_name = creator_data.get("username", "Unknown")
+            creator_id = creator_data.get("id")
+            creator_is_admin = creator_data.get("is_admin", False)
+            
+            thumbnail_url = f"https://kittys.rip/Thumbs/Asset.ashx?x=180&y=180&assetId={asset_id}"
+            asset_url = f"https://kittys.rip/games/{asset_id}"
+            
+            embed = discord.Embed(
+                title=name,
+                url=asset_url,  # Fixed: changed game_url to asset_url
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue(),
+                description=description or "No description available"
+            )
+            
+            embed.add_field(name="Asset ID", value=asset_id, inline=True)
+            embed.add_field(name="Type", value=asset_type, inline=True)
+            embed.add_field(name="For Sale", value="Yes" if is_for_sale else "No", inline=True)
+            
+            if is_for_sale:
+                price_text = ""
+                if price_robux > 0:
+                    price_text += f"{price_robux} Robux"
+                if price_tickets > 0:
+                    if price_text:
+                        price_text += " / "
+                    price_text += f"{price_tickets} Tickets"
+                embed.add_field(name="Price", value=price_text, inline=True)
+            
+            embed.add_field(name="Sales", value=str(sales), inline=True)
+            
+            creator_display = creator_name
+            if creator_is_admin:
+                creator_display += " <:RobloxAdmin:1416951128876122152>"
+            
+            embed.add_field(name="Creator", value=creator_display, inline=True)
+            
+            if created_at:
+                embed.add_field(name="Created", value=f"<t:{created_at}:D>", inline=True)
+            
+            if updated_at:
+                embed.add_field(name="Updated", value=f"<t:{updated_at}:D>", inline=True)
+            
+            embed.set_thumbnail(url=thumbnail_url)
+            
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="View Asset",
+                style=discord.ButtonStyle.link,
+                url=asset_url,
+                emoji="<:KittyBloxLogo:1435371557240438796>"
+            ))
+            
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed, view=view)
+            
+        else:
+            error_embed = discord.Embed(
+                title="Asset Not Found",
+                description=f"Could not find a KittyBlox asset with ID `{assetid}`",
+                color=discord.Color.red()
+            )
+            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=error_embed)
+            
+    except requests.exceptions.RequestException as e:
+        error_embed = discord.Embed(
+            title="Error",
+            description=f"Failed to fetch KittyBlox asset data: {str(e)}",
+            color=discord.Color.red()
+        )
+        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=error_embed)
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="Unexpected Error",
+            description=f"An unexpected error occurred: {str(e)}",
+            color=discord.Color.red()
+        )
+        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=error_embed)
+        
+@bot.tree.command(name="kittygroup", description="Get information about a KittyBlox group")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def kittygroup(interaction: discord.Interaction, groupid: str):
+    await interaction.response.defer(thinking=True)
+    
+    thinkingembed = discord.Embed(
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For Group {groupid}!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
+    kittyAPIURL = f"https://kittys.rip/public-api/v1/groups/{groupid}"
+    
+    try:
+        response = requests.get(kittyAPIURL)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("success") and data.get("data"):
+            group_data = data["data"]
+            
+            group_id = group_data.get("id")
+            name = group_data.get("name", "Unknown Group")
+            description = group_data.get("description", "No description available")
+            member_count = group_data.get("member_count", 0)
+            owner_id = group_data.get("owner_id")
+            role_count = group_data.get("role_count", 0)
+            created_at = group_data.get("created_at")
+            updated_at = group_data.get("updated_at")
+            
+            members = group_data.get("members", [])
+            roles = group_data.get("roles", [])
+            
+            total_members = len(members)
+            
+            group_url = f"https://kittys.rip/groups/{group_id}"
+            thumbnail_url = f"https://kittys.rip/Thumbs/GroupIcon.ashx?groupid={group_id}&x=150&y=150"
+            
+            embed = discord.Embed(
+                title=name,
+                url=group_url,
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue(),
+                description=description or "No description available"
+            )
+            
+            embed.add_field(name="Group ID", value=group_id, inline=True)
+            embed.add_field(name="Members", value=f"{member_count}", inline=True)
+            embed.add_field(name="Roles", value=f"{role_count}", inline=True)
+            
+            if created_at:
+                embed.add_field(name="Created", value=f"<t:{created_at}:D>", inline=True)
+            
+            if updated_at:
+                embed.add_field(name="Updated", value=f"<t:{updated_at}:D>", inline=True)
+            
+            if owner_id:
+                owner = next((member for member in members if member.get("user_id") == owner_id), None)
+                if owner:
+                    embed.add_field(name="Owner", value=owner.get("username", "Unknown"), inline=True)
+            
+            embed.set_thumbnail(url=thumbnail_url)
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="View Group",
+                style=discord.ButtonStyle.link,
+                url=group_url,
+                emoji="<:KittyBloxLogo:1435371557240438796>"
+            ))
+            
+            await interaction.edit_original_response(embed=embed, view=view)
+            
+        else:
+            error_embed = discord.Embed(
+                title="Group Not Found",
+                description=f"Could not find a KittyBlox group with ID `{groupid}`",
+                color=discord.Color.red()
+            )
+            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=error_embed)
+            
+    except requests.exceptions.RequestException as e:
+        error_embed = discord.Embed(
+            title="Error",
+            description=f"Failed to fetch KittyBlox group data: {str(e)}",
+            color=discord.Color.red()
+        )
+        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=error_embed)
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="Unexpected Error",
+            description=f"An unexpected error occurred: {str(e)}",
+            color=discord.Color.red()
+        )
+        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=error_embed)
+        
+@bot.tree.command(name="kittygame", description="Get information about a KittyBlox game")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def kittygame(interaction: discord.Interaction, gameid: str):
+    await interaction.response.defer(thinking=True)
+    
+    thinkingembed = discord.Embed(
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For Game {gameid}!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
+    gameAPIURL = f"https://kittys.rip/public-api/v1/game-info/{gameid}"
+    assetAPIURL = f"https://www.kittys.rip/public-api/v1/asset/{gameid}"
+    
+    try:
+        game_response = requests.get(gameAPIURL)
+        game_response.raise_for_status()
+        game_data = game_response.json()
+        
+        if not game_data.get("success") or not game_data.get("data"):
+            error_embed = discord.Embed(
+                title="Game Not Found",
+                description=f"Could not find a KittyBlox game with ID `{gameid}`",
+                color=discord.Color.red()
+            )
+            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=error_embed)
+            return
+        
+        game_info = game_data["data"]
+        
+        name = game_info.get("name", "Unknown Game")
+        description = game_info.get("description", "No description available")
+        playing_count = game_info.get("playing_count", 0)
+        universe_id = game_info.get("universe_id")
+        like_percentage = game_info.get("like_percentage", 0)
+        place_id = game_info.get("place_id")
+        
+        creator_data = game_info.get("creator", {})
+        creator_name = creator_data.get("username", "Unknown")
+        creator_is_admin = creator_data.get("is_admin", False)
+        
+        asset_response = requests.get(assetAPIURL)
+        asset_data = asset_response.json()
+        
+        created_at = None
+        updated_at = None
+        
+        if asset_data.get("success") and asset_data.get("data"):
+            asset_info = asset_data["data"]
+            created_at = asset_info.get("created_at")
+            updated_at = asset_info.get("updated_at")
+        
+        game_url = f"https://kittys.rip/games/{gameid}"
+        thumbnail_url = f"https://kittys.rip/Thumbs/Asset.ashx?x=180&y=180&assetId={gameid}"
+        
+        embed = discord.Embed(
+            title=name,
+            url=game_url,
+            color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue(),
+            description=description or "No description available"
+        )
+        
+        embed.add_field(name="Game ID", value=gameid, inline=True)
+        embed.add_field(name="Playing", value=str(playing_count), inline=True)
+        embed.add_field(name="Likes", value=f"{like_percentage}%", inline=True)
+        
+        if universe_id:
+            embed.add_field(name="Universe ID", value=str(universe_id), inline=True)
+        
+        creator_display = creator_name
+        if creator_is_admin:
+            creator_display += " <:RobloxAdmin:1416951128876122152>"
+        
+        embed.add_field(name="Creator", value=creator_display, inline=True)
+        
+        if created_at:
+            embed.add_field(name="Created", value=f"<t:{created_at}:D>", inline=True)
+        
+        if updated_at:
+            embed.add_field(name="Updated", value=f"<t:{updated_at}:D>", inline=True)
+        
+        embed.set_thumbnail(url=thumbnail_url)
+        
+        view = discord.ui.View()
+        view.add_item(discord.ui.Button(
+            label="View Game",
+            style=discord.ButtonStyle.link,
+            url=game_url,
+            emoji="<:KittyBloxLogo:1435371557240438796>"
+        ))
+        
+        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=embed, view=view)
+        
+    except requests.exceptions.RequestException as e:
+        error_embed = discord.Embed(
+            title="Error",
+            description=f"Failed to fetch KittyBlox game data: {str(e)}",
+            color=discord.Color.red()
+        )
+        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=error_embed)
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="Unexpected Error",
+            description=f"An unexpected error occurred: {str(e)}",
+            color=discord.Color.red()
+        )
+        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        await interaction.edit_original_response(embed=error_embed)
+        
+@bot.tree.command(name="talk", description="only for when home is limited")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.describe(message="home")
+async def talk(interaction: discord.Interaction, message: str):
+    """for when home is limited"""
+    
+    if str(interaction.user.id) != "1296186288289878159":
+        await interaction.response.send_message(
+            "noob haha imagine", 
+            ephemeral=True
+        )
+        return
+    
+    await interaction.response.send_message(message)
+    
+    await interaction.followup.send(
+        f"Message sent: \"{message}\"", 
+        ephemeral=True
+    )
+    
+@bot.tree.command(name="kittyavatar", description="Get a user's avatar image")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def kittyavatar(interaction: discord.Interaction, user: str = "Kittyblox"):
+    await interaction.response.defer(thinking=True)
+    
+    kittyAPIURL = f"https://kittys.rip/public-api/v1/users/username/{user}"
+    
+    try:
+        response = requests.get(kittyAPIURL)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("success") and data.get("data"):
+            datatable = data["data"]
+            UserID = datatable.get("id")
+            
+            avatar_url = f"https://kittys.rip/Thumbs/Avatar.ashx?x=420&y=420&userId={UserID}"
+            
+            await interaction.followup.send(avatar_url)
+                
+        else:
+            await interaction.followup.send(f"User `{user}` not found on Kittyblox")
+            
+    except requests.exceptions.RequestException as e:
+        await interaction.followup.send(f"Failed to fetch data: {str(e)}")
+    except Exception as e:
+        await interaction.followup.send(f"An error occured :{str(e)}")
+        
+@bot.tree.command(name="discordkitty", description="find kittyblox user from discord")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def discordkitty(interaction: discord.Interaction, user: discord.User):
+    await interaction.response.defer(thinking=True)
+    
+    thinkingembed = discord.Embed(
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user.display_name}'s KittyBlox Profile!",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.followup.send(embed=thinkingembed)
+    
+    discord_id = user.id
+    kittyAPIURL = f"https://www.kittys.rip/public-api/v1/users/discord_id/{discord_id}"
+    
+    try:
+        response = requests.get(kittyAPIURL)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("success") and data.get("data"):
+            datatable = data["data"]
+            
+            Username = datatable.get("username")
+            UserID = datatable.get("id")
+            
+            kitty_profile_url = f"https://kittys.rip/users/{UserID}/profile"
+            avatar_url = f"https://kittys.rip/Thumbs/Avatar.ashx?x=420&y=420&userId={UserID}"
+            
+            embed = discord.Embed(
+                title=f"{Username}",
+                url=kitty_profile_url,
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+            )
+            
+            embed.set_thumbnail(url=avatar_url)
+            
+            await interaction.edit_original_response(embed=embed)
+            
+        else:
+            await interaction.edit_original_response(content=f"No KittyBlox account linked to {user.mention}")
+            
+    except requests.exceptions.RequestException as e:
+        await interaction.edit_original_response(content=f"Failed to fetch data: {str(e)}")
+    except Exception as e:
+        await interaction.edit_original_response(content=f"An error occurred: {str(e)}")
         
 # === Flask Runner in Thread ===
 def run_flask():

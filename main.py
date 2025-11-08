@@ -50,7 +50,7 @@ Emojis = {
 }
 
 # OpenAI client
-chatgpt = OpenAI(api_key=os.getenv("MapleAI_KEY"), base_url="https://api.mapleai.de/v1")
+chatgpt = OpenAI(api_key=os.getenv("OPENAI_KEY"), base_url="https://api.mapleai.de/v1")
 AIModel = "gpt-5"
 
 #=== Database Setup ===

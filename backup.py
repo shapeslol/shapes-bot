@@ -1049,7 +1049,7 @@ class EmbedColorSelection(discord.ui.Modal, title="Test Modal"):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # === User Commands ===
-@bot.tree.command(name="discord2roblox", description="Get a roblox profile from their Discord UserID.")
+@bot.tree.context_menu(name="discord2roblox")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def discord2roblox(interaction: discord.Interaction, user: discord.User): # = 481295611417853982):
@@ -1118,7 +1118,7 @@ async def discord2spook(interaction: discord.Interaction, user: discord.User):
         print(f"Error fetching data: {response.status_code}")
 
 # === Message Commands ===
-@bot.tree.command(name="ai", description="Chat with an AI assistant.")
+@bot.tree.context_menu(name="ai")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def ai(interaction: discord.Interaction, prompt: discord.Message):

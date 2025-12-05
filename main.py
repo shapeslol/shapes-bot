@@ -75,7 +75,7 @@ searchengine = "621a38269031b4e89" # PLEASE USE YOUR OWN SEARCH ENGINE ID FROM h
 # get the public key and api key for our api from .env
 PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
 APIBaseURL_Key = os.environ.get("Shapes_API_Key")
-APIBaseURL_Headers = {"Authorization": APIBaseURL_Key}
+APIBaseURL_Headers = {"Authorization": f"Bearer {APIBaseURL_Key}"}
 
 # get the bot token from TOKEN.txt
 try:
@@ -1067,7 +1067,7 @@ async def discord2roblox(interaction: discord.Interaction, user: discord.User): 
     url = f"{APIBaseURL}/d2r/{userid}"
 
     try:
-        response = requests.get(url, headers={"Authorization": f"Bearer {APIBaseURL_Key}"})
+        response = requests.get(url, headers=APIBaseURL_Headers)
         response.raise_for_status()
         APIData = response.json()
         print(APIData)
@@ -1078,7 +1078,7 @@ async def discord2roblox(interaction: discord.Interaction, user: discord.User): 
                 description=f"[View Roblox Profile](https://www.roblox.com/users/{APIData['data']}/profile)",
                 color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
-            successembed.set_author(url=f"https://www.roblox.com/headshot-thumbnail/image?userId={APIData['data']}&width=420&height=420&format=png")
+            successembed.set_thumbnail(url=f"https://www.roblox.com/headshot-thumbnail/image?userId={APIData['data']}&width=420&height=420&format=png")
             successembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=successembed)
             return
@@ -1676,7 +1676,6 @@ async def discord2roblox(interaction: discord.Interaction, user: discord.User):
                 description=f"[View Roblox Profile](https://www.roblox.com/users/{APIData['data']}/profile)",
                 color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
-            successembed.set_author(url=f"https://roblox.com/headshot-thumbnail/image?userId={APIData['data']}&width=420&height=420&format=png")
             successembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=successembed)
             return

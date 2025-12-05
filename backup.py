@@ -103,14 +103,8 @@ except FileNotFoundError:
 except Exception as e:
     print(f"An error occurred: {e}")
 
-# get the API url from APIBaseURL.txt
-try:
-    with open('APIBaseURL.txt', 'r') as f:
-        APIBaseURL = f.read()
-except FileNotFoundError:
-    print("Error: The file 'APIBaseURL.txt' was not found.")
-except Exception as e:
-    print(f"An error occurred: {e}")
+# get the API url
+APIBaseURL = "http://localhost:1337"
 
 
 # last online cache
@@ -1055,32 +1049,146 @@ class EmbedColorSelection(discord.ui.Modal, title="Test Modal"):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # === User Commands ===
-@bot.tree.context_menu(name="sayhitouser")
+@bot.tree.command(name="discord2roblox", description="Get a roblox profile from their Discord UserID.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def sayhitouser(interaction: discord.Interaction, member: discord.Member):
-    await interaction.response.send_message(f"Hello, {member.mention}!")
+async def discord2roblox(interaction: discord.Interaction, user: discord.User): # = 481295611417853982):
+    userid = user.id
+    await interaction.response.defer(thinking=True)
+
+    loading = discord.Embed(
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Getting Roblox Profile For {user.name}",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+
+    await interaction.followup.send(embed=loading)
+
+    url = f"{APIBaseURL}/d2r/{userid}"
+
+    try:
+        response = requests.get(url, headers={"Authorization": "Bearer " + APIKey})
+        response.raise_for_status()
+        APIData = response.json()
+        print(APIData)
+        Roblox = None
+        if APIData.get("data") and APIData.get("success", False) == True:
+            successembed = discord.Embed(
+                title=f"Roblox Profile for {user.name}",
+                description=f"[View Roblox Profile](https://www.roblox.com/users/{APIData['data']}/profile)",
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+            )
+            successembed.set_author(url=f"https://www.roblox.com/headshot-thumbnail/image?userId={APIData['data']}&width=420&height=420&format=png")
+            successembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=successembed)
+            return
+        else:
+            #print(f"No Roblox Profile found for {user.name}")
+            failedembed = discord.Embed(
+                title=f"No Roblox Profile found for {user.name}",
+                color=discord.Color.red()
+            )
+            await interaction.edit_original_response(embed=failedembed)
+            return
+    except requests.exceptions.RequestException as e:
+        #print(f"Error fetching data for Discord ID: {userid}: {e}")
+        failedembed3 = discord.Embed(
+            title=f"Error retrieving Roblox Profile from {user.name}",
+            color=discord.Color.red()
+        )
+        await interaction.edit_original_response(embed=failedembed3)
+        return
 
 @bot.tree.context_menu(name="discord2spook")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discord2spook(interaction: discord.Interaction, user: discord.User): # = <@481295611417853982>):
-    url = f"https://api.prp.bio/discord/{user.name}"
-    print(url)
+async def discord2spook(interaction: discord.Interaction, user: discord.User):
+    url = f"https://spook.bio/api/profiles?discordId={user.id}"
     print(user.id)
+    print(url)
     response = requests.get(url)
-    print(response.text)
+    data = response.json()
     if response.status_code == 200:
-        await interaction.response.send_message(f"{user.mention}'s [spook.bio Profile]({response.text})", ephemeral=False)
-        print(f"Fetched {response.text} successfully!")
+        await interaction.response.send_message(f"{user.mention}'s [spook.bio Profile](https://spook.bio/@{data.username})", ephemeral=False)
+        print(f"Fetched {data.username} successfully!")
     else:
         if interaction.user.name == user.name:
-            await interaction.response.send_message(f":x: You don't have a spook.bio profile linked to your account {user.mention}! :x: To link your profile to your account please DM {owner} or {co_owner}")
+            await interaction.response.send_message(f":x: You don't have a spook.bio profile linked to your account {user.mention}! :x: To link your profile to your account create a spook.bio account [here](https://spook.bio/login)")
             return
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
 
 # === Message Commands ===
+@bot.tree.command(name="ai", description="Chat with an AI assistant.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+async def ai(interaction: discord.Interaction, prompt: discord.Message):
+    await interaction.response.defer(thinking=True)
+
+    loading = discord.Embed(
+    title=f"{Emojis.get('loading')} {interaction.user.mention} Getting AI Response For: {prompt}",
+    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+)
+
+    await interaction.followup.send(embed=loading)
+    
+    user_id = str(interaction.user.id)
+    username = interaction.user.name
+
+    # Load or initialize user data
+    user_data = AI_DB.get(user_id) or {"username": username, "user_messages": [], "ai_responses": []}
+    user_data["username"] = username
+    user_data["user_messages"].append(prompt)
+    
+    # Keep last 50 messages
+    user_data["user_messages"] = user_data["user_messages"][-50:]
+    user_data["ai_responses"] = user_data["ai_responses"][-50:]
+
+    # System instructions for the AI
+    messages_for_ai = [
+        {
+            "role": "system",
+            "content": (
+                f"You are a helpful Discord assistant chatting with {username}. "
+                "Always respond in a single concise paragraph. Otherwise your response will not be recieved due to the embed text limit"
+                "Follow Discord TOS. Do not provide instructions for illegal activity. "
+                "Stay safe, respectful, and friendly."
+            )
+        }
+    ]
+
+    # Include previous conversation
+    for u_msg, a_msg in zip(user_data["user_messages"], user_data["ai_responses"]):
+        messages_for_ai.append({"role": "user", "content": u_msg})
+        messages_for_ai.append({"role": "assistant", "content": a_msg})
+
+    # Add latest message
+    messages_for_ai.append({"role": "user", "content": prompt})
+
+    try:
+        response = chatgpt.chat.completions.create(
+            model=AIModel,
+            messages=messages_for_ai
+        )
+        ai_reply = response.choices[0].message.content.strip()
+    except Exception as e:
+        ai_reply = f"⚠️ API error: {e}"
+
+    # Save AI response
+    user_data["ai_responses"].append(ai_reply)
+    AI_DB.set(user_id, user_data)
+    AI_DB.save()
+
+    # Create embed
+    embed = discord.Embed(
+        title=f"💬 Chat with {username}",
+        color=embedDB.get(user_id) or discord.Color.blue()
+    )
+    embed.add_field(name="🧍 You said:", value=prompt, inline=False)
+    embed.add_field(name="🤖 AI replied:", value=ai_reply, inline=False)
+    embed.set_footer(text=f"Requested by {username} | {MainURL}")
+
+    await interaction.edit_original_response(embed=embed)
+
 @bot.tree.context_menu(name="google")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1179,26 +1287,35 @@ async def servercount(interaction: discord.Interaction):
 @bot.tree.command(name="getdata", description="Get The Data From One Of Our Databases")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.describe(database="The database to get data from", key="The key to get data for")
+@app_commands.choices(database=[
+    app_commands.Choice(name="embedDB", value="embedDB"),
+    app_commands.Choice(name="countingDB", value="countingDB"),
+    app_commands.Choice(name="usersDB", value="usersDB"),
+    app_commands.Choice(name="autoroleDB", value="autoroleDB"),
+    app_commands.Choice(name="AI_DB", value="AI_DB"),
+])
 async def getdata(interaction: discord.Interaction, database: str, key: str):
-    edata = None
-    data = None
-    if database == "Counting":
-        edata = countingDB.get(f"{key}")
-        data = str(edata)
-    if database == "Embed":
-        edata = embedDB.get(f"{key}")
-        data = str(edata)
-    if database == "Users":
-        edata = usersDB.get(f"{key}")
-        data = str(edata)
-    if database == "autorole":
-        edata = autoroleDB.get(f"{key}")
-        data = str(edata)
-    if data:
-        await interaction.response.send_message(data, ephemeral=True)
+    # add options for each database and each key and restrict who can use the command.
+    if not interaction.user.id in [481295611417853982]:
+        await interaction.response.send_message(":x: You don't have permission to use this command! :x:", ephemeral=True)
+        return
+    db_map = {
+        "embedDB": embedDB,
+        "countingDB": countingDB,
+        "usersDB": usersDB,
+        "autoroleDB": autoroleDB,
+        "AI_DB": AI_DB,
+    }
+    selected_db = db_map.get(database)
+    if selected_db:
+        data = selected_db.get(f"{key}")
+        if data:
+            await interaction.response.send_message(f"Data for key `{key}` in database `{database}`: ```{data}```", ephemeral=True)
+        else:
+            await interaction.response.send_message(f":x: No data found for key `{key}` in database `{database}`! :x:", ephemeral=True)
     else:
-        await interaction.response.send_message(f"No Data Found For {key} In the {database} Database!", ephemeral=True)
-
+        await interaction.response.send_message(f":x: Database `{database}` not found! :x:", ephemeral=True)
 
 @bot.tree.command(name="settings", description="Your Settings For Shapes")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -1600,7 +1717,7 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
     user_data["username"] = username
     user_data["user_messages"].append(prompt)
     
-    # Keep last 5 messages for context
+    # Keep last 50 messages
     user_data["user_messages"] = user_data["user_messages"][-50:]
     user_data["ai_responses"] = user_data["ai_responses"][-50:]
 
@@ -1644,8 +1761,8 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
         title=f"💬 Chat with {username}",
         color=embedDB.get(user_id) or discord.Color.blue()
     )
-    embed.add_field(name="🧍 You said:", value=prompt[:1024], inline=False)
-    embed.add_field(name="🤖 AI replied:", value=ai_reply[:1024], inline=False)
+    embed.add_field(name="🧍 You said:", value=prompt, inline=False)
+    embed.add_field(name="🤖 AI replied:", value=ai_reply, inline=False)
     embed.set_footer(text=f"Requested by {username} | {MainURL}")
 
     await interaction.edit_original_response(embed=embed)

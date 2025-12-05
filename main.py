@@ -18,7 +18,7 @@ import requests
 from discord.ext import commands
 from discord.gateway import DiscordWebSocket, _log
 from discord.ext.commands import Bot
-from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify, Response
 from flask_cors import CORS
 import base64
 import urllib
@@ -360,40 +360,118 @@ def shutdown():
     
 @app.route('/commands', methods=['GET'])
 def send_commands():
-    commands = []
-    print([c.qualified_name for c in bot.tree.get_commands()])
+    commands = {}
+    commands['Commands'] = {}
     for cmd in bot.tree.get_commands():
-        print(c)
-        commands.append(c)
+        if isinstance(cmd, discord.app_commands.ContextMenu):
+            # Context menu commands don't have description/options
+            cmd_data = {
+                "name": cmd.qualified_name,
+                "type": "context_menu_command"
+            }
+        else:  # Slash commands
+            cmd_data = {
+                "name": cmd.qualified_name,
+                "description": getattr(cmd, "description", ""),
+                "options": [opt.name for opt in getattr(cmd, "options", [])],
+                "choices": [choice.name for choice in getattr(cmd, "choices", [])],
+                "type": "slash_command"
+            }
+        
+        commands['Commands'][cmd.qualified_name] = cmd_data
+    commands['success'] = True
     return jsonify(commands), 200
     
 @app.route('/count/commands', methods=['GET'])
-def send_commands_count():
-    return str(len(bot.tree.get_commands())), 200
+def get_command_count():
+    return {'Commands': str(len(bot.tree.get_commands()))}, 200
 
 @app.route('/webhook', methods=['POST'])
 def send_webhook():
     if request.json["type"] == 0:
-        return "", 204
+        return Response(status=204)
+
     webhook = os.environ.get('webhook_url')
-    response_data = request.headers
-    print(response_data)
-    webhook_data = request.headers.get('content')
+    if not webhook:
+        print("Webhook URL not set in environment")
+        return "webhook missing", 500
 
-    payload = {
-        "content": f"{webhook_data}",
-    }
+    if request.json["type"] == 1:
+        event = request.json["event"]
+        data = event.get("data", {})
+        integration_type = data.get("integration_type", None)
+        event_type = data.get("type", None)
+        if event_type == None:
+            return Response(status=400)
+        elif event_type == "APPLICATION_AUTHORIZED" and integration_type == 1:
+            event_data = event.get("data", {})
+            event_timestamp = event_data.get("timestamp", None)
+            user_data = event_data.get("user", {})
+            user_id = user_data.get("id", "Unknown")
+            user_name = user_data.get("username", "Unknown")
+            user_avatar = user_data.get("avatar", None)
+            if user_avatar:
+                if user_avatar.startswith("a_"):
+                    avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{user_avatar}.gif"
+                else:
+                    avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{user_avatar}.png"
+            else:
+                avatar_url = "https://cdn.discordapp.com/embed/avatars/0.png"
 
-    # Send the POST request
-    try:
-        response = requests.post(webhook, json=payload)
-        response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
-        print(f"Webhook sent successfully! Status code: {response.status_code}")
-        return "successful", 200
-    except requests.exceptions.RequestException as e:
-        print(f"Error sending webhook: {e}")
-        return "failed", 400
-    
+            embed = {
+                "author": {
+                    "name": user_name,
+                    "icon_url": avatar_url
+                },
+                "title": "New Bot Authorization",
+                "description": f"**{user_name}** (`{user_id}`) has authorized Shapes.",
+                "color": 3066993,
+                "timestamp": event_timestamp
+            }
+            payload = {
+                "embeds": [embed]
+            }
+            headers = {
+                "Content-Type": "application/json"
+            }
+            response = requests.post(webhook, json=payload, headers=headers)
+            if response.status_code != 204:
+                print(f"Failed to send webhook: {response.status_code} - {response.text}")
+        elif event_type == "APPLICATION_AUTHORIZED" and integration_type == 0:
+            event_data = event.get("data", {})
+            event_timestamp = event_data.get("timestamp", None)
+            guild_data = event_data.get("guild", {})
+            guild_id = guild_data.get("id", "Unknown")
+            guild_name = guild_data.get("name", "Unknown")
+            guild_icon = guild_data.get("icon", None)
+            if guild_icon:
+                if guild_icon.startswith("a_"):
+                    guild_icon_url = f"https://cdn.discordapp.com/icons/{guild_id}/{guild_icon}.gif"
+                else:
+                    guild_icon_url = f"https://cdn.discordapp.com/icons/{guild_id}/{guild_icon}.png"
+            else:
+                guild_icon_url = "https://cdn.discordapp.com/embed/avatars/0.png"
+
+            embed = {
+                "author": {
+                    "name": guild_name,
+                    "icon_url": guild_icon_url
+                },
+                "title": "New Bot Authorization",
+                "description": f"**{guild_name}** (`{guild_id}`) has authorized Shapes.",
+                "color": 3066993,
+                "timestamp": event_timestamp
+            }
+            payload = {
+                "embeds": [embed]
+            }
+            headers = {
+                "Content-Type": "application/json"
+            }
+            response = requests.post(webhook, json=payload, headers=headers)
+            if response.status_code != 204:
+                print(f"Failed to send webhook: {response.status_code} - {response.text}")
+
 
 # === Globals for caching and ready state ===
 cached_guilds = []

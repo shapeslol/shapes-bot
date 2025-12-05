@@ -10,3 +10,4 @@ slpp
 flask-cors
 openai
 PyNaCl
+topggpy

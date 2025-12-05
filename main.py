@@ -408,13 +408,10 @@ def send_webhook():
 
     payload = request.json
 
-    if payload.get("type") == 1:
-        return jsonify({"type": 1})
-
     if payload.get("type") == 0:
         return Response(status=204)
 
-    if payload.get("type") == 2:
+    if payload.get("type") == 1:
         event = payload.get("event", {})
         data = event.get("data", {})
         integration_type = data.get("integration_type")

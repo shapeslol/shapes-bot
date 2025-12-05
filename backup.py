@@ -709,7 +709,7 @@ class TopGGIntegration:
             print(f"❌ Error posting commands to Top.gg: {e}")
             return False
 
-    async def _get_bot_commands_for_topgg(self) -> List[Dict]:
+    async def _get_bot_commands_for_topgg(self) -> list[Dict]:
         """Convert bot's commands to Top.gg API format with decorator exclusions"""
         commands_list = []
         excluded_count = 0

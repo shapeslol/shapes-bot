@@ -27,6 +27,7 @@ import socket
 import typing
 from typing import Dict, Any, Optional
 from openai import OpenAI
+import io
 
 # Setup Emojis
 Emojis = {
@@ -113,6 +114,23 @@ except FileNotFoundError:
     print("Error: The file 'APIDataURL.txt' was not found.")
 except Exception as e:
     print(f"An error occurred: {e}")
+
+# last online cache
+def load_cached_timestamps():
+    try:
+        with open('lastonline.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+def update_cached_timestamp(user_id, timestamp):
+    try:
+        cached_timestamps = load_cached_timestamps()
+        cached_timestamps[str(user_id)] = timestamp
+        with open('lastonline.json', 'w') as f:
+            json.dump(cached_timestamps, f, indent=2)
+    except Exception as e:
+        print(f"Error updating cached timestamp: {e}")
 
 # === Flask App Setup ===
 app = Flask(__name__)
@@ -310,11 +328,6 @@ def dashboard():
         return "<h3>Bot is not ready yet, please try again in a moment.</h3>"
     return render_template_string(HTML_TEMPLATE, guilds=cached_guilds)
 
-# Redirect /activity to /
-@app.route("/activity")
-def activity_redirect():
-    return redirect(url_for("dashboard"))
-
 @app.route("/send", methods=["POST"])
 @admin_required
 def send_message():
@@ -343,7 +356,44 @@ def shutdown():
         return 'Not running with the Werkzeug Server', 500
     
     func()
-    return 'Server shutting down...'   
+    return 'Server shutting down...'  
+    
+@app.route('/commands', methods=['GET'])
+def send_commands():
+    commands = []
+    print([c.qualified_name for c in bot.tree.get_commands()])
+    for cmd in bot.tree.get_commands():
+        print(c)
+        commands.append(c)
+    return jsonify(commands), 200
+    
+@app.route('/count/commands', methods=['GET'])
+def send_commands_count():
+    return str(len(bot.tree.get_commands())), 200
+
+@app.route('/webhook', methods=['POST'])
+def send_webhook():
+    if request.json["type"] == 0:
+        return "", 204
+    webhook = os.environ.get('webhook_url')
+    response_data = request.headers
+    print(response_data)
+    webhook_data = request.headers.get('content')
+
+    payload = {
+        "content": f"{webhook_data}",
+    }
+
+    # Send the POST request
+    try:
+        response = requests.post(webhook, json=payload)
+        response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
+        print(f"Webhook sent successfully! Status code: {response.status_code}")
+        return "successful", 200
+    except requests.exceptions.RequestException as e:
+        print(f"Error sending webhook: {e}")
+        return "failed", 400
+    
 
 # === Globals for caching and ready state ===
 cached_guilds = []
@@ -1126,7 +1176,7 @@ async def ping(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def stop(interaction: discord.Interaction):
-    if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip" or interaction.user.name == "38013":
+    if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip" or interaction.user.name == "kiwixor":
         await interaction.response.send_message(":white_check_mark: Shutdown Successfully!", ephemeral=False)
         
         countingDB.save()
@@ -1153,11 +1203,11 @@ async def stop(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def restart(interaction: discord.Interaction):
-    if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip":
+    if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip" or interaction.user.name == "kiwixor":
         await interaction.response.send_message(":white_check_mark: Restarted Successfully!!", ephemeral=False)
         await restartbot()
     else:
-        await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
+        await interaction.response.send_message(f"Only <@481295611417853982 and <@1129085908390518895> can use this command.", ephemeral=True)
 
 @bot.tree.command(name="counting", description="Counting Settings")
 @app_commands.default_permissions(administrator=True)
@@ -1577,7 +1627,7 @@ async def invite(interaction: discord.Interaction):
     invite_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     await interaction.response.send_message(embed=invite_embed, ephemeral=False)
     #await interaction.response.send_message(f"Invite me to your server or add me to your apps using this link: {invite_url}", ephemeral=False)
-
+    
 @bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1626,8 +1676,160 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
         
         return False
 
+    async def check_inventory_visibility(session: aiohttp.ClientSession, user_id: str) -> str:
+        try:
+            inventory_url = f"https://inventory.roblox.com/v1/users/{user_id}/can-view-inventory"
+            async with session.get(inventory_url) as response:
+                if response.status == 200:
+                    inventory_data = await response.json()
+                    return "Public" if inventory_data.get('canView', False) else "Private"
+        except Exception as e:
+            print(f"Error checking inventory visibility: {e}")
+        return "Private"
+
+    async def check_presence(session: aiohttp.ClientSession, user_id: str) -> tuple:
+        try:
+            try:
+                with open('roblosecuritytoken.txt', 'r') as f:
+                    roblosecurity_token = f.read().strip()
+            except FileNotFoundError:
+                print("ROBLOSECURITY token file not found")
+                return (0, None)
+            
+            presence_url = 'https://presence.roblox.com/v1/presence/users'
+            headers = {
+                "Content-Type": "application/json",
+                "Cookie": f".ROBLOSECURITY={roblosecurity_token}"
+            }
+            
+            async with session.post(presence_url, headers=headers, json={'userIds': [user_id]}) as response:
+                if response.status == 200:
+                    presence_data = await response.json()
+                    if presence_data.get('userPresences') and len(presence_data['userPresences']) > 0:
+                        user_presence = presence_data['userPresences'][0]
+                        presence_type = user_presence.get('userPresenceType', 0)
+                        place_id = user_presence.get('placeId')
+                        return (presence_type, place_id)
+        except Exception as e:
+            print(f"Error checking presence: {e}")
+        return (0, None)
+
+    class BadgeService:
+        def __init__(self, session: aiohttp.ClientSession):
+            self.session = session
+
+        async def get_user_badges(self, user_id: str):
+            try:
+                url = f"https://badges.roblox.com/v1/users/{user_id}/badges?sortOrder=Desc&limit=10"
+                async with self.session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data.get('data', []), 200
+                    return [], response.status
+            except Exception as e:
+                print(f"Error getting user badges: {e}")
+                return [], 500
+
+        async def get_awarded_dates(self, user_id: str, badge_ids: list):
+            try:
+                if not badge_ids:
+                    return {}
+                
+                badge_ids_str = ",".join(map(str, badge_ids))
+                url = f"https://badges.roblox.com/v1/users/{user_id}/badges/awarded-dates?badgeIds={badge_ids_str}"
+                async with self.session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        awarded_dates = {}
+                        for item in data.get('data', []):
+                            awarded_dates[item['badgeId']] = item.get('awardedDate')
+                        return awarded_dates
+                    return {}
+            except Exception as e:
+                print(f"Error getting awarded dates: {e}")
+                return {}
+
+    class BadgeFormatter:
+        @staticmethod
+        def parse_iso_timestamp(iso_timestamp: str) -> int:
+            try:
+                if iso_timestamp:
+                    dt = datetime.fromisoformat(iso_timestamp.replace('Z', '+00:00'))
+                    return int(dt.timestamp())
+            except (ValueError, AttributeError):
+                pass
+            return None
+
+    async def get_last_online_from_badges(session: aiohttp.ClientSession, user_id: str) -> tuple:
+        try:
+            badge_service = BadgeService(session)
+            badges, status_code = await badge_service.get_user_badges(user_id)
+            
+            if status_code == 200 and badges:
+                badge_ids = [badge['id'] for badge in badges]
+                awarded_dates = await badge_service.get_awarded_dates(user_id, badge_ids)
+                
+                for badge in badges:
+                    badge_id = badge['id']
+                    badge['awardedDate'] = awarded_dates.get(badge_id)
+                
+                valid_timestamps = []
+                latest_place_id = None
+                
+                for badge in badges:
+                    awarded_date = badge.get('awardedDate')
+                    if awarded_date:
+                        unix_timestamp = BadgeFormatter.parse_iso_timestamp(awarded_date)
+                        if unix_timestamp:
+                            valid_timestamps.append((unix_timestamp, badge))
+                
+                if valid_timestamps:
+                    valid_timestamps.sort(key=lambda x: x[0], reverse=True)
+                    latest_timestamp, latest_badge = valid_timestamps[0]
+                    
+                    awarder = latest_badge.get('awarder', {})
+                    if awarder.get('type') == 'Place':
+                        latest_place_id = awarder.get('id')
+                    
+                    return (latest_timestamp, latest_place_id)
+        except Exception as e:
+            print(f"Error fetching badge last online: {e}")
+        return (None, None)
+
+    async def get_friends_count(session: aiohttp.ClientSession, user_id: str) -> int:
+        try:
+            friends_url = f"https://friends.roblox.com/v1/users/{user_id}/friends/count"
+            async with session.get(friends_url) as response:
+                if response.status == 200:
+                    friends_data = await response.json()
+                    return friends_data.get('count', 0)
+        except Exception as e:
+            print(f"Error fetching friends count: {e}")
+        return 0
+
+    async def get_followers_count(session: aiohttp.ClientSession, user_id: str) -> int:
+        try:
+            followers_url = f"https://friends.roblox.com/v1/users/{user_id}/followers/count"
+            async with session.get(followers_url) as response:
+                if response.status == 200:
+                    followers_data = await response.json()
+                    return followers_data.get('count', 0)
+        except Exception as e:
+            print(f"Error fetching followers count: {e}")
+        return 0
+
+    async def get_followings_count(session: aiohttp.ClientSession, user_id: str) -> int:
+        try:
+            followings_url = f"https://friends.roblox.com/v1/users/{user_id}/followings/count"
+            async with session.get(followings_url) as response:
+                if response.status == 200:
+                    followings_data = await response.json()
+                    return followings_data.get('count', 0)
+        except Exception as e:
+            print(f"Error fetching followings count: {e}")
+        return 0
+
     async def get_user_games_visits(session: aiohttp.ClientSession, user_id: str) -> int:
-        """Get total visits for all user's games"""
         try:
             user_games_url = f"https://games.roblox.com/v2/users/{user_id}/games?accessFilter=2&limit=50"
             async with session.get(user_games_url) as response:
@@ -1660,109 +1862,110 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             print(f"Error fetching user games visits: {e}")
         return 0
 
-    async def check_inventory_visibility(session: aiohttp.ClientSession, user_id: str) -> str:
-        """Check if user's inventory is public"""
+    async def get_profile_api_data(session: aiohttp.ClientSession, user_id: str) -> dict:
         try:
-            inventory_url = f"https://inventory.roblox.com/v1/users/{user_id}/can-view-inventory"
-            async with session.get(inventory_url) as response:
-                if response.status == 200:
-                    inventory_data = await response.json()
-                    return "Public" if inventory_data.get('canView', False) else "Private"
-        except Exception as e:
-            print(f"Error checking inventory visibility: {e}")
-        return "Private"
-
-    async def get_friends_count(session: aiohttp.ClientSession, user_id: str) -> int:
-        """Get user's friends count"""
-        try:
-            friends_url = f"https://friends.roblox.com/v1/users/{user_id}/friends/count"
-            async with session.get(friends_url) as response:
-                if response.status == 200:
-                    friends_data = await response.json()
-                    return friends_data.get('count', 0)
-        except Exception as e:
-            print(f"Error fetching friends count: {e}")
-        return 0
-
-    async def get_followers_count(session: aiohttp.ClientSession, user_id: str) -> int:
-        """Get user's followers count"""
-        try:
-            followers_url = f"https://friends.roblox.com/v1/users/{user_id}/followers/count"
-            async with session.get(followers_url) as response:
-                if response.status == 200:
-                    followers_data = await response.json()
-                    return followers_data.get('count', 0)
-        except Exception as e:
-            print(f"Error fetching followers count: {e}")
-        return 0
-
-    async def get_followings_count(session: aiohttp.ClientSession, user_id: str) -> int:
-        """Get user's followings count"""
-        try:
-            followings_url = f"https://friends.roblox.com/v1/users/{user_id}/followings/count"
-            async with session.get(followings_url) as response:
-                if response.status == 200:
-                    followings_data = await response.json()
-                    return followings_data.get('count', 0)
-        except Exception as e:
-            print(f"Error fetching followings count: {e}")
-        return 0
-
-    async def check_presence(session: aiohttp.ClientSession, user_id: str) -> tuple:
-        """Check user's presence status and return userPresenceType and place_id"""
-        try:
-            try:
-                with open('roblosecuritytoken.txt', 'r') as f:
-                    roblosecurity_token = f.read().strip()
-            except FileNotFoundError:
-                print("ROBLOSECURITY token file not found")
-                return (0, None)
+            with open('roblosecuritytoken.txt', 'r') as f:
+                roblosecurity_token = f.read().strip()
             
-            presence_url = 'https://presence.roblox.com/v1/presence/users'
-            headers = {
-                "Content-Type": "application/json",
-                "Cookie": f".ROBLOSECURITY={roblosecurity_token}"
+            url = "https://apis.roblox.com/profile-platform-api/v1/profiles/get"
+            payload = {
+                "profileId": str(user_id),
+                "profileType": "User",
+                "components": [
+                    {"component": "UserProfileHeader"},
+                    {"component": "About"},
+                    {"component": "RobloxBadges"},
+                    {"component": "Statistics"}
+                ],
+                "includeComponentOrdering": True
             }
             
-            async with session.post(presence_url, headers=headers, json={'userIds': [user_id]}) as response:
+            headers = {
+                "Content-Type": "application/json",
+                "Cookie": f".ROBLOSECURITY={roblosecurity_token}",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            
+            async with session.post(url, json=payload, headers=headers) as response:
                 if response.status == 200:
-                    presence_data = await response.json()
-                    if presence_data.get('userPresences') and len(presence_data['userPresences']) > 0:
-                        user_presence = presence_data['userPresences'][0]
-                        presence_type = user_presence.get('userPresenceType', 0)
-                        place_id = user_presence.get('placeId')
-                        return (presence_type, place_id)
-        except Exception as e:
-            print(f"Error checking presence: {e}")
-        return (0, None)
-
-    async def get_last_online_from_badges(session: aiohttp.ClientSession, user_id: str) -> int:
-        """Get last online timestamp from recent badges"""
-        try:
-            user_badges_url = f"https://badges.roblox.com/v1/users/{user_id}/badges?sortOrder=Desc&limit=10"
-            async with session.get(user_badges_url) as response:
-                if response.status == 200:
-                    user_badges_result = await response.json()
-                    if user_badges_result and user_badges_result.get('data'):
-                        recent_badge = user_badges_result['data'][0]
-                        badge_id = recent_badge.get('id')
+                    data = await response.json()
+                    components = data.get('components', {})
+                    
+                    profile_data = {}
+                    
+                    user_profile_header = components.get('UserProfileHeader', {}) or {}
+                    profile_data['is_premium'] = user_profile_header.get('isPremium', False)
+                    profile_data['is_verified'] = user_profile_header.get('isVerified', False)
+                    
+                    counts = user_profile_header.get('counts', {}) or {}
+                    profile_data['friends_count'] = counts.get('friendsCount', 0)
+                    profile_data['followers_count'] = counts.get('followersCount', 0)
+                    profile_data['followings_count'] = counts.get('followingsCount', 0)
+                    
+                    statistics = components.get('Statistics', {}) or {}
+                    profile_data['visits'] = statistics.get('numberOfVisits', 0)
+                    profile_data['join_date'] = statistics.get('userJoinedDate', '')
+                    
+                    about = components.get('About', {}) or {}
+                    profile_data['description'] = about.get('description', '')
+                    
+                    roblox_badges = components.get('RobloxBadges', {}) or {}
+                    badge_list = roblox_badges.get('robloxBadgeList', [])
+                    
+                    excluded_badges = {'Homestead', 'Bricksmith'}
+                    valid_badges = []
+                    
+                    for badge in badge_list:
+                        badge_type = badge.get('type', {})
+                        badge_name = badge_type.get('value', '')
                         
-                        if badge_id:
-                            badge_awarded_url = f"https://badges.roblox.com/v1/users/{user_id}/badges/awarded-dates?badgeIds={badge_id}"
-                            async with session.get(badge_awarded_url) as badge_response:
-                                if badge_response.status == 200:
-                                    badge_awarded_result = await badge_response.json()
-                                    if badge_awarded_result and badge_awarded_result.get('data'):
-                                        awarded_date = badge_awarded_result['data'][0].get('awardedDate')
-                                        if awarded_date:
-                                            try:
-                                                dt = datetime.fromisoformat(awarded_date.replace('Z', '+00:00'))
-                                                return int(dt.timestamp())
-                                            except (ValueError, AttributeError):
-                                                pass
+                        if badge_name not in excluded_badges:
+                            valid_badges.append(badge)
+                    
+                    profile_data['last_online'] = None
+                    if valid_badges:
+                        latest_timestamp = 0
+                        for badge in valid_badges:
+                            created_time = badge.get('createdTime', {})
+                            seconds = created_time.get('seconds', 0)
+                            if seconds > latest_timestamp:
+                                latest_timestamp = seconds
+                        
+                        if latest_timestamp > 0:
+                            profile_data['last_online'] = latest_timestamp
+                    
+                    return profile_data
+                    
         except Exception as e:
-            print(f"Error fetching badge last online: {e}")
-        return None
+            print(f"Error fetching profile API data: {e}")
+        
+        return {
+            'visits': 0,
+            'friends_count': 0,
+            'followers_count': 0,
+            'followings_count': 0,
+            'is_verified': False,
+            'is_premium': False,
+            'description': '',
+            'join_date': '',
+            'last_online': None
+        }
+
+    def load_cached_timestamps():
+        try:
+            with open('lastonline.json', 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
+
+    def update_cached_timestamp(user_id, timestamp):
+        try:
+            cached_timestamps = load_cached_timestamps()
+            cached_timestamps[str(user_id)] = timestamp
+            with open('lastonline.json', 'w') as f:
+                json.dump(cached_timestamps, f, indent=2)
+        except Exception as e:
+            print(f"Error updating cached timestamp: {e}")
 
     try:
         response = requests.post(url, json=request_payload)
@@ -1778,6 +1981,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             value_value = 0
             rolimons_last_online = None
             badge_last_online = None
+            badge_place_id = None
             is_premium = False
             is_verified = False
             roblox_badges = []
@@ -1788,53 +1992,37 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
             followings_count = 0
             presence_type = 0
             current_place_id = None
+            profile_description = ""
             
             try:
                 connector = aiohttp.TCPConnector(family=socket.AF_INET)
                 async with aiohttp.ClientSession(connector=connector) as session:
-                    premium_check_url = f"https://premiumfeatures.roblox.com/v1/users/{UserID}/validate-membership"
+                    profile_data = await get_profile_api_data(session, UserID)
                     
-                    async def make_premium_request(session, url, **kwargs):
-                        try:
-                            with open('roblosecuritytoken.txt', 'r') as f:
-                                roblosecurity_token = f.read().strip()
-                            
-                            cookies = kwargs.get('cookies', {})
-                            cookies['.ROBLOSECURITY'] = roblosecurity_token
-                            kwargs['cookies'] = cookies
-                            
-                            async with session.get(url, **kwargs) as response:
-                                if response.status == 200:
-                                    response_text = await response.text()
-                                    return response_text.strip().lower() == 'true'
-                                return False
-                        except Exception:
-                            return False
+                    is_premium = profile_data['is_premium']
+                    is_verified = profile_data['is_verified']
+                    friends_count = profile_data['friends_count']
+                    followers_count = profile_data['followers_count']
+                    followings_count = profile_data['followings_count']
+                    total_visits = profile_data['visits']
+                    profile_description = profile_data['description']
                     
                     tasks = [
-                        make_premium_request(session, premium_check_url),
                         check_verification_items(session, UserID),
-                        get_user_games_visits(session, UserID),
                         check_inventory_visibility(session, UserID),
-                        get_friends_count(session, UserID),
-                        get_followers_count(session, UserID),
-                        get_followings_count(session, UserID),
                         check_presence(session, UserID),
                         get_last_online_from_badges(session, UserID)
                     ]
                     
                     results = await asyncio.gather(*tasks)
-                    is_premium = results[0]
-                    is_verified = results[1]
-                    total_visits = results[2]
-                    inventory_visibility = results[3]
-                    friends_count = results[4]
-                    followers_count = results[5]
-                    followings_count = results[6]
-                    presence_result = results[7]
+                    is_verified = results[0]
+                    inventory_visibility = results[1]
+                    presence_result = results[2]
                     presence_type = presence_result[0]
                     current_place_id = presence_result[1]
-                    badge_last_online = results[8]
+                    badge_result = results[3]
+                    badge_last_online = badge_result[0]
+                    badge_place_id = badge_result[1]
                     
                     badges_url = f"https://accountinformation.roblox.com/v1/users/{UserID}/roblox-badges"
                     async with session.get(badges_url) as response:
@@ -1851,7 +2039,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                                 value_value = rolimons_stats_data.get('value', 0) or 0
                                 rolimons_last_online = rolimons_stats_data.get('last_online')
             except Exception as e:
-                print(f"Error fetching Rolimons stats: {e}")
+                print(f"Error fetching data: {e}")
 
             rolimonsurl = f"https://rolimons.com/player/{UserID}"
 
@@ -1860,7 +2048,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 response = requests.get(url)
                 response.raise_for_status()
                 playerdata = response.json()
-                Description = playerdata["description"]
+                Description = profile_description or playerdata["description"]
                 Banned = playerdata["isBanned"]
                 user = playerdata["name"]
                 JoinDate = playerdata["created"]
@@ -1911,6 +2099,24 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
             if is_terminated:
                 Username = f":warning: [Banned] {Username}"
+                
+                try:
+                    connector = aiohttp.TCPConnector(family=socket.AF_INET)
+                    async with aiohttp.ClientSession(connector=connector) as session:
+                        terminated_tasks = [
+                            get_friends_count(session, UserID),
+                            get_followers_count(session, UserID),
+                            get_followings_count(session, UserID),
+                            get_user_games_visits(session, UserID)
+                        ]
+                        
+                        terminated_results = await asyncio.gather(*terminated_tasks)
+                        friends_count = terminated_results[0]
+                        followers_count = terminated_results[1]
+                        followings_count = terminated_results[2]
+                        total_visits = terminated_results[3]
+                except Exception as e:
+                    print(f"Error fetching terminated user data: {e}")
 
             url = f"https://api.ropro.io/getUserInfoTest.php?userid={UserID}"
             try:
@@ -1924,34 +2130,33 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
             profileurl = f"https://www.roblox.com/users/{UserID}/profile"
 
-            last_online_timestamp = None
-            last_online_source = "Unknown"
-            
+            cached_timestamps = load_cached_timestamps()
+            cached_timestamp = cached_timestamps.get(str(UserID))
+
+            if presence_type in [1, 2, 3]:
+                current_time = int(time.time())
+                update_cached_timestamp(UserID, current_time)
+                cached_timestamp = current_time
+
             timestamps = []
-            
-            if presence_type in [1, 2, 3]:  # User is currently online
-                current_time = int(datetime.now().timestamp())
-                timestamps.append((current_time, "Online Now"))
-            
+
+            if cached_timestamp:
+                timestamps.append((cached_timestamp, "Cached"))
+
             if badge_last_online:
                 timestamps.append((badge_last_online, "Badge Activity"))
-            
+
+            if profile_data['last_online']:
+                timestamps.append((profile_data['last_online'], "Profile API"))
+
             if rolimons_last_online:
                 timestamps.append((rolimons_last_online, "Rolimons Data"))
-            
+
+            formatted_last_online = "Unknown"
             if timestamps:
                 timestamps.sort(key=lambda x: x[0], reverse=True)
                 last_online_timestamp, last_online_source = timestamps[0]
-
-            formatted_last_online = "Unknown"
-            if last_online_timestamp:
-                try:
-                    if last_online_source == "Online Now":
-                        formatted_last_online = "**Online Now**"
-                    else:
-                        formatted_last_online = f"<t:{last_online_timestamp}:D>"
-                except (ValueError, AttributeError):
-                    formatted_last_online = "Unknown"
+                formatted_last_online = f"<t:{last_online_timestamp}:D>"
 
             badges = {
                 "Combat Initiation": "<:CombatInitiation:1430627878898368632>",
@@ -2306,145 +2511,6 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
         print(f"Error fetching item data for ID {item_id}: {e}")
         failedembed = discord.Embed(
             title=f":x: An error occurred while fetching data for item ID: {item_id}. Please try again later.",
-            color=discord.Color.red()
-        )
-        await interaction.edit_original_response(embed=failedembed)
-        return
-
-@bot.tree.command(name="groupinfo", description="Get information about a Roblox group")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def groupinfo(interaction: discord.Interaction, groupid: str):
-    await interaction.response.defer(thinking=True)
-    
-    print(f"Searching For group ID {groupid}")
-    thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')}  {interaction.user.mention} Searching For Group ID {groupid}!",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    await interaction.followup.send(embed=thinkingembed)
-
-    url = f"https://groups.roblox.com/v1/groups/{groupid}"
-    
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        group_data = response.json()
-
-        name = group_data.get("name", "Unknown Group")
-        description = group_data.get("description", "No description available")
-        member_count = group_data.get("memberCount", 0)
-        group_verified = group_data.get("hasVerifiedBadge", False)
-        public_entry = group_data.get("publicEntryAllowed", False)
-        owner_data = group_data.get("owner", {})
-        owner_id = owner_data.get("userId")
-        owner_name = owner_data.get("username", "Unknown")
-
-        if groupid == "5544706":
-            group_verified = True
-        
-        owner_verified = False
-        if owner_id:
-            try:
-                user_url = f"https://users.roblox.com/v1/users/{owner_id}"
-                user_response = requests.get(user_url)
-                user_response.raise_for_status()
-                user_data = user_response.json()
-                owner_verified = user_data.get("hasVerifiedBadge", False)
-                if user_data.get("id") == 124767284:
-                    owner_verified = True
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching owner data: {e}")
-
-        create_time = "Unknown"
-        update_time = "Unknown"
-        
-        try:
-            roseal_url = f"https://apis.roblox.com/cloud/v2/groups/{groupid}?_rosealRequest="
-            
-            try:
-                with open('roblosecuritytoken.txt', 'r') as f:
-                    roblosecurity_token = f.read().strip()
-            except FileNotFoundError:
-                roblosecurity_token = None
-            
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 RoSealExtension (RoSeal/chrome/2.1.24/prod)",
-                "authorization": "Bearer eyJhbGciOiJFUzI1NiIsImtpZCI6IlBOeHhpb2JFNE8zbGhQUUlUZG9QQ3FCTE81amh3aXZFS1pHOWhfTGJNOWMiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiIzMzI2MTk0MSIsImFpZCI6IjcwYTUyNTBmLWU4ZjYtNGYxMi05MTFjLWI3OWNmNzRjZGMwZCIsInNjb3BlIjoib3BlbmlkOnJlYWQgdXNlci5pbnZlbnRvcnktaXRlbTpyZWFkIiwianRpIjoiQVQuRHhoN2RkT2hieDE2Z2hINXpZUGciLCJuYmYiOjE3NjIwOTg5MDksImV4cCI6MTc2MjA5OTgwOSwiaWF0IjoxNzYyMDk4OTA5LCJpc3MiOiJodHRwczovL2FwaXMucm9ibG94LmNvbS9vYXV0aC8iLCJhdWQiOiI1NTUwMTc2OTUwMjA4NDk2MDEwIn0.5YhN0sVCkNc3sa3u7r3KvVZi0JYksoqYlq7faUrS0TLeLwJdMxWOEx-fP1eBZsy3kX96Dl7QjMOWsC8MX4GZBQ"
-            }
-            
-            if roblosecurity_token:
-                headers["Cookie"] = f".ROBLOSECURITY={roblosecurity_token}"
-            
-            roseal_response = requests.get(roseal_url, headers=headers)
-            if roseal_response.status_code == 200:
-                roseal_data = roseal_response.json()
-                create_time_str = roseal_data.get("createTime")
-                update_time_str = roseal_data.get("updateTime")
-                
-                if create_time_str:
-                    create_time = isotodiscordtimestamp(create_time_str, "D") if create_time_str != 'Unknown' else "Unknown"
-                if update_time_str:
-                    update_time = isotodiscordtimestamp(update_time_str, "D") if update_time_str != 'Unknown' else "Unknown"
-                    
-        except Exception as e:
-            print(f"Error fetching RoSeal data: {e}")
-
-        group_display = name
-        if group_verified:
-            group_display += " <:RobloxVerified:1416951927513677874>"
-
-        owner_display = owner_name
-        if owner_verified:
-            owner_display += " <:RobloxVerified:1416951927513677874>"
-
-        entry_status = "Public" if public_entry else "Private"
-
-        thumbnail_url = f"https://thumbnails.roblox.com/v1/groups/icons?groupIds={groupid}&size=150x150&format=Png&isCircular=false"
-        try:
-            thumb_response = requests.get(thumbnail_url)
-            thumb_response.raise_for_status()
-            thumb_data = thumb_response.json()
-            if thumb_data and thumb_data.get("data") and len(thumb_data["data"]) > 0:
-                image_url = thumb_data["data"][0].get("imageUrl")
-            else:
-                image_url = None
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching group thumbnail: {e}")
-            image_url = None
-
-        embed = discord.Embed(
-            title=group_display,
-            url=f"https://roblox.com/communities/{groupid}",
-            description=description,
-            color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-        )
-
-        if image_url:
-            embed.set_thumbnail(url=image_url)
-
-        embed.add_field(name="Group ID", value=groupid, inline=True)
-        embed.add_field(name="Members", value=f"{member_count:,}", inline=True)
-        embed.add_field(name="Entry", value=entry_status, inline=True)
-        embed.add_field(name="Owner", value=owner_display, inline=True)
-        embed.add_field(name="Created", value=create_time, inline=True)
-        embed.add_field(name="Updated", value=update_time, inline=True)
-
-        view = discord.ui.View()
-        view.add_item(discord.ui.Button(
-            label="View Group",
-            style=discord.ButtonStyle.link,
-            emoji="<:RobloxLogo:1416951004607418398>",
-            url=f"https://www.roblox.com/communities/{groupid}"
-        ))
-
-        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=embed, view=view)
-
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching group data for ID {groupid}: {e}")
-        failedembed = discord.Embed(
-            title=f":x: An error occurred while fetching data for group ID: {groupid}. Please try again later.",
             color=discord.Color.red()
         )
         await interaction.edit_original_response(embed=failedembed)
@@ -2912,356 +2978,6 @@ async def countingleaderboard(interaction: discord.Interaction):
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
     
     await interaction.response.send_message(embed=embed)
-
-class BadgeService:
-    def __init__(self, session: aiohttp.ClientSession):
-        self.session = session
-    
-    async def get_user_id(self, user_input: str) -> Optional[str]:
-        if user_input.isdigit():
-            return user_input
-        return await self._get_id_from_username(user_input)
-    
-    async def _get_id_from_username(self, username: str) -> Optional[str]:
-        url = "https://users.roblox.com/v1/usernames/users"
-        try:
-            async with self.session.post(url, json={"usernames": [username]}) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if data.get("data") and len(data["data"]) > 0:
-                        return str(data["data"][0]["id"])
-        except Exception:
-            pass
-        return None
-    
-    async def get_username(self, user_id: str) -> Optional[str]:
-        url = f"https://users.roblox.com/v1/users/{user_id}"
-        try:
-            async with self.session.get(url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("name")
-        except Exception:
-            pass
-        return None
-    
-    async def get_user_badges(self, user_id: str, limit: int = 10) -> tuple[list, int]:
-        badges_url = f"https://badges.roblox.com/v1/users/{user_id}/badges?sortOrder=Desc&limit={limit}"
-        
-        async with self.session.get(badges_url) as response:
-            if response.status != 200:
-                return [], response.status
-            
-            data = await response.json()
-            return data.get('data', []), response.status
-    
-    async def get_awarded_dates(self, user_id: str, badge_ids: list) -> Dict[int, str]:
-        if not badge_ids:
-            return {}
-            
-        awarded_dates_url = f"https://badges.roblox.com/v1/users/{user_id}/badges/awarded-dates?badgeIds={','.join(map(str, badge_ids))}"
-        
-        try:
-            async with self.session.get(awarded_dates_url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return {item['badgeId']: item.get('awardedDate') for item in data.get('data', [])}
-        except Exception:
-            pass
-        return {}
-    
-    async def get_badge_thumbnail(self, badge: Dict[str, Any]) -> Optional[str]:
-        icon_image_id = badge.get('iconImageId') or badge.get('displayIconImageId')
-        if not icon_image_id:
-            return None
-            
-        icon_url = f"https://thumbnails.roblox.com/v1/assets?assetIds={icon_image_id}&size=150x150&format=Png&isCircular=false"
-        
-        try:
-            async with self.session.get(icon_url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if data.get('data') and len(data['data']) > 0:
-                        return data['data'][0]['imageUrl']
-        except Exception:
-            pass
-        return None
-
-class BadgeFormatter:
-    @staticmethod
-    def parse_iso_timestamp(timestamp_str: Optional[str]) -> Optional[int]:
-        if not timestamp_str:
-            return None
-            
-        try:
-            timestamp_str = timestamp_str.split('.')[0]
-            
-            if timestamp_str.endswith('Z'):
-                dt = datetime.fromisoformat(timestamp_str[:-1]).replace(
-                    tzinfo=datetime.timezone.utc
-                )
-            else:
-                if '+' not in timestamp_str and 'Z' not in timestamp_str:
-                    timestamp_str += '+00:00'
-                dt = datetime.fromisoformat(timestamp_str)
-            
-            return int(dt.timestamp())
-        except (ValueError, AttributeError, TypeError):
-            return None
-    
-    @staticmethod
-    def format_creator_info(creator: Dict[str, Any]) -> str:
-        creator_name = creator.get('name', 'Unknown')
-        creator_type = creator.get('type', 'User')
-        creator_id = creator.get('id')
-        
-        if not creator_id:
-            return creator_name
-            
-        if creator_type.lower() == 'user':
-            return f"[{creator_name}](https://www.roblox.com/users/{creator_id}/profile)"
-        else:
-            return f"[{creator_name}](https://www.roblox.com/groups/{creator_id}/)"
-    
-    @staticmethod
-    def format_awarder_info(awarder: Dict[str, Any]) -> str:
-        awarder_type = awarder.get('type', 'Unknown')
-        awarder_id = awarder.get('id')
-        
-        if not awarder_id:
-            return "Unknown"
-            
-        if awarder_type.lower() == 'place':
-            return f"[Place #{awarder_id}](https://www.roblox.com/games/{awarder_id}/)"
-        else:
-            return f"{awarder_type} #{awarder_id}"
-
-class BadgesView(discord.ui.View):
-    def __init__(self, badges: list, username: str, user_id: str, requester: discord.User, 
-                 start_time: float, badge_service: BadgeService):
-        super().__init__(timeout=120)
-        self.badges = badges
-        self.current_page = 0
-        self.username = username
-        self.user_id = user_id
-        self.requester = requester
-        self.start_time = start_time
-        self.badge_service = badge_service
-        self.message = None
-        self.thumbnail_cache = {}
-        self.update_buttons()
-    
-    async def preload_thumbnails(self):
-        for i, badge in enumerate(self.badges):
-            thumbnail_url = await self.badge_service.get_badge_thumbnail(badge)
-            if thumbnail_url:
-                self.thumbnail_cache[i] = thumbnail_url
-    
-    async def create_embed(self) -> discord.Embed:
-        badge = self.badges[self.current_page]
-        
-        embed = discord.Embed(
-            title=f"{self.username}'s Recent Badges",
-            color=discord.Color.blue(),
-            timestamp=datetime.now(),
-            url=f"https://www.roblox.com/users/{self.user_id}/badges"
-        )
-        
-        thumbnail_url = self.thumbnail_cache.get(self.current_page)
-        if thumbnail_url:
-            embed.set_thumbnail(url=thumbnail_url)
-        
-        badge_name = badge.get('displayName') or badge.get('name', 'Unknown Badge')
-        badge_description = badge.get('displayDescription') or badge.get('description', 'No description')
-        badge_id = badge.get('id', 'N/A')
-        
-        embed.add_field(name="Badge Name", value=badge_name, inline=False)
-        embed.add_field(name="Description", value=badge_description or "No description", inline=False)
-        embed.add_field(name="Badge ID", value=f"`{badge_id}`", inline=True)
-        
-        awarded_date = badge.get('awardedDate')
-        if awarded_date:
-            unix_timestamp = BadgeFormatter.parse_iso_timestamp(awarded_date)
-            if unix_timestamp:
-                embed.add_field(
-                    name="Awarded Date", 
-                    value=f"<t:{unix_timestamp}:f> (<t:{unix_timestamp}:R>)", 
-                    inline=False
-                )
-            else:
-                embed.add_field(name="Awarded Date", value=awarded_date, inline=False)
-        
-        creator = badge.get('creator', {})
-        creator_text = BadgeFormatter.format_creator_info(creator)
-        embed.add_field(name="Creator", value=creator_text, inline=True)
-        
-        awarder = badge.get('awarder', {})
-        awarder_text = BadgeFormatter.format_awarder_info(awarder)
-        embed.add_field(name="Awarded By", value=awarder_text, inline=True)
-        
-        stats = badge.get('statistics', {})
-        awarded_count = stats.get('awardedCount', 0)
-        win_rate = stats.get('winRatePercentage', 0)
-        
-        embed.add_field(name="Times Awarded", value=f"{awarded_count:,}", inline=True)
-        embed.add_field(name="Win Rate", value=f"{win_rate}%", inline=True)
-        
-        elapsed_time = asyncio.get_event_loop().time() - self.start_time
-        embed.set_footer(
-            text=f"Badge {self.current_page + 1}/{len(self.badges)} • Load time: {elapsed_time:.2f}s • Requested by {self.requester.display_name}"
-        )
-        
-        return embed
-        
-    def update_buttons(self):
-        self.clear_items()
-        
-        if self.current_page > 0:
-            previous_btn = discord.ui.Button(style=discord.ButtonStyle.primary, emoji="⬅️", custom_id="previous")
-            previous_btn.callback = self.previous_callback
-            self.add_item(previous_btn)
-            
-        if self.current_page < len(self.badges) - 1:
-            next_btn = discord.ui.Button(style=discord.ButtonStyle.primary, emoji="➡️", custom_id="next")
-            next_btn.callback = self.next_callback
-            self.add_item(next_btn)
-        
-        current_badge = self.badges[self.current_page]
-        badge_id = current_badge.get('id')
-        if badge_id:
-            link_btn = discord.ui.Button(
-                style=discord.ButtonStyle.link,
-                label="View Badge",
-                url=f"https://www.roblox.com/badges/{badge_id}"
-            )
-            self.add_item(link_btn)
-    
-    async def _handle_navigation(self, interaction: discord.Interaction, direction: int):
-        if interaction.user != self.requester:
-            await interaction.response.send_message("You can't interact with this command!", ephemeral=True)
-            return
-        
-        self.current_page += direction
-        embed = await self.create_embed()
-        self.update_buttons()
-        await interaction.response.edit_message(embed=embed, view=self)
-    
-    async def previous_callback(self, interaction: discord.Interaction):
-        await self._handle_navigation(interaction, -1)
-    
-    async def next_callback(self, interaction: discord.Interaction):
-        await self._handle_navigation(interaction, 1)
-    
-    async def on_timeout(self):
-        for item in self.children:
-            if isinstance(item, discord.ui.Button) and item.style != discord.ButtonStyle.link:
-                item.disabled = True
-        try:
-            await self.message.edit(view=self)
-        except Exception:
-            pass
-
-async def send_error_embed(interaction: discord.Interaction, title: str, description: str):
-    embed = discord.Embed(
-        title=f"❌ {title}",
-        description=description,
-        color=discord.Color.red(),
-        timestamp=datetime.now()
-    )
-    await interaction.followup.send(embed=embed)
-
-@bot.tree.command(name="recentbadges", description="Get a user's most recently earned Roblox badges")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@app_commands.describe(user_input="Roblox username or user ID")
-async def recent_badges(interaction: discord.Interaction, user_input: str):
-    await interaction.response.defer()
-    
-    thinkingembed = discord.Embed(
-        title=f"<a:loading:1416950730094542881> {interaction.user.mention} Searching For {user_input}'s Recent Badges!",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    await interaction.followup.send(embed=thinkingembed)
-    
-    start_time = asyncio.get_event_loop().time()
-    
-    connector = aiohttp.TCPConnector(family=socket.AF_INET)
-    async with aiohttp.ClientSession(connector=connector) as session:
-        badge_service = BadgeService(session)
-        
-        try:
-            user_id = await badge_service.get_user_id(user_input)
-            if not user_id:
-                await send_error_embed(
-                    interaction, 
-                    "User Not Found",
-                    f"Could not find a Roblox user with the name or ID `{user_input}`"
-                )
-                return
-            
-            username = await badge_service.get_username(user_id)
-            if not username:
-                await send_error_embed(
-                    interaction, 
-                    "User Not Found",
-                    f"Could not find a Roblox user with ID `{user_id}`"
-                )
-                return
-            
-            badges, status_code = await badge_service.get_user_badges(user_id)
-            
-            if status_code == 403:
-                embed = discord.Embed(
-                    title=f"{username}'s Recent Badges",
-                    description="❌ This user's inventory is private. Badges cannot be viewed.",
-                    color=discord.Color.orange(),
-                    timestamp=interaction.created_at,
-                    url=f"https://www.roblox.com/users/{user_id}/profile"
-                )
-                embed.set_footer(text=f"Requested by {interaction.user.display_name}")
-                await interaction.edit_original_response(embed=embed)
-                return
-            elif status_code != 200:
-                await send_error_embed(
-                    interaction,
-                    "API Error",
-                    f"Failed to fetch badges (Status: {status_code})"
-                )
-                return
-            
-            if not badges:
-                embed = discord.Embed(
-                    title=f"{username}'s Recent Badges",
-                    description="This user has no badges.",
-                    color=discord.Color.blue(),
-                    timestamp=interaction.created_at,
-                    url=f"https://www.roblox.com/users/{user_id}/profile"
-                )
-                elapsed_time = asyncio.get_event_loop().time() - start_time
-                embed.set_footer(text=f"Load time: {elapsed_time:.2f}s • Requested by {interaction.user.display_name}")
-                await interaction.edit_original_response(embed=embed)
-                return
-            
-            badge_ids = [badge['id'] for badge in badges]
-            awarded_dates = await badge_service.get_awarded_dates(user_id, badge_ids)
-            
-            for badge in badges:
-                badge_id = badge['id']
-                badge['awardedDate'] = awarded_dates.get(badge_id)
-            
-            view = BadgesView(badges, username, user_id, interaction.user, start_time, badge_service)
-            await view.preload_thumbnails()
-            embed = await view.create_embed()
-            view.update_buttons()
-            message = await interaction.edit_original_response(embed=embed, view=view)
-            view.message = message
-            
-        except asyncio.TimeoutError:
-            await send_error_embed(interaction, "Timeout Error", "The request timed out while fetching badge data.")
-        except aiohttp.ClientError as e:
-            await send_error_embed(interaction, "Network Error", f"Failed to connect to Roblox API: {str(e)}")
-        except Exception as e:
-            await send_error_embed(interaction, "Unexpected Error", f"An unexpected error occurred: {str(e)}")
             
 @bot.tree.command(name="outfits", description="Get all outfits for a Roblox user")
 @app_commands.allowed_installs(guilds=True, users=True)
@@ -3520,32 +3236,57 @@ async def badges(interaction: discord.Interaction, username: str, badge_id: str 
     )
     await interaction.followup.send(embed=thinkingembed)
 
-    user_url = "https://users.roblox.com/v1/usernames/users"
-    request_payload = {
-        "usernames": [username],
-        "excludeBannedUsers": False
-    }
+    async def get_user_id():
+        user_url = "https://users.roblox.com/v1/usernames/users"
+        request_payload = {"usernames": [username], "excludeBannedUsers": False}
+        async with aiohttp.ClientSession() as session:
+            async with session.post(user_url, json=request_payload) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data, None
+                return None, f"Failed to fetch user data (Status: {response.status})"
+
+    async def get_user_badges(user_id):
+        user_badges_url = f"https://badges.roblox.com/v1/users/{user_id}/badges?limit=100&sortOrder=Asc"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(user_badges_url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data, None
+                return None, f"Failed to fetch badges (Status: {response.status})"
+
+    async def get_badge_info(badge_id):
+        badge_info_url = f"https://badges.roblox.com/v1/badges/{badge_id}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(badge_info_url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data, None
+                return None, f"Failed to fetch badge info (Status: {response.status})"
+
+    async def get_awarded_date(user_id, badge_id):
+        awarded_date_url = f"https://badges.roblox.com/v1/users/{user_id}/badges/awarded-dates?badgeIds={badge_id}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(awarded_date_url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data, None
+                return None, f"Failed to fetch awarded date (Status: {response.status})"
 
     async def get_badge_thumbnail(badge_id):
         thumbnail_url = f"https://thumbnails.roblox.com/v1/badges/icons?badgeIds={badge_id}&size=150x150&format=Png"
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(thumbnail_url) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        if data.get('data') and len(data['data']) > 0:
-                            return data['data'][0]['imageUrl']
-        except Exception:
-            pass
+        async with aiohttp.ClientSession() as session:
+            async with session.get(thumbnail_url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data.get('data') and len(data['data']) > 0:
+                        return data['data'][0]['imageUrl']
         return None
 
     try:
-        response = requests.post(user_url, json=request_payload)
-        response.raise_for_status()
-        user_data = response.json()
+        user_data, error = await get_user_id()
         
-        if not user_data.get("data") or len(user_data["data"]) == 0:
+        if error or not user_data.get("data") or len(user_data["data"]) == 0:
             errorembed = discord.Embed(
                 title=f":x: User Not Found :x:",
                 description=f"Could not find a Roblox user with the username `{username}`",
@@ -3557,24 +3298,21 @@ async def badges(interaction: discord.Interaction, username: str, badge_id: str 
             
         user_info = user_data["data"][0]
         user_id = user_info["id"]
-        display_name = user_info["displayName"]
         roblox_username = user_info["name"]
         
-        user_badges_url = f"https://badges.roblox.com/v1/users/{user_id}/badges?limit=100&sortOrder=Asc"
-        user_badges_response = requests.get(user_badges_url)
+        badges_data, error = await get_user_badges(user_id)
         
-        if user_badges_response.status_code != 200:
+        if error:
             errorembed = discord.Embed(
                 title=f":x: Error Fetching Badges :x:",
-                description=f"Failed to fetch badges for user `{username}` (Status: {user_badges_response.status_code})",
+                description=f"Failed to fetch badges for user `{username}`",
                 color=discord.Color.red()
             )
             errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=errorembed)
             return
         
-        user_badges_data = user_badges_response.json()
-        user_badges = user_badges_data.get("data", [])
+        user_badges = badges_data.get("data", [])
         
         if not user_badges:
             errorembed = discord.Embed(
@@ -3586,182 +3324,294 @@ async def badges(interaction: discord.Interaction, username: str, badge_id: str 
             await interaction.edit_original_response(embed=errorembed)
             return
         
-        if not badge_id:
-            embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+        if badge_id:
+            target_badge = None
+            for badge in user_badges:
+                if str(badge.get("id")) == badge_id:
+                    target_badge = badge
+                    break
             
-            embed = discord.Embed(
-                title=f"{username}'s Badges",
-                description=f"Found {len(user_badges)} badges. Select one from the dropdown below to view details.",
-                color=embed_color
-            )
+            if not target_badge:
+                errorembed = discord.Embed(
+                    title=f":x: Badge Not Found :x:",
+                    description=f"User `{username}` does not have badge ID `{badge_id}`",
+                    color=discord.Color.red()
+                )
+                errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                await interaction.edit_original_response(embed=errorembed)
+                return
             
-            class BadgeSelector(discord.ui.Select):
-                def __init__(self, badges, user_id, username, display_name, requester_id):
-                    options = []
-                    for badge in badges[:25]:
-                        badge_id = badge.get('id')
-                        badge_name = badge.get('displayName') or badge.get('name', 'Unknown Badge')
-                        options.append(discord.SelectOption(
-                            label=badge_name[:100],
-                            description=f"ID: {badge_id}",
-                            value=str(badge_id)
-                        ))
-                    super().__init__(placeholder="Select a badge to view details...", options=options)
-                    self.badges = badges
-                    self.user_id = user_id
-                    self.username = username
-                    self.display_name = display_name
-                    self.requester_id = requester_id
-                
-                async def callback(self, interaction: discord.Interaction):
-                    if interaction.user.id != self.requester_id:
-                        await interaction.response.send_message("This is not your command!", ephemeral=True)
-                        return
-                    
-                    selected_badge_id = self.values[0]
-                    await interaction.response.defer()
-                    
-                    badge_info_url = f"https://badges.roblox.com/v1/badges/{selected_badge_id}"
-                    badge_info_response = requests.get(badge_info_url)
-                    
-                    if badge_info_response.status_code != 200:
-                        await interaction.followup.send("Failed to fetch badge information.", ephemeral=True)
-                        return
-                    
-                    badge_info = badge_info_response.json()
-                    
-                    awarded_date_url = f"https://badges.roblox.com/v1/users/{self.user_id}/badges/awarded-dates?badgeIds={selected_badge_id}"
-                    awarded_date_response = requests.get(awarded_date_url)
-                    
-                    awarded_date = "Unknown"
-                    if awarded_date_response.status_code == 200:
-                        awarded_data = awarded_date_response.json()
-                        if awarded_data.get("data") and len(awarded_data["data"]) > 0:
-                            awarded_date_str = awarded_data["data"][0].get("awardedDate")
-                            if awarded_date_str:
-                                awarded_timestamp = isotodiscordtimestamp(awarded_date_str, "F")
-                                awarded_date = awarded_timestamp if awarded_timestamp else awarded_date_str
-                    
-                    badge_name = badge_info.get("displayName") or badge_info.get("name", "Unknown Badge")
-                    badge_description = badge_info.get("displayDescription") or badge_info.get("description", "No description available")
-                    badge_enabled = badge_info.get("enabled", False)
-                    
-                    created_date = badge_info.get("created", "Unknown")
-                    updated_date = badge_info.get("updated", "Unknown")
-                    
-                    created_timestamp = isotodiscordtimestamp(created_date, "F") if created_date != "Unknown" else "Unknown"
-                    updated_timestamp = isotodiscordtimestamp(updated_date, "F") if updated_date != "Unknown" else "Unknown"
-                    
-                    badge_thumbnail = await get_badge_thumbnail(selected_badge_id)
-                    
-                    embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-                    
-                    new_embed = discord.Embed(
-                        title=f"✅ {self.username} has this badge!",
-                        description=f"**{badge_name}**\n{badge_description}",
-                        color=embed_color
-                    )
-                    
-                    if badge_thumbnail:
-                        new_embed.set_thumbnail(url=badge_thumbnail)
-                    
-                    new_embed.add_field(
-                        name="Badge Information", 
-                        value=f"**Badge ID:** `{selected_badge_id}`\n**Status:** {'Enabled' if badge_enabled else 'Disabled'}", 
-                        inline=True
-                    )
-                    
-                    new_embed.add_field(
-                        name="Awarded", 
-                        value=f"**Date:** {awarded_date}", 
-                        inline=True
-                    )
-                    
-                    new_embed.add_field(
-                        name="Created", 
-                        value=f"**Date:** {created_timestamp}", 
-                        inline=True
-                    )
-                    
-                    new_view = discord.ui.View()
-                    
-                    new_view.add_item(discord.ui.Button(
-                        label="View Badge",
-                        style=discord.ButtonStyle.link,
-                        emoji="<:RobloxLogo:1416951004607418398>",
-                        url=f"https://www.roblox.com/badges/{selected_badge_id}"
-                    ))
-                    
-                    new_view.add_item(BadgeSelector(self.badges, self.user_id, self.username, self.display_name, self.requester_id))
-                    
-                    await interaction.edit_original_response(embed=new_embed, view=new_view)
+            badge_info_task = asyncio.create_task(get_badge_info(badge_id))
+            awarded_date_task = asyncio.create_task(get_awarded_date(user_id, badge_id))
+            thumbnail_task = asyncio.create_task(get_badge_thumbnail(badge_id))
             
-            view = discord.ui.View()
-            view.add_item(BadgeSelector(user_badges, user_id, roblox_username, display_name, interaction.user.id))
+            badge_info, badge_error = await badge_info_task
+            awarded_data, awarded_error = await awarded_date_task
+            badge_thumbnail = await thumbnail_task
             
-            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=embed, view=view)
-            return
-        
-        target_badge = None
-        for badge in user_badges:
-            if str(badge.get("id")) == badge_id:
-                target_badge = badge
-                break
-        
-        if not target_badge:
-            errorembed = discord.Embed(
-                title=f":x: Badge Not Found :x:",
-                description=f"User `{username}` does not have badge ID `{badge_id}`",
-                color=discord.Color.red()
-            )
-            errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=errorembed)
-            return
-        
-        badge_info_url = f"https://badges.roblox.com/v1/badges/{badge_id}"
-        badge_info_response = requests.get(badge_info_url)
-        
-        if badge_info_response.status_code != 200:
-            errorembed = discord.Embed(
-                title=f":x: Error Fetching Badge Info :x:",
-                description=f"Failed to fetch detailed information for badge ID `{badge_id}`",
-                color=discord.Color.red()
-            )
-            errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=errorembed)
-            return
-        
-        badge_info = badge_info_response.json()
-        
-        awarded_date_url = f"https://badges.roblox.com/v1/users/{user_id}/badges/awarded-dates?badgeIds={badge_id}"
-        awarded_date_response = requests.get(awarded_date_url)
-        
-        awarded_date = "Unknown"
-        if awarded_date_response.status_code == 200:
-            awarded_data = awarded_date_response.json()
-            if awarded_data.get("data") and len(awarded_data["data"]) > 0:
+            if badge_error:
+                errorembed = discord.Embed(
+                    title=f":x: Error Fetching Badge Info :x:",
+                    description=f"Failed to fetch detailed information for badge ID `{badge_id}`",
+                    color=discord.Color.red()
+                )
+                errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                await interaction.edit_original_response(embed=errorembed)
+                return
+            
+            awarded_date = "Unknown"
+            if awarded_data and awarded_data.get("data") and len(awarded_data["data"]) > 0:
                 awarded_date_str = awarded_data["data"][0].get("awardedDate")
                 if awarded_date_str:
                     awarded_timestamp = isotodiscordtimestamp(awarded_date_str, "F")
                     awarded_date = awarded_timestamp if awarded_timestamp else awarded_date_str
+            
+            badge_name = badge_info.get("displayName") or badge_info.get("name", "Unknown Badge")
+            badge_description = badge_info.get("displayDescription") or badge_info.get("description", "No description available")
+            badge_enabled = badge_info.get("enabled", False)
+            
+            created_date = badge_info.get("created", "Unknown")
+            created_timestamp = isotodiscordtimestamp(created_date, "F") if created_date != "Unknown" else "Unknown"
+            
+            embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+            
+            embed = discord.Embed(
+                title=f"✅ {username} has this badge!",
+                description=f"**{badge_name}**\n{badge_description}",
+                color=embed_color
+            )
+            
+            if badge_thumbnail:
+                embed.set_thumbnail(url=badge_thumbnail)
+            
+            embed.add_field(name="Badge Information", value=f"**ID:** `{badge_id}`\n**Status:** {'Enabled' if badge_enabled else 'Disabled'}", inline=True)
+            embed.add_field(name="Awarded", value=f"**Date:** {awarded_date}", inline=True)
+            embed.add_field(name="Created", value=f"**Date:** {created_timestamp}", inline=True)
+            
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="View Badge",
+                style=discord.ButtonStyle.link,
+                emoji="<:RobloxLogo:1416951004607418398>",
+                url=f"https://www.roblox.com/badges/{badge_id}"
+            ))
+            
+            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=embed, view=view)
+            return
+
+        first_badge = user_badges[0]
+        first_badge_id = str(first_badge.get("id"))
+        
+        badge_info_task = asyncio.create_task(get_badge_info(first_badge_id))
+        awarded_date_task = asyncio.create_task(get_awarded_date(user_id, first_badge_id))
+        thumbnail_task = asyncio.create_task(get_badge_thumbnail(first_badge_id))
+        
+        badge_info, badge_error = await badge_info_task
+        awarded_data, awarded_error = await awarded_date_task
+        badge_thumbnail = await thumbnail_task
+        
+        if badge_error:
+            errorembed = discord.Embed(
+                title=f":x: Error Fetching Badge Info :x:",
+                description=f"Failed to fetch detailed information for badge ID `{first_badge_id}`",
+                color=discord.Color.red()
+            )
+            errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=errorembed)
+            return
+        
+        awarded_date = "Unknown"
+        if awarded_data and awarded_data.get("data") and len(awarded_data["data"]) > 0:
+            awarded_date_str = awarded_data["data"][0].get("awardedDate")
+            if awarded_date_str:
+                awarded_timestamp = isotodiscordtimestamp(awarded_date_str, "F")
+                awarded_date = awarded_timestamp if awarded_timestamp else awarded_date_str
         
         badge_name = badge_info.get("displayName") or badge_info.get("name", "Unknown Badge")
         badge_description = badge_info.get("displayDescription") or badge_info.get("description", "No description available")
         badge_enabled = badge_info.get("enabled", False)
         
         created_date = badge_info.get("created", "Unknown")
-        updated_date = badge_info.get("updated", "Unknown")
-        
         created_timestamp = isotodiscordtimestamp(created_date, "F") if created_date != "Unknown" else "Unknown"
-        updated_timestamp = isotodiscordtimestamp(updated_date, "F") if updated_date != "Unknown" else "Unknown"
-        
-        badge_thumbnail = await get_badge_thumbnail(badge_id)
         
         embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
         
+        class BadgePaginator(discord.ui.View):
+            def __init__(self, badges, user_id, username, requester_id, current_index=0):
+                super().__init__(timeout=60)
+                self.badges = badges
+                self.user_id = user_id
+                self.username = username
+                self.requester_id = requester_id
+                self.current_index = current_index
+            
+            async def update_badge_display(self, interaction: discord.Interaction):
+                badge = self.badges[self.current_index]
+                badge_id = str(badge.get("id"))
+                
+                badge_info_task = asyncio.create_task(get_badge_info(badge_id))
+                awarded_date_task = asyncio.create_task(get_awarded_date(self.user_id, badge_id))
+                thumbnail_task = asyncio.create_task(get_badge_thumbnail(badge_id))
+                
+                badge_info, badge_error = await badge_info_task
+                awarded_data, awarded_error = await awarded_date_task
+                badge_thumbnail = await thumbnail_task
+                
+                if badge_error:
+                    await interaction.response.send_message("Failed to fetch badge information.", ephemeral=True)
+                    return
+                
+                awarded_date = "Unknown"
+                if awarded_data and awarded_data.get("data") and len(awarded_data["data"]) > 0:
+                    awarded_date_str = awarded_data["data"][0].get("awardedDate")
+                    if awarded_date_str:
+                        awarded_timestamp = isotodiscordtimestamp(awarded_date_str, "F")
+                        awarded_date = awarded_timestamp if awarded_timestamp else awarded_date_str
+                
+                badge_name = badge_info.get("displayName") or badge_info.get("name", "Unknown Badge")
+                badge_description = badge_info.get("displayDescription") or badge_info.get("description", "No description available")
+                badge_enabled = badge_info.get("enabled", False)
+                
+                created_date = badge_info.get("created", "Unknown")
+                created_timestamp = isotodiscordtimestamp(created_date, "F") if created_date != "Unknown" else "Unknown"
+                
+                embed_color = embedDB.get(f"{self.requester_id}") if embedDB.get(f"{self.requester_id}") else discord.Color.blue()
+                
+                embed = discord.Embed(
+                    title=f"✅ {self.username}'s Badges",
+                    description=f"**{badge_name}**\n{badge_description}",
+                    color=embed_color
+                )
+                
+                if badge_thumbnail:
+                    embed.set_thumbnail(url=badge_thumbnail)
+                
+                embed.add_field(name="Badge Information", value=f"**ID:** `{badge_id}`\n**Status:** {'Enabled' if badge_enabled else 'Disabled'}", inline=True)
+                embed.add_field(name="Awarded", value=f"**Date:** {awarded_date}", inline=True)
+                embed.add_field(name="Created", value=f"**Date:** {created_timestamp}", inline=True)
+                embed.set_footer(text=f"Badge {self.current_index + 1}/{len(self.badges)} | Requested By {interaction.user.name} | {MainURL}")
+                
+                view = BadgePaginator(self.badges, self.user_id, self.username, self.requester_id, self.current_index)
+                await interaction.response.edit_message(embed=embed, view=view)
+            
+            @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.secondary)
+            async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if interaction.user.id != self.requester_id:
+                    await interaction.response.send_message("This is not your command!", ephemeral=True)
+                    return
+                
+                self.current_index = (self.current_index - 1) % len(self.badges)
+                await self.update_badge_display(interaction)
+            
+            @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.secondary)
+            async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if interaction.user.id != self.requester_id:
+                    await interaction.response.send_message("This is not your command!", ephemeral=True)
+                    return
+                
+                self.current_index = (self.current_index + 1) % len(self.badges)
+                await self.update_badge_display(interaction)
+            
+            @discord.ui.button(emoji="🔍", style=discord.ButtonStyle.primary)
+            async def search_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if interaction.user.id != self.requester_id:
+                    await interaction.response.send_message("This is not your command!", ephemeral=True)
+                    return
+                
+                modal = BadgeSearchModal(self.badges, self.user_id, self.username, self.requester_id, self.current_index)
+                await interaction.response.send_modal(modal)
+        
+        class BadgeSearchModal(discord.ui.Modal, title="Search Badge by ID"):
+            def __init__(self, badges, user_id, username, requester_id, current_index):
+                super().__init__()
+                self.badges = badges
+                self.user_id = user_id
+                self.username = username
+                self.requester_id = requester_id
+                self.current_index = current_index
+            
+            badge_id_input = discord.ui.TextInput(
+                label="Badge ID",
+                placeholder="Enter the badge ID to search...",
+                required=True,
+                max_length=20
+            )
+            
+            async def on_submit(self, interaction: discord.Interaction):
+                badge_id = self.badge_id_input.value.strip()
+                found_index = -1
+                
+                for i, badge in enumerate(self.badges):
+                    if str(badge.get("id")) == badge_id:
+                        found_index = i
+                        break
+                
+                if found_index == -1:
+                    await interaction.response.defer()
+                    errorembed = discord.Embed(
+                        title=f":x: Badge Not Found :x:",
+                        description=f"User `{self.username}` does not have badge ID `{badge_id}`",
+                        color=discord.Color.red()
+                    )
+                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+                    
+                    original_view = BadgePaginator(self.badges, self.user_id, self.username, self.requester_id, self.current_index)
+                    await interaction.edit_original_response(embed=errorembed, view=original_view)
+                    return
+                
+                await interaction.response.defer()
+                
+                badge = self.badges[found_index]
+                badge_id = str(badge.get("id"))
+                
+                badge_info_task = asyncio.create_task(get_badge_info(badge_id))
+                awarded_date_task = asyncio.create_task(get_awarded_date(self.user_id, badge_id))
+                thumbnail_task = asyncio.create_task(get_badge_thumbnail(badge_id))
+                
+                badge_info, badge_error = await badge_info_task
+                awarded_data, awarded_error = await awarded_date_task
+                badge_thumbnail = await thumbnail_task
+                
+                if badge_error:
+                    await interaction.followup.send("Failed to fetch badge information.", ephemeral=True)
+                    return
+                
+                awarded_date = "Unknown"
+                if awarded_data and awarded_data.get("data") and len(awarded_data["data"]) > 0:
+                    awarded_date_str = awarded_data["data"][0].get("awardedDate")
+                    if awarded_date_str:
+                        awarded_timestamp = isotodiscordtimestamp(awarded_date_str, "F")
+                        awarded_date = awarded_timestamp if awarded_timestamp else awarded_date_str
+                
+                badge_name = badge_info.get("displayName") or badge_info.get("name", "Unknown Badge")
+                badge_description = badge_info.get("displayDescription") or badge_info.get("description", "No description available")
+                badge_enabled = badge_info.get("enabled", False)
+                
+                created_date = badge_info.get("created", "Unknown")
+                created_timestamp = isotodiscordtimestamp(created_date, "F") if created_date != "Unknown" else "Unknown"
+                
+                embed_color = embedDB.get(f"{self.requester_id}") if embedDB.get(f"{self.requester_id}") else discord.Color.blue()
+                
+                embed = discord.Embed(
+                    title=f"✅ {self.username}'s Badges",
+                    description=f"**{badge_name}**\n{badge_description}",
+                    color=embed_color
+                )
+                
+                if badge_thumbnail:
+                    embed.set_thumbnail(url=badge_thumbnail)
+                
+                embed.add_field(name="Badge Information", value=f"**ID:** `{badge_id}`\n**Status:** {'Enabled' if badge_enabled else 'Disabled'}", inline=True)
+                embed.add_field(name="Awarded", value=f"**Date:** {awarded_date}", inline=True)
+                embed.add_field(name="Created", value=f"**Date:** {created_timestamp}", inline=True)
+                embed.set_footer(text=f"Badge {found_index + 1}/{len(self.badges)} | Requested By {interaction.user.name} | {MainURL}")
+                
+                view = BadgePaginator(self.badges, self.user_id, self.username, self.requester_id, found_index)
+                await interaction.edit_original_response(embed=embed, view=view)
+        
         embed = discord.Embed(
-            title=f"✅ {username} has this badge!",
+            title=f"✅ {username}'s Badges",
             description=f"**{badge_name}**\n{badge_description}",
             color=embed_color
         )
@@ -3769,144 +3619,18 @@ async def badges(interaction: discord.Interaction, username: str, badge_id: str 
         if badge_thumbnail:
             embed.set_thumbnail(url=badge_thumbnail)
         
-        embed.add_field(
-            name="Badge Information", 
-            value=f"**Badge ID:** `{badge_id}`\n**Status:** {'Enabled' if badge_enabled else 'Disabled'}", 
-            inline=True
-        )
+        embed.add_field(name="Badge Information", value=f"**ID:** `{first_badge_id}`\n**Status:** {'Enabled' if badge_enabled else 'Disabled'}", inline=True)
+        embed.add_field(name="Awarded", value=f"**Date:** {awarded_date}", inline=True)
+        embed.add_field(name="Created", value=f"**Date:** {created_timestamp}", inline=True)
+        embed.set_footer(text=f"Badge 1/{len(user_badges)} | Requested By {interaction.user.name} | {MainURL}")
         
-        embed.add_field(
-            name="Awarded", 
-            value=f"**Date:** {awarded_date}", 
-            inline=True
-        )
-        
-        embed.add_field(
-            name="Created", 
-            value=f"**Date:** {created_timestamp}", 
-            inline=True
-        )
-        
-        view = discord.ui.View()
-        
-        view.add_item(discord.ui.Button(
-            label="View Badge",
-            style=discord.ButtonStyle.link,
-            emoji="<:RobloxLogo:1416951004607418398>",
-            url=f"https://www.roblox.com/badges/{badge_id}"
-        ))
-        
-        if len(user_badges) > 1:
-            class BadgeSelector(discord.ui.Select):
-                def __init__(self, badges, user_id, username, display_name, requester_id):
-                    options = []
-                    for badge in badges[:25]:
-                        badge_id = badge.get('id')
-                        badge_name = badge.get('displayName') or badge.get('name', 'Unknown Badge')
-                        options.append(discord.SelectOption(
-                            label=badge_name[:100],
-                            description=f"ID: {badge_id}",
-                            value=str(badge_id)
-                        ))
-                    super().__init__(placeholder="View another badge...", options=options)
-                    self.badges = badges
-                    self.user_id = user_id
-                    self.username = username
-                    self.display_name = display_name
-                    self.requester_id = requester_id
-                
-                async def callback(self, interaction: discord.Interaction):
-                    if interaction.user.id != self.requester_id:
-                        await interaction.response.send_message("This is not your command!", ephemeral=True)
-                        return
-                    
-                    selected_badge_id = self.values[0]
-                    await interaction.response.defer()
-                    
-                    badge_info_url = f"https://badges.roblox.com/v1/badges/{selected_badge_id}"
-                    badge_info_response = requests.get(badge_info_url)
-                    
-                    if badge_info_response.status_code != 200:
-                        await interaction.followup.send("Failed to fetch badge information.", ephemeral=True)
-                        return
-                    
-                    badge_info = badge_info_response.json()
-                    
-                    awarded_date_url = f"https://badges.roblox.com/v1/users/{self.user_id}/badges/awarded-dates?badgeIds={selected_badge_id}"
-                    awarded_date_response = requests.get(awarded_date_url)
-                    
-                    awarded_date = "Unknown"
-                    if awarded_date_response.status_code == 200:
-                        awarded_data = awarded_date_response.json()
-                        if awarded_data.get("data") and len(awarded_data["data"]) > 0:
-                            awarded_date_str = awarded_data["data"][0].get("awardedDate")
-                            if awarded_date_str:
-                                awarded_timestamp = isotodiscordtimestamp(awarded_date_str, "F")
-                                awarded_date = awarded_timestamp if awarded_timestamp else awarded_date_str
-                    
-                    badge_name = badge_info.get("displayName") or badge_info.get("name", "Unknown Badge")
-                    badge_description = badge_info.get("displayDescription") or badge_info.get("description", "No description available")
-                    badge_enabled = badge_info.get("enabled", False)
-                    
-                    created_date = badge_info.get("created", "Unknown")
-                    updated_date = badge_info.get("updated", "Unknown")
-                    
-                    created_timestamp = isotodiscordtimestamp(created_date, "F") if created_date != "Unknown" else "Unknown"
-                    updated_timestamp = isotodiscordtimestamp(updated_date, "F") if updated_date != "Unknown" else "Unknown"
-                    
-                    badge_thumbnail = await get_badge_thumbnail(selected_badge_id)
-                    
-                    embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-                    
-                    new_embed = discord.Embed(
-                        title=f"✅ {self.username} has this badge!",
-                        description=f"**{badge_name}**\n{badge_description}",
-                        color=embed_color
-                    )
-                    
-                    if badge_thumbnail:
-                        new_embed.set_thumbnail(url=badge_thumbnail)
-                    
-                    new_embed.add_field(
-                        name="Badge Information", 
-                        value=f"**Badge ID:** `{selected_badge_id}`\n**Status:** {'Enabled' if badge_enabled else 'Disabled'}", 
-                        inline=True
-                    )
-                    
-                    new_embed.add_field(
-                        name="Awarded", 
-                        value=f"**Date:** {awarded_date}", 
-                        inline=True
-                    )
-                    
-                    new_embed.add_field(
-                        name="Created", 
-                        value=f"**Date:** {created_timestamp}", 
-                        inline=True
-                    )
-                    
-                    new_view = discord.ui.View()
-                    
-                    new_view.add_item(discord.ui.Button(
-                        label="View Badge",
-                        style=discord.ButtonStyle.link,
-                        emoji="<:RobloxLogo:1416951004607418398>",
-                        url=f"https://www.roblox.com/badges/{selected_badge_id}"
-                    ))
-                    
-                    new_view.add_item(BadgeSelector(self.badges, self.user_id, self.username, self.display_name, self.requester_id))
-                    
-                    await interaction.edit_original_response(embed=new_embed, view=new_view)
-            
-            view.add_item(BadgeSelector(user_badges, user_id, roblox_username, display_name, interaction.user.id))
-        
-        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+        view = BadgePaginator(user_badges, user_id, roblox_username, interaction.user.id, 0)
         await interaction.edit_original_response(embed=embed, view=view)
         
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         errorembed = discord.Embed(
-            title=f":x: API Error :x:",
-            description=f"An error occurred while fetching data: {str(e)}",
+            title=f":x: Error :x:",
+            description=f"An error occurred: {str(e)}",
             color=discord.Color.red()
         )
         errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
@@ -4035,7 +3759,7 @@ async def discorduser(interaction: discord.Interaction, user: discord.User = Non
             try:
                 import aiohttp
                 async with aiohttp.ClientSession() as session:
-                    async with session.get("https://bot.shapes.lol/mutuals") as response:
+                    async with session.get("http://localhost:13455/mutuals") as response:
                         if response.status == 200:
                             data = await response.json()
                             
@@ -5179,856 +4903,349 @@ async def avatar_command(interaction: discord.Interaction, user: str):
         except Exception:
             await interaction.followup.send("Failed to fetch user data")
             return
+            
+class BadgeService:
+    def __init__(self, session: aiohttp.ClientSession):
+        self.session = session
+    
+    async def get_user_id(self, user: str):
+        if user.isdigit():
+            return user
+        return await self._get_id_from_username(user)
+    
+    async def _get_id_from_username(self, username: str):
+        url = "https://users.roblox.com/v1/usernames/users"
+        try:
+            async with self.session.post(url, json={"usernames": [username]}) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data.get("data") and len(data["data"]) > 0:
+                        return str(data["data"][0]["id"])
+        except Exception:
+            pass
+        return None
+    
+    async def get_username(self, user_id: str):
+        url = f"https://users.roblox.com/v1/users/{user_id}"
+        try:
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("name")
+        except Exception:
+            pass
+        return None
+    
+    async def get_user_badges(self, user_id: str, limit: int = 10):
+        badges_url = f"https://badges.roblox.com/v1/users/{user_id}/badges?sortOrder=Desc&limit={limit}"
+        
+        async with self.session.get(badges_url) as response:
+            if response.status != 200:
+                return [], response.status
+            
+            data = await response.json()
+            return data.get('data', []), response.status
+    
+    async def get_awarded_dates(self, user_id: str, badge_ids: list):
+        if not badge_ids:
+            return {}
+            
+        awarded_dates_url = f"https://badges.roblox.com/v1/users/{user_id}/badges/awarded-dates?badgeIds={','.join(map(str, badge_ids))}"
+        
+        try:
+            async with self.session.get(awarded_dates_url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return {item['badgeId']: item.get('awardedDate') for item in data.get('data', [])}
+        except Exception:
+            pass
+        return {}
+    
+    async def get_badge_thumbnail(self, badge):
+        icon_image_id = badge.get('iconImageId') or badge.get('displayIconImageId')
+        if not icon_image_id:
+            return None
+            
+        icon_url = f"https://thumbnails.roblox.com/v1/assets?assetIds={icon_image_id}&size=150x150&format=Png&isCircular=false"
+        
+        try:
+            async with self.session.get(icon_url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data.get('data') and len(data['data']) > 0:
+                        return data['data'][0]['imageUrl']
+        except Exception:
+            pass
+        return None
 
-@bot.tree.command(name="kittylims", description="Get limited items from a KittyBlox user's inventory")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def kittylims(interaction: discord.Interaction, user: str = "leandre"):
-    await interaction.response.defer(thinking=True)
-    
-    thinkingembed = discord.Embed(
-        title=f"{interaction.user.mention} Searching For {user}'s Limited Items!",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    await interaction.followup.send(embed=thinkingembed)
-    
-    kittyAPIURL = f"https://kittys.rip/public-api/v1/users/username/{user}"
-    
-    try:
-        user_response = requests.get(kittyAPIURL)
-        user_response.raise_for_status()
-        user_data = user_response.json()
-        
-        if not user_data.get("success") or not user_data.get("data"):
-            error_embed = discord.Embed(
-                title="User Not Found",
-                description=f"Could not find a KittyBlox user with the username `{user}`",
-                color=discord.Color.red()
-            )
-            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=error_embed)
-            return
+class BadgeFormatter:
+    @staticmethod
+    def parse_iso_timestamp(timestamp_str):
+        if not timestamp_str:
+            return None
             
-        user_id = user_data["data"].get("id")
-        username = user_data["data"].get("username")
-        
-        inventory_url = f"https://www.kittys.rip/public-api/v1/inventory/collectibles/{user_id}"
-        inventory_response = requests.get(inventory_url)
-        inventory_response.raise_for_status()
-        inventory_data = inventory_response.json()
-        
-        if not inventory_data.get("success") or not inventory_data.get("data"):
-            error_embed = discord.Embed(
-                title="No Inventory Data",
-                description=f"Could not fetch inventory data for `{username}`",
-                color=discord.Color.orange()
-            )
-            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=error_embed)
-            return
-        
-        limited_items = []
-        for item in inventory_data["data"]:
-            asset = item.get("asset", {})
-            if asset.get("is_limited"):
-                limited_items.append({
-                    "name": asset.get("name", "Unknown Item"),
-                    "description": asset.get("description", "No description available"),
-                    "asset_type": asset.get("asset_type", "Unknown"),
-                    "is_for_sale": asset.get("is_for_sale", False),
-                    "price_robux": asset.get("price_robux", 0),
-                    "price_tickets": asset.get("price_tickets", 0),
-                    "sales": asset.get("sales", 0),
-                    "serial": item.get("serial"),
-                    "uaid": item.get("uaid"),
-                    "is_limited_unique": asset.get("is_limited_unique", False),
-                    "created_at": asset.get("created_at"),
-                    "updated_at": asset.get("updated_at"),
-                    "asset_id": asset.get("id")
-                })
-        
-        if not limited_items:
-            error_embed = discord.Embed(
-                title=f"{username}'s Limited Items",
-                description="No limited items found in inventory",
-                color=discord.Color.blue()
-            )
-            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=error_embed)
-            return
-        
-        class LimitedsView(discord.ui.View):
-            def __init__(self, limited_items, username, user_id, requester_id):
-                super().__init__(timeout=120)
-                self.limited_items = limited_items
-                self.current_page = 0
-                self.username = username
-                self.user_id = user_id
-                self.requester_id = requester_id
-                self.message = None
-                self.update_buttons()
+        try:
+            timestamp_str = timestamp_str.split('.')[0]
             
-            async def create_embed(self):
-                item = self.limited_items[self.current_page]
-                catalog_url = f"https://kittys.rip/catalog/{item.get('asset_id')}" if item.get('asset_id') else None
-                
-                embed = discord.Embed(
-                    title=f"{self.username}'s Limited Items",
-                    color=embedDB.get(f"{self.requester_id}") if embedDB.get(f"{self.requester_id}") else discord.Color.blue(),
-                    timestamp=interaction.created_at
+            if timestamp_str.endswith('Z'):
+                dt = datetime.fromisoformat(timestamp_str[:-1]).replace(
+                    tzinfo=datetime.timezone.utc
                 )
-                
-                name = item.get("name", "Unknown Item")
-                description = item.get("description", "No description available")
-                asset_type = item.get("asset_type", "Unknown")
-                is_for_sale = item.get("is_for_sale", False)
-                price_robux = item.get("price_robux", 0)
-                price_tickets = item.get("price_tickets", 0)
-                sales = item.get("sales", 0)
-                serial = item.get("serial")
-                uaid = item.get("uaid")
-                is_limited_unique = item.get("is_limited_unique", False)
-                asset_id = item.get("asset_id")
-                
-                if asset_id:
-                    thumbnail_url = f"https://kittys.rip/Thumbs/Asset.ashx?x=180&y=180&assetId={asset_id}"
-                    embed.set_thumbnail(url=thumbnail_url)
-                
-                # Make the item name clickable if we have a catalog URL
-                if catalog_url:
-                    name_display = f"[{name}]({catalog_url})"
-                else:
-                    name_display = name
-                
-                embed.add_field(name="Item Name", value=name_display, inline=False)
-                embed.add_field(name="Description", value=description, inline=False)
-                embed.add_field(name="Type", value=asset_type, inline=True)
-                embed.add_field(name="For Sale", value="Yes" if is_for_sale else "No", inline=True)
-                embed.add_field(name="Limited Unique", value="Yes" if is_limited_unique else "No", inline=True)
-                
-                if is_for_sale:
-                    price_text = ""
-                    if price_robux > 0:
-                        price_text += f"{price_robux} Robux"
-                    if price_tickets > 0:
-                        if price_text:
-                            price_text += " / "
-                        price_text += f"{price_tickets} Tickets"
-                    embed.add_field(name="Price", value=price_text, inline=True)
-                
-                embed.add_field(name="Sales", value=str(sales), inline=True)
-                
-                if serial:
-                    embed.add_field(name="Serial", value=f"#{serial}", inline=True)
-                
-                if uaid:
-                    embed.add_field(name="UAID", value=str(uaid), inline=True)
-                
-                created_at = item.get("created_at")
-                if created_at:
-                    embed.add_field(name="Created", value=f"<t:{created_at}:D>", inline=True)
-                
-                updated_at = item.get("updated_at")
-                if updated_at:
-                    embed.add_field(name="Updated", value=f"<t:{updated_at}:D>", inline=True)
-                
-                embed.set_footer(text=f"Item {self.current_page + 1}/{len(self.limited_items)} | Requested by {interaction.user.name} | {MainURL}")
-                return embed
-            
-            def update_buttons(self):
-                self.clear_items()
-                
-                if self.current_page > 0:
-                    previous_btn = discord.ui.Button(style=discord.ButtonStyle.primary, label="Previous", custom_id="previous")
-                    previous_btn.callback = self.previous_callback
-                    self.add_item(previous_btn)
-                
-                if self.current_page < len(self.limited_items) - 1:
-                    next_btn = discord.ui.Button(style=discord.ButtonStyle.primary, label="Next", custom_id="next")
-                    next_btn.callback = self.next_callback
-                    self.add_item(next_btn)
-                
-                current_item = self.limited_items[self.current_page]
-                asset_id = current_item.get("asset_id")
-                if asset_id:
-                    catalog_btn = discord.ui.Button(
-                        style=discord.ButtonStyle.link,
-                        label="View Item",
-                        url=f"https://kittys.rip/catalog/{asset_id}",
-                        emoji="<:KittyBloxLogo:1435371557240438796>"
-                    )
-                    self.add_item(catalog_btn)
-            
-            async def previous_callback(self, interaction: discord.Interaction):
-                if interaction.user.id != self.requester_id:
-                    await interaction.response.send_message("This is not your command!", ephemeral=True)
-                    return
-                
-                self.current_page -= 1
-                embed = await self.create_embed()
-                self.update_buttons()
-                await interaction.response.edit_message(embed=embed, view=self)
-            
-            async def next_callback(self, interaction: discord.Interaction):
-                if interaction.user.id != self.requester_id:
-                    await interaction.response.send_message("This is not your command!", ephemeral=True)
-                    return
-                
-                self.current_page += 1
-                embed = await self.create_embed()
-                self.update_buttons()
-                await interaction.response.edit_message(embed=embed, view=self)
-            
-            async def on_timeout(self):
-                for item in self.children:
-                    if isinstance(item, discord.ui.Button) and item.style != discord.ButtonStyle.link:
-                        item.disabled = True
-                try:
-                    await self.message.edit(view=self)
-                except Exception:
-                    pass
-        
-        view = LimitedsView(limited_items, username, user_id, interaction.user.id)
-        embed = await view.create_embed()
-        message = await interaction.edit_original_response(embed=embed, view=view)
-        view.message = message
-        
-    except requests.exceptions.RequestException as e:
-        error_embed = discord.Embed(
-            title="API Error",
-            description=f"Failed to fetch KittyBlox data: {str(e)}",
-            color=discord.Color.red()
-        )
-        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=error_embed)
-    except Exception as e:
-        error_embed = discord.Embed(
-            title="Unexpected Error",
-            description=f"An unexpected error occurred: {str(e)}",
-            color=discord.Color.red()
-        )
-        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=error_embed)
-            
-@bot.tree.command(name="kittyinfo", description="Get information about a KittyBlox user")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def kittyinfo(interaction: discord.Interaction, user: str = "Kittyblox"):
-    await interaction.response.defer(thinking=True)
-    
-    thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}'s KittyBlox Profile!",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    await interaction.followup.send(embed=thinkingembed)
-    
-    kittyAPIURL = f"https://kittys.rip/public-api/v1/users/username/{user}"
-    
-    try:
-        response = requests.get(kittyAPIURL)
-        response.raise_for_status()
-        data = response.json()
-        
-        if data.get("success") and data.get("data"):
-            datatable = data["data"]
-            
-            UserID = datatable.get("id")
-            Joindate = datatable.get("created_at")
-            LastOnline = datatable.get("last_online")
-            InventoryRAP = datatable.get("inventory_rap")
-            IsBanned = datatable.get("is_banned")
-            Description = datatable.get("description")
-            Username = datatable.get("username")
-            followers_count = datatable.get("followers_count", 0)
-            following_count = datatable.get("following_count", 0)
-            friends_count = datatable.get("friends_count", 0)
-            is_admin = datatable.get("is_admin", False)
-            is_verified = datatable.get("is_verified", False)
-           
-            kitty_profile_url = f"https://kittys.rip/users/{UserID}/profile"
-            
-            avatar_url = f"https://kittys.rip/Thumbs/Avatar.ashx?x=420&y=420&userId={UserID}"
-            avatar_response = requests.get(avatar_url)
-            
-            if avatar_response.status_code == 200:
-                image_url = avatar_response.url
             else:
-                image_url = None
+                if '+' not in timestamp_str and 'Z' not in timestamp_str:
+                    timestamp_str += '+00:00'
+                dt = datetime.fromisoformat(timestamp_str)
             
-            friends_followers_text = f"-# {friends_count} Friends | {followers_count} Followers | {following_count} Following"
+            return int(dt.timestamp())
+        except (ValueError, AttributeError, TypeError):
+            return None
+    
+    @staticmethod
+    def format_creator_info(creator):
+        creator_name = creator.get('name', 'Unknown')
+        creator_type = creator.get('type', 'User')
+        creator_id = creator.get('id')
+        
+        if not creator_id:
+            return creator_name
             
-            full_description = f"{friends_followers_text}\n\n{Description or 'No description available'}"
-            
-            display_name = Username
-            if is_admin:
-                display_name += " <:RobloxAdmin:1416951128876122152>"
-            
-            embed = discord.Embed(
-                title=f"{display_name}",
-                url=kitty_profile_url,
-                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue(),
-                description=full_description
-            )
-            
-            embed.add_field(name="ID", value=UserID, inline=True)
-            embed.add_field(name="RAP", value=f"{InventoryRAP:,}" if InventoryRAP else "0", inline=True)
-            embed.add_field(name="Staff", value="Yes" if is_admin else "No", inline=True)
-            
-            badges = []
-            if friends_count >= 20:
-                badges.append("<:Friendship:1430641140679577630>")
-            if is_admin:
-                badges.append("<:RobloxAdmin:1416951128876122152>")
-            
-            if badges:
-                embed.add_field(name="Badges", value=" ".join(badges), inline=True)
-            else:
-                embed.add_field(name="Badges", value="None", inline=True)
-            
-            if Joindate:
-                embed.add_field(name="Created", value=f"<t:{Joindate}:D>", inline=True)
-            
-            if LastOnline:
-                embed.add_field(name="Last Online", value=f"<t:{LastOnline}:D>", inline=True)
-            
-            if IsBanned:
-                embed.add_field(name="Terminated", value="Yes", inline=True)
-            
-            if image_url:
-                embed.set_thumbnail(url=image_url)
-            
-            view = discord.ui.View()
-            view.add_item(discord.ui.Button(
-                label="View KittyBlox Profile",
-                style=discord.ButtonStyle.link,
-                url=kitty_profile_url,
-                emoji="<:KittyBloxLogo:1435371557240438796>"
-            ))
-            
-            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=embed, view=view)
-            
+        if creator_type.lower() == 'user':
+            return f"[{creator_name}](https://www.roblox.com/users/{creator_id}/profile)"
         else:
-            error_embed = discord.Embed(
-                title="User Not Found",
-                description=f"Could not find a KittyBlox user with the username `{user}`",
-                color=discord.Color.red()
-            )
-            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=error_embed)
-            
-    except requests.exceptions.RequestException as e:
-        error_embed = discord.Embed(
-            title="Error",
-            description=f"Failed to fetch KittyBlox data: {str(e)}",
-            color=discord.Color.red()
-        )
-        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=error_embed)
-    except Exception as e:
-        error_embed = discord.Embed(
-            title="Unexpected Error",
-            description=f"An unexpected error occurred: {str(e)}",
-            color=discord.Color.red()
-        )
-        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=error_embed)
+            return f"[{creator_name}](https://www.roblox.com/groups/{creator_id}/)"
+    
+    @staticmethod
+    def format_awarder_info(awarder):
+        awarder_type = awarder.get('type', 'Unknown')
+        awarder_id = awarder.get('id')
         
-@bot.tree.command(name="kittyasset", description="Get information about a KittyBlox asset")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def kittyasset(interaction: discord.Interaction, assetid: str):
-    await interaction.response.defer(thinking=True)
-    
-    thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For Asset {assetid}!",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    await interaction.followup.send(embed=thinkingembed)
-    
-    kittyAPIURL = f"https://kittys.rip/public-api/v1/asset/{assetid}"
-    
-    asset_type_map = {
-        1: "Image",
-        2: "TShirt",
-        3: "Audio",
-        4: "Mesh",
-        5: "Lua",
-        6: "HTML",
-        7: "Text",
-        8: "Hat",
-        9: "Place",
-        10: "Model",
-        11: "Shirt",
-        12: "Pants",
-        13: "Decal",
-        16: "Avatar",
-        17: "Head",
-        18: "Face",
-        19: "Gear",
-        21: "Badge",
-        22: "GroupEmblem",
-        24: "Animation",
-        27: "Torso",
-        28: "RightArm",
-        29: "LeftArm",
-        30: "LeftLeg",
-        31: "RightLeg",
-        32: "Package",
-        33: "YoutubeVideo",
-        34: "GamePass",
-        35: "App",
-        37: "Code",
-        38: "Plugin",
-        39: "SolidModel",
-        40: "MeshPart",
-        41: "HairAccessory",
-        42: "FaceAccessory",
-        43: "NeckAccessory",
-        44: "ShoulderAccessory",
-        45: "FrontAccessory",
-        46: "BackAccessory",
-        47: "WaistAccessory",
-        48: "ClimbAnimation",
-        49: "DeathAnimation",
-        50: "FallAnimation",
-        51: "IdleAnimation",
-        52: "JumpAnimation",
-        53: "RunAnimation",
-        54: "SwimAnimation",
-        55: "WalkAnimation",
-        56: "PoseAnimation",
-        57: "EarAccessory",
-        58: "EyeAccessory",
-        61: "EmoteAnimation",
-        62: "Video",
-        64: "TShirtAccessory",
-        65: "ShirtAccessory",
-        66: "PantsAccessory",
-        67: "JacketAccessory",
-        68: "SweaterAccessory",
-        69: "ShortsAccessory",
-        70: "LeftShoeAccessory",
-        71: "RightShoeAccessory",
-        72: "DressSkirtAccessory",
-        73: "FontFamily",
-        76: "EyebrowAccessory",
-        77: "EyelashAccessory",
-        78: "MoodAnimation",
-        79: "DynamicHead"
-    }
-    
-    try:
-        response = requests.get(kittyAPIURL)
-        response.raise_for_status()
-        data = response.json()
-        
-        if data.get("success") and data.get("data"):
-            asset_data = data["data"]
+        if not awarder_id:
+            return "Unknown"
             
-            asset_id = asset_data.get("id")
-            name = asset_data.get("name", "Unknown Asset")
-            description = asset_data.get("description", "No description available")
-            asset_type_value = asset_data.get("asset_type_value")
-            asset_type = asset_type_map.get(asset_type_value, "Unknown")
-            is_for_sale = asset_data.get("is_for_sale", False)
-            price_robux = asset_data.get("price_robux", 0)
-            price_tickets = asset_data.get("price_tickets", 0)
-            sales = asset_data.get("sales", 0)
-            created_at = asset_data.get("created_at")
-            updated_at = asset_data.get("updated_at")
-            
-            creator_data = asset_data.get("creator", {})
-            creator_name = creator_data.get("username", "Unknown")
-            creator_id = creator_data.get("id")
-            creator_is_admin = creator_data.get("is_admin", False)
-            
-            thumbnail_url = f"https://kittys.rip/Thumbs/Asset.ashx?x=180&y=180&assetId={asset_id}"
-            asset_url = f"https://kittys.rip/games/{asset_id}"
-            
-            embed = discord.Embed(
-                title=name,
-                url=asset_url,  # Fixed: changed game_url to asset_url
-                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue(),
-                description=description or "No description available"
-            )
-            
-            embed.add_field(name="Asset ID", value=asset_id, inline=True)
-            embed.add_field(name="Type", value=asset_type, inline=True)
-            embed.add_field(name="For Sale", value="Yes" if is_for_sale else "No", inline=True)
-            
-            if is_for_sale:
-                price_text = ""
-                if price_robux > 0:
-                    price_text += f"{price_robux} Robux"
-                if price_tickets > 0:
-                    if price_text:
-                        price_text += " / "
-                    price_text += f"{price_tickets} Tickets"
-                embed.add_field(name="Price", value=price_text, inline=True)
-            
-            embed.add_field(name="Sales", value=str(sales), inline=True)
-            
-            creator_display = creator_name
-            if creator_is_admin:
-                creator_display += " <:RobloxAdmin:1416951128876122152>"
-            
-            embed.add_field(name="Creator", value=creator_display, inline=True)
-            
-            if created_at:
-                embed.add_field(name="Created", value=f"<t:{created_at}:D>", inline=True)
-            
-            if updated_at:
-                embed.add_field(name="Updated", value=f"<t:{updated_at}:D>", inline=True)
-            
-            embed.set_thumbnail(url=thumbnail_url)
-            
-            view = discord.ui.View()
-            view.add_item(discord.ui.Button(
-                label="View Asset",
-                style=discord.ButtonStyle.link,
-                url=asset_url,
-                emoji="<:KittyBloxLogo:1435371557240438796>"
-            ))
-            
-            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=embed, view=view)
-            
+        if awarder_type.lower() == 'place':
+            return f"[Place #{awarder_id}](https://www.roblox.com/games/{awarder_id}/)"
         else:
-            error_embed = discord.Embed(
-                title="Asset Not Found",
-                description=f"Could not find a KittyBlox asset with ID `{assetid}`",
-                color=discord.Color.red()
-            )
-            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=error_embed)
-            
-    except requests.exceptions.RequestException as e:
-        error_embed = discord.Embed(
-            title="Error",
-            description=f"Failed to fetch KittyBlox asset data: {str(e)}",
-            color=discord.Color.red()
-        )
-        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=error_embed)
-    except Exception as e:
-        error_embed = discord.Embed(
-            title="Unexpected Error",
-            description=f"An unexpected error occurred: {str(e)}",
-            color=discord.Color.red()
-        )
-        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=error_embed)
-        
-@bot.tree.command(name="kittygroup", description="Get information about a KittyBlox group")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def kittygroup(interaction: discord.Interaction, groupid: str):
-    await interaction.response.defer(thinking=True)
+            return f"{awarder_type} #{awarder_id}"
+
+class BadgesView(discord.ui.View):
+    def __init__(self, badges, username, user_id, requester, start_time, badge_service):
+        super().__init__(timeout=120)
+        self.badges = badges
+        self.current_page = 0
+        self.username = username
+        self.user_id = user_id
+        self.requester = requester
+        self.start_time = start_time
+        self.badge_service = badge_service
+        self.message = None
+        self.thumbnail_cache = {}
+        self.update_buttons()
     
-    thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For Group {groupid}!",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    await interaction.followup.send(embed=thinkingembed)
+    async def preload_thumbnails(self):
+        for i, badge in enumerate(self.badges):
+            thumbnail_url = await self.badge_service.get_badge_thumbnail(badge)
+            if thumbnail_url:
+                self.thumbnail_cache[i] = thumbnail_url
     
-    kittyAPIURL = f"https://kittys.rip/public-api/v1/groups/{groupid}"
-    
-    try:
-        response = requests.get(kittyAPIURL)
-        response.raise_for_status()
-        data = response.json()
-        
-        if data.get("success") and data.get("data"):
-            group_data = data["data"]
-            
-            group_id = group_data.get("id")
-            name = group_data.get("name", "Unknown Group")
-            description = group_data.get("description", "No description available")
-            member_count = group_data.get("member_count", 0)
-            owner_id = group_data.get("owner_id")
-            role_count = group_data.get("role_count", 0)
-            created_at = group_data.get("created_at")
-            updated_at = group_data.get("updated_at")
-            
-            members = group_data.get("members", [])
-            roles = group_data.get("roles", [])
-            
-            total_members = len(members)
-            
-            group_url = f"https://kittys.rip/groups/{group_id}"
-            thumbnail_url = f"https://kittys.rip/Thumbs/GroupIcon.ashx?groupid={group_id}&x=150&y=150"
-            
-            embed = discord.Embed(
-                title=name,
-                url=group_url,
-                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue(),
-                description=description or "No description available"
-            )
-            
-            embed.add_field(name="Group ID", value=group_id, inline=True)
-            embed.add_field(name="Members", value=f"{member_count}", inline=True)
-            embed.add_field(name="Roles", value=f"{role_count}", inline=True)
-            
-            if created_at:
-                embed.add_field(name="Created", value=f"<t:{created_at}:D>", inline=True)
-            
-            if updated_at:
-                embed.add_field(name="Updated", value=f"<t:{updated_at}:D>", inline=True)
-            
-            if owner_id:
-                owner = next((member for member in members if member.get("user_id") == owner_id), None)
-                if owner:
-                    embed.add_field(name="Owner", value=owner.get("username", "Unknown"), inline=True)
-            
-            embed.set_thumbnail(url=thumbnail_url)
-            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            
-            view = discord.ui.View()
-            view.add_item(discord.ui.Button(
-                label="View Group",
-                style=discord.ButtonStyle.link,
-                url=group_url,
-                emoji="<:KittyBloxLogo:1435371557240438796>"
-            ))
-            
-            await interaction.edit_original_response(embed=embed, view=view)
-            
-        else:
-            error_embed = discord.Embed(
-                title="Group Not Found",
-                description=f"Could not find a KittyBlox group with ID `{groupid}`",
-                color=discord.Color.red()
-            )
-            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=error_embed)
-            
-    except requests.exceptions.RequestException as e:
-        error_embed = discord.Embed(
-            title="Error",
-            description=f"Failed to fetch KittyBlox group data: {str(e)}",
-            color=discord.Color.red()
-        )
-        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=error_embed)
-    except Exception as e:
-        error_embed = discord.Embed(
-            title="Unexpected Error",
-            description=f"An unexpected error occurred: {str(e)}",
-            color=discord.Color.red()
-        )
-        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=error_embed)
-        
-@bot.tree.command(name="kittygame", description="Get information about a KittyBlox game")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def kittygame(interaction: discord.Interaction, gameid: str):
-    await interaction.response.defer(thinking=True)
-    
-    thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For Game {gameid}!",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    await interaction.followup.send(embed=thinkingembed)
-    
-    gameAPIURL = f"https://kittys.rip/public-api/v1/game-info/{gameid}"
-    assetAPIURL = f"https://kittys.rip/public-api/v1/asset/{gameid}"
-    
-    try:
-        game_response = requests.get(gameAPIURL)
-        game_response.raise_for_status()
-        game_data = game_response.json()
-        
-        if not game_data.get("success") or not game_data.get("data"):
-            error_embed = discord.Embed(
-                title="Game Not Found",
-                description=f"Could not find a KittyBlox game with ID `{gameid}`",
-                color=discord.Color.red()
-            )
-            error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=error_embed)
-            return
-        
-        game_info = game_data["data"]
-        
-        name = game_info.get("name", "Unknown Game")
-        description = game_info.get("description", "No description available")
-        playing_count = game_info.get("playing_count", 0)
-        universe_id = game_info.get("universe_id")
-        like_percentage = game_info.get("like_percentage", 0)
-        place_id = game_info.get("place_id")
-        
-        creator_data = game_info.get("creator", {})
-        creator_name = creator_data.get("username", "Unknown")
-        creator_is_admin = creator_data.get("is_admin", False)
-        
-        asset_response = requests.get(assetAPIURL)
-        asset_data = asset_response.json()
-        
-        created_at = None
-        updated_at = None
-        
-        if asset_data.get("success") and asset_data.get("data"):
-            asset_info = asset_data["data"]
-            created_at = asset_info.get("created_at")
-            updated_at = asset_info.get("updated_at")
-        
-        game_url = f"https://kittys.rip/games/{gameid}"
-        thumbnail_url = f"https://kittys.rip/Thumbs/Asset.ashx?x=180&y=180&assetId={gameid}"
+    async def create_embed(self):
+        badge = self.badges[self.current_page]
         
         embed = discord.Embed(
-            title=name,
-            url=game_url,
-            color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue(),
-            description=description or "No description available"
+            title=f"{self.username}'s Recent Badges",
+            color=embedDB.get(f"{self.requester.id}") if embedDB.get(f"{self.requester.id}") else discord.Color.blue(),
+            timestamp=datetime.now(),
+            url=f"https://www.roblox.com/users/{self.user_id}/badges"
         )
         
-        embed.add_field(name="Game ID", value=gameid, inline=True)
-        embed.add_field(name="Playing", value=str(playing_count), inline=True)
-        embed.add_field(name="Likes", value=f"{like_percentage}%", inline=True)
+        thumbnail_url = self.thumbnail_cache.get(self.current_page)
+        if thumbnail_url:
+            embed.set_thumbnail(url=thumbnail_url)
         
-        if universe_id:
-            embed.add_field(name="Universe ID", value=str(universe_id), inline=True)
+        badge_name = badge.get('displayName') or badge.get('name', 'Unknown Badge')
+        badge_description = badge.get('displayDescription') or badge.get('description', 'No description')
+        badge_id = badge.get('id', 'N/A')
         
-        creator_display = creator_name
-        if creator_is_admin:
-            creator_display += " <:RobloxAdmin:1416951128876122152>"
+        embed.add_field(name="Badge Name", value=badge_name, inline=False)
+        embed.add_field(name="Description", value=badge_description or "No description", inline=False)
+        embed.add_field(name="Badge ID", value=f"`{badge_id}`", inline=True)
         
-        embed.add_field(name="Creator", value=creator_display, inline=True)
+        awarded_date = badge.get('awardedDate')
+        if awarded_date:
+            unix_timestamp = BadgeFormatter.parse_iso_timestamp(awarded_date)
+            if unix_timestamp:
+                embed.add_field(
+                    name="Awarded Date", 
+                    value=f"<t:{unix_timestamp}:D> (<t:{unix_timestamp}:R>)",  
+                    inline=False
+                )
+            else:
+                embed.add_field(name="Awarded Date", value=awarded_date, inline=False)
         
-        if created_at:
-            embed.add_field(name="Created", value=f"<t:{created_at}:D>", inline=True)
+        creator = badge.get('creator', {})
+        creator_text = BadgeFormatter.format_creator_info(creator)
+        embed.add_field(name="Creator", value=creator_text, inline=True)
         
-        if updated_at:
-            embed.add_field(name="Updated", value=f"<t:{updated_at}:D>", inline=True)
+        awarder = badge.get('awarder', {})
+        awarder_text = BadgeFormatter.format_awarder_info(awarder)
+        embed.add_field(name="Awarded By", value=awarder_text, inline=True)
         
-        embed.set_thumbnail(url=thumbnail_url)
+        stats = badge.get('statistics', {})
+        awarded_count = stats.get('awardedCount', 0)
+        win_rate = stats.get('winRatePercentage', 0)
         
-        view = discord.ui.View()
-        view.add_item(discord.ui.Button(
-            label="View Game",
-            style=discord.ButtonStyle.link,
-            url=game_url,
-            emoji="<:KittyBloxLogo:1435371557240438796>"
-        ))
+        embed.add_field(name="Times Awarded", value=f"{awarded_count:,}", inline=True)
+        embed.add_field(name="Win Rate", value=f"{win_rate}%", inline=True)
         
-        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=embed, view=view)
-        
-    except requests.exceptions.RequestException as e:
-        error_embed = discord.Embed(
-            title="Error",
-            description=f"Failed to fetch KittyBlox game data: {str(e)}",
-            color=discord.Color.red()
+        elapsed_time = asyncio.get_event_loop().time() - self.start_time
+        embed.set_footer(
+            text=f"Badge {self.current_page + 1}/{len(self.badges)} • Load time: {elapsed_time:.2f}s • Requested by {self.requester.display_name}"
         )
-        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=error_embed)
-    except Exception as e:
-        error_embed = discord.Embed(
-            title="Unexpected Error",
-            description=f"An unexpected error occurred: {str(e)}",
-            color=discord.Color.red()
-        )
-        error_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=error_embed)
         
-@bot.tree.command(name="talk", description="only for when home is limited")
+        return embed
+        
+    def update_buttons(self):
+        self.clear_items()
+        
+        if self.current_page > 0:
+            previous_btn = discord.ui.Button(style=discord.ButtonStyle.primary, label="<<", custom_id="previous")
+            previous_btn.callback = self.previous_callback
+            self.add_item(previous_btn)
+            
+        if self.current_page < len(self.badges) - 1:
+            next_btn = discord.ui.Button(style=discord.ButtonStyle.primary, label=">>", custom_id="next")
+            next_btn.callback = self.next_callback
+            self.add_item(next_btn)
+        
+        current_badge = self.badges[self.current_page]
+        badge_id = current_badge.get('id')
+        if badge_id:
+            link_btn = discord.ui.Button(
+                style=discord.ButtonStyle.link,
+                label="View Badge",
+                url=f"https://www.roblox.com/badges/{badge_id}"
+            )
+            self.add_item(link_btn)
+    
+    async def _handle_navigation(self, interaction: discord.Interaction, direction: int):
+        if interaction.user != self.requester:
+            await interaction.response.send_message("You can't interact with this command!", ephemeral=True)
+            return
+        
+        self.current_page += direction
+        embed = await self.create_embed()
+        self.update_buttons()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    async def previous_callback(self, interaction: discord.Interaction):
+        await self._handle_navigation(interaction, -1)
+    
+    async def next_callback(self, interaction: discord.Interaction):
+        await self._handle_navigation(interaction, 1)
+    
+    async def on_timeout(self):
+        for item in self.children:
+            if isinstance(item, discord.ui.Button) and item.style != discord.ButtonStyle.link:
+                item.disabled = True
+        try:
+            await self.message.edit(view=self)
+        except Exception:
+            pass
+
+@bot.tree.command(name="recentbadges", description="Get a user's most recently earned Roblox badges")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@app_commands.describe(message="home")
-async def talk(interaction: discord.Interaction, message: str):
-    """for when home is limited"""
-    
-    if str(interaction.user.id) != "1296186288289878159":
-        await interaction.response.send_message(
-            "noob haha imagine", 
-            ephemeral=True
-        )
-        return
-    
-    await interaction.response.send_message(message)
-    
-    await interaction.followup.send(
-        f"Message sent: \"{message}\"", 
-        ephemeral=True
-    )
-    
-@bot.tree.command(name="kittyavatar", description="Get a user's avatar image")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def kittyavatar(interaction: discord.Interaction, user: str = "Kittyblox"):
-    await interaction.response.defer(thinking=True)
-    
-    kittyAPIURL = f"https://kittys.rip/public-api/v1/users/username/{user}"
-    
-    try:
-        response = requests.get(kittyAPIURL)
-        response.raise_for_status()
-        data = response.json()
-        
-        if data.get("success") and data.get("data"):
-            datatable = data["data"]
-            UserID = datatable.get("id")
-            
-            avatar_url = f"https://kittys.rip/Thumbs/Avatar.ashx?x=420&y=420&userId={UserID}"
-            
-            await interaction.followup.send(avatar_url)
-                
-        else:
-            await interaction.followup.send(f"User `{user}` not found on Kittyblox")
-            
-    except requests.exceptions.RequestException as e:
-        await interaction.followup.send(f"Failed to fetch data: {str(e)}")
-    except Exception as e:
-        await interaction.followup.send(f"An error occured :{str(e)}")
-        
-@bot.tree.command(name="discord2kitty", description="Find a Kittyblox user from their discord account")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discord2kitty(interaction: discord.Interaction, user: discord.User):
-    await interaction.response.defer(thinking=True)
+async def recent_badges(interaction: discord.Interaction, user: str):
+    await interaction.response.defer()
     
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user.display_name}'s KittyBlox Profile!",
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}'s recent badges",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
     await interaction.followup.send(embed=thinkingembed)
     
-    discord_id = user.id
-    kittyAPIURL = f"https://kittys.rip/public-api/v1/users/discord_id/{discord_id}"
+    start_time = asyncio.get_event_loop().time()
     
-    try:
-        response = requests.get(kittyAPIURL)
-        response.raise_for_status()
-        data = response.json()
+    connector = aiohttp.TCPConnector(family=socket.AF_INET)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        badge_service = BadgeService(session)
         
-        if data.get("success") and data.get("data"):
-            datatable = data["data"]
+        try:
+            user_id = await badge_service.get_user_id(user)
+            if not user_id:
+                embed = discord.Embed(
+                    description=f"Cannot find user",
+                    color=discord.Color.red()
+                )
+                await interaction.edit_original_response(embed=embed)
+                return
             
-            Username = datatable.get("username")
-            UserID = datatable.get("id")
+            username = await badge_service.get_username(user_id)
+            if not username:
+                embed = discord.Embed(
+                    description=f"Cannot find user",
+                    color=discord.Color.red()
+                )
+                await interaction.edit_original_response(embed=embed)
+                return
             
-            kitty_profile_url = f"https://kittys.rip/users/{UserID}/profile"
-            avatar_url = f"https://kittys.rip/Thumbs/Avatar.ashx?x=420&y=420&userId={UserID}"
+            badges, status_code = await badge_service.get_user_badges(user_id)
             
+            if status_code == 403:
+                embed = discord.Embed(
+                    description="This user's inventory is private. Badges cannot be viewed.",
+                    color=discord.Color.red()
+                )
+                await interaction.edit_original_response(embed=embed)
+                return
+            elif status_code != 200:
+                embed = discord.Embed(
+                    description=f"Failed to fetch badges",
+                    color=discord.Color.red()
+                )
+                await interaction.edit_original_response(embed=embed)
+                return
+            
+            if not badges:
+                embed = discord.Embed(
+                    description="This user has no badges.",
+                    color=discord.Color.red()
+                )
+                await interaction.edit_original_response(embed=embed)
+                return
+            
+            badge_ids = [badge['id'] for badge in badges]
+            awarded_dates = await badge_service.get_awarded_dates(user_id, badge_ids)
+            
+            for badge in badges:
+                badge_id = badge['id']
+                badge['awardedDate'] = awarded_dates.get(badge_id)
+            
+            view = BadgesView(badges, username, user_id, interaction.user, start_time, badge_service)
+            await view.preload_thumbnails()
+            embed = await view.create_embed()
+            view.update_buttons()
+            message = await interaction.edit_original_response(embed=embed, view=view)
+            view.message = message
+            
+        except asyncio.TimeoutError:
             embed = discord.Embed(
-                title=f"{Username}",
-                url=kitty_profile_url,
-                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+                description=f"The request timed out while fetching badge data.",
+                color=discord.Color.red()
             )
-            
-            embed.set_thumbnail(url=avatar_url)
-            
             await interaction.edit_original_response(embed=embed)
-            
-        else:
-            await interaction.edit_original_response(content=f"No KittyBlox account linked to {user.mention}")
-            
-    except requests.exceptions.RequestException as e:
-        await interaction.edit_original_response(content=f"Failed to fetch data: {str(e)}")
-    except Exception as e:
-        await interaction.edit_original_response(content=f"An error occurred: {str(e)}")
+        except aiohttp.ClientError as e:
+            embed = discord.Embed(
+                description=f"Failed to connect",
+                color=discord.Color.red()
+            )
+            await interaction.edit_original_response(embed=embed)
+        except Exception as e:
+            print(f"Unexpected error details: {type(e).__name__}: {str(e)}")
+            embed = discord.Embed(
+                description=f"An unexpected error occurred",
+                color=discord.Color.red()
+            )
+            await interaction.edit_original_response(embed=embed)
         
 # === Flask Runner in Thread ===
 def run_flask():

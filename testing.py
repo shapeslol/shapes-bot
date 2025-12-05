@@ -391,7 +391,7 @@ def send_commands():
 def get_command_count():
     return {'Commands': str(len(bot.tree.get_commands()))}, 200
 
-@app.route('/webhook', methods=['POST'])
+@app.route('/discord/webhook', methods=['POST'])
 def send_webhook():
     signature = request.headers.get("X-Signature-Ed25519")
     timestamp = request.headers.get("X-Signature-Timestamp")
@@ -904,7 +904,7 @@ async def on_ready():
         print(f"Watching {len(bot.guilds)} Servers")
         #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
     # Start the cache updater task
-    MyBot(command_prefix="/", intents=discord.Intents.all())
+    Shapes(command_prefix="/", intents=discord.Intents.all())
     bot.loop.create_task(update_guild_cache())
     bot.loop.create_task(update_db())
     #bot.loop.create_task(update_db_on_close())

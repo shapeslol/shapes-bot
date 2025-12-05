@@ -21,7 +21,6 @@ from discord.ext.commands import Bot
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify, Response
 from flask_cors import CORS
 import base64
-import topgg
 from topgg import DBLClient
 import urllib
 import re
@@ -645,14 +644,6 @@ bot = Shapes(command_prefix="/", intents=discord.Intents.all())
 @app.route('/topgg/webhook', methods=['POST'])
 def topgg_webhook():
     return "", 204
-    
-bot.topgg_webhook = topgg.WebhookManager(bot)\
-                    .dbl_webhook("/dbl", "dbl_auth")\
-                    .dsl_webhook("/dsl", "dsl_auth")
-                    
-async def Start_top_gg_client():
-    topgg_client = DBLClient(bot, os.environ.get("TOPGG_API_TOKEN"), autopost=True, post_shard_count=True, autopost_interval=900, session=app)
-    await topgg_client.start()
 
 class TopGGIntegration:
     """Handles Top.gg API integration for command posting"""
@@ -1174,6 +1165,8 @@ async def on_ready():
     TOP_GG = TopGGIntegration(bot)
     TOP_GG_COMMANDS = CommandSyncer(bot)
 
+    print("Loading top.gg API")
+
     try:
         synced_count = await TOP_GG_COMMANDS.sync_commands()
         print(f"✅ Command sync completed: {synced_count} commands")
@@ -1181,19 +1174,19 @@ async def on_ready():
         print(f"❌ Command sync failed: {e}")
     
     try:
-        await topgg.start_periodic_updates()
+        await TOP_GG.start_periodic_updates()
         print("✅ Top.gg integration started")
     except Exception as e:
         print(f"❌ Top.gg integration failed: {e}")
     
     try:
-        await topgg.post_commands_to_topgg()
+        await TOP_GG.post_commands_to_topgg()
         print("✅ Initial Top.gg commands posted")
     except Exception as e:
         print(f"❌ Failed to post initial Top.gg commands: {e}")
 
     try:
-        await topgg.post_server_count()
+        await TOP_GG.post_server_count()
         print("✅ Server count updated successfully")
     except Exception as e:
         print(f"❌ Failed to update server count: {e}")

@@ -391,7 +391,7 @@ def send_commands():
 def get_command_count():
     return {'Commands': str(len(bot.tree.get_commands()))}, 200
 
-@app.route('/webhook', methods=['POST'])
+@app.route('/discord/webhook', methods=['POST'])
 def send_webhook():
     signature = request.headers.get("X-Signature-Ed25519")
     timestamp = request.headers.get("X-Signature-Timestamp")
@@ -408,26 +408,86 @@ def send_webhook():
 
     payload = request.json
 
+    # Ping Check
     if payload.get("type") == 0:
         return Response(status=204)
 
+    # Event Sent
     if payload.get("type") == 1:
         event = payload.get("event", {})
         data = event.get("data", {})
         integration_type = data.get("integration_type")
-        event_type = data.get("type")
+        event_type = event.get("type")
 
-        if event_type is None:
-            return Response(status=400)
+        print("Received event:", event)  # debugging
+
 
         webhook = os.environ.get('webhook_url')
         if not webhook:
             print("Webhook URL not set in environment")
             return "webhook missing", 500
 
-        if event_type == "APPLICATION_AUTHORIZED" and integration_type == 1:
-            event_data = event.get("data", {})
-            user = event_data.get("user", {})
+        if event_type == "APPLICATION_AUTHORIZED":
+            # User authorization
+            if integration_type == 1:
+                user = data.get("user", {})
+                user_id = user.get("id", "Unknown")
+                user_name = user.get("username", "Unknown")
+                user_avatar = user.get("avatar")
+
+                scopes_data = data.get("scopes", [])
+                scopes = ", ".join(scopes_data)
+
+                if user_avatar:
+                    ext = "gif" if user_avatar.startswith("a_") else "png"
+                    avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{user_avatar}.{ext}"
+                else:
+                    avatar_url = "https://cdn.discordapp.com/embed/avatars/0.png"
+
+                embed = {
+                    "author": {"name": user_name, "icon_url": avatar_url},
+                    "title": f"{user_name} Installed Shapes to their apps",
+                    "description": f"**{user_name}** (`{user_id}`) has authorized Shapes. With the scopes: {scopes}",
+                    "color": 3066993,
+                    "timestamp": data.get("timestamp")
+                }
+
+                requests.post(webhook, json={"embeds": [embed]})
+
+            # Guild authorization
+            elif integration_type == 0:
+                user = data.get("user", {})
+                user_id = user.get("id", "Unknown")
+                user_name = user.get("username", "Unknown")
+
+                guild = data.get("guild", {})
+                guild_id = guild.get("id", "Unknown")
+                guild_name = guild.get("name", "Unknown")
+                guild_icon = guild.get("icon")
+
+                scopes_data = data.get("scopes", [])
+                scopes = ", ".join(scopes_data)
+
+
+                if guild_icon:
+                    ext = "gif" if guild_icon.startswith("a_") else "png"
+                    icon_url = f"https://cdn.discordapp.com/icons/{guild_id}/{guild_icon}.{ext}"
+                else:
+                    icon_url = "https://cdn.discordapp.com/embed/avatars/0.png"
+
+                embed = {
+                    "author": {"name": guild_name, "icon_url": icon_url},
+                    "title": "New Bot Authorization",
+                    "description": f"**{guild_name}** (`{guild_id}`) has authorized Shapes. Added To {guild_name} by {user_name} (`{user_id}`) with the scopes: {scopes}",
+                    "color": 3066993,
+                    "timestamp": data.get("timestamp")
+                }
+
+                requests.post(webhook, json={"embeds": [embed]})
+            return Response(status=204)
+        elif event_type == "APPLICATION_DEAUTHORIZED":
+            # User de-authorization
+            user = data.get("user", {})
             user_id = user.get("id", "Unknown")
             user_name = user.get("username", "Unknown")
             user_avatar = user.get("avatar")
@@ -439,48 +499,20 @@ def send_webhook():
                 avatar_url = "https://cdn.discordapp.com/embed/avatars/0.png"
 
             embed = {
-                "author": {
-                    "name": user_name,
-                    "icon_url": avatar_url
-                },
-                "title": "New Bot Authorization",
-                "description": f"**{user_name}** (`{user_id}`) has authorized Shapes.",
-                "color": 3066993,
-                "timestamp": event_data.get("timestamp")
+                "author": {"name": user_name, "icon_url": avatar_url},
+                "title": f"{user_name} Removed Shapes from their apps",
+                "description": f"**{user_name}** (`{user_id}`) has deauthorized Shapes.",
+                "color": 15158332,
+                "timestamp": data.get("timestamp")
             }
 
             requests.post(webhook, json={"embeds": [embed]})
-
-        elif event_type == "APPLICATION_AUTHORIZED" and integration_type == 0:
-            event_data = event.get("data", {})
-            guild = event_data.get("guild", {})
-            guild_id = guild.get("id", "Unknown")
-            guild_name = guild.get("name", "Unknown")
-            guild_icon = guild.get("icon")
-
-            if guild_icon:
-                ext = "gif" if guild_icon.startswith("a_") else "png"
-                icon_url = f"https://cdn.discordapp.com/icons/{guild_id}/{guild_icon}.{ext}"
-            else:
-                icon_url = "https://cdn.discordapp.com/embed/avatars/0.png"
-
-            embed = {
-                "author": {
-                    "name": guild_name,
-                    "icon_url": icon_url
-                },
-                "title": "New Bot Authorization",
-                "description": f"**{guild_name}** (`{guild_id}`) has authorized Shapes.",
-                "color": 3066993,
-                "timestamp": event_data.get("timestamp")
-            }
-
-            requests.post(webhook, json={"embeds": [embed]})
-
-        return Response(status=200)
-
-    # Any unknown type
-    return Response("unhandled event", 400)
+            return Response(status=204)
+        else:
+            # Unknown type
+            return Response("Unhandled Event", 400)
+    else:
+        return Response("invalid type", 400)
 
 # === Globals for caching and ready state ===
 cached_guilds = []
@@ -526,7 +558,7 @@ class MyGateway(DiscordWebSocket):
         _log.info('Shard ID %s has sent the IDENTIFY payload.', self.shard_id)
 
 
-class MyBot(Bot):
+class Shapes(Bot):
 
     async def connect(self, *, reconnect: bool = True) -> None:
         """|coro|
@@ -556,7 +588,7 @@ class MyBot(Bot):
         backoff = discord.client.ExponentialBackoff()
         ws_params = {
             'initial': True,
-            'shard_id': self.shard_id,
+            'shard_id': 1,
         }
         while not self.is_closed():
             try:
@@ -617,7 +649,7 @@ colors = lua.decode(colors_lua)
 #print(colors)
 
 #bot = commands.Bot(command_prefix="/", intents=intents)
-bot = MyBot(command_prefix="/", intents=discord.Intents.all())
+bot = Shapes(command_prefix="/", intents=discord.Intents.all())
 #tree = app_commands.CommandTree(bot)
 
 # == save databases if bot closes/goes offline == #

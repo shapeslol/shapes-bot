@@ -655,7 +655,7 @@ class TopGGIntegration:
     async def post_server_count(self) -> bool:
         url = f"https://top.gg/api/bots/{self.bot.user.id}/stats"
         headers = {
-            "Authorization": self.topgg_token,
+            "Authorization": os.environ.get("TOPGG_TOKEN"),
             "Content-Type": "application/json"
         }
         payload = {

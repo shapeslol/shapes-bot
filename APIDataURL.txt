@@ -1,1 +1,1 @@
-https://example.com?data=hello+world
+https://example.com/api/get?data=hello+world

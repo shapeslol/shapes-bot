@@ -18,16 +18,18 @@ import requests
 from discord.ext import commands
 from discord.gateway import DiscordWebSocket, _log
 from discord.ext.commands import Bot
-from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify, Response
 from flask_cors import CORS
 import base64
 import urllib
 import re
+import io
 import socket
 import typing
 from typing import Dict, Any, Optional
 from openai import OpenAI
-import io
+import nacl.signing
+import nacl.exceptions
 
 # Setup Emojis
 Emojis = {
@@ -69,6 +71,9 @@ owner = "sl.ip"
 co_owner = "<@481295611417853982>"
 MainURL = "https://shapes.lol"
 searchengine = "621a38269031b4e89" # PLEASE USE YOUR OWN SEARCH ENGINE ID FROM https://cse.google.com/
+
+# get the public key from .env
+PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
 
 # get the bot token from TOKEN.txt
 try:
@@ -360,40 +365,125 @@ def shutdown():
     
 @app.route('/commands', methods=['GET'])
 def send_commands():
-    commands = []
-    print([c.qualified_name for c in bot.tree.get_commands()])
+    commands = {}
+    commands['Commands'] = {}
     for cmd in bot.tree.get_commands():
-        print(c)
-        commands.append(c)
+        if isinstance(cmd, discord.app_commands.ContextMenu):
+            # Context menu commands don't have description/options
+            cmd_data = {
+                "name": cmd.qualified_name,
+                "type": "context_menu_command"
+            }
+        else:  # Slash commands
+            cmd_data = {
+                "name": cmd.qualified_name,
+                "description": getattr(cmd, "description", ""),
+                "options": [opt.name for opt in getattr(cmd, "options", [])],
+                "choices": [choice.name for choice in getattr(cmd, "choices", [])],
+                "type": "slash_command"
+            }
+        
+        commands['Commands'][cmd.qualified_name] = cmd_data
+    commands['success'] = True
     return jsonify(commands), 200
     
 @app.route('/count/commands', methods=['GET'])
-def send_commands_count():
-    return str(len(bot.tree.get_commands())), 200
+def get_command_count():
+    return {'Commands': str(len(bot.tree.get_commands()))}, 200
 
 @app.route('/webhook', methods=['POST'])
 def send_webhook():
-    if request.json["type"] == 0:
-        return "", 204
-    webhook = os.environ.get('webhook_url')
-    response_data = request.headers
-    print(response_data)
-    webhook_data = request.headers.get('content')
+    signature = request.headers.get("X-Signature-Ed25519")
+    timestamp = request.headers.get("X-Signature-Timestamp")
+    body = request.data.decode("utf-8")
 
-    payload = {
-        "content": f"{webhook_data}",
-    }
+    if not signature or not timestamp:
+        return Response("missing signature", 401)
 
-    # Send the POST request
     try:
-        response = requests.post(webhook, json=payload)
-        response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
-        print(f"Webhook sent successfully! Status code: {response.status_code}")
-        return "successful", 200
-    except requests.exceptions.RequestException as e:
-        print(f"Error sending webhook: {e}")
-        return "failed", 400
-    
+        verify_key = nacl.signing.VerifyKey(bytes.fromhex(PUBLIC_KEY))
+        verify_key.verify(f'{timestamp}{body}'.encode(), bytes.fromhex(signature))
+    except nacl.exceptions.BadSignatureError:
+        return Response("invalid signature", 401)
+
+    payload = request.json
+
+    if payload.get("type") == 1:
+        return jsonify({"type": 1})
+
+    if payload.get("type") == 0:
+        return Response(status=204)
+
+    if payload.get("type") == 2:
+        event = payload.get("event", {})
+        data = event.get("data", {})
+        integration_type = data.get("integration_type")
+        event_type = data.get("type")
+
+        if event_type is None:
+            return Response(status=400)
+
+        webhook = os.environ.get('webhook_url')
+        if not webhook:
+            print("Webhook URL not set in environment")
+            return "webhook missing", 500
+
+        if event_type == "APPLICATION_AUTHORIZED" and integration_type == 1:
+            event_data = event.get("data", {})
+            user = event_data.get("user", {})
+            user_id = user.get("id", "Unknown")
+            user_name = user.get("username", "Unknown")
+            user_avatar = user.get("avatar")
+
+            if user_avatar:
+                ext = "gif" if user_avatar.startswith("a_") else "png"
+                avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{user_avatar}.{ext}"
+            else:
+                avatar_url = "https://cdn.discordapp.com/embed/avatars/0.png"
+
+            embed = {
+                "author": {
+                    "name": user_name,
+                    "icon_url": avatar_url
+                },
+                "title": "New Bot Authorization",
+                "description": f"**{user_name}** (`{user_id}`) has authorized Shapes.",
+                "color": 3066993,
+                "timestamp": event_data.get("timestamp")
+            }
+
+            requests.post(webhook, json={"embeds": [embed]})
+
+        elif event_type == "APPLICATION_AUTHORIZED" and integration_type == 0:
+            event_data = event.get("data", {})
+            guild = event_data.get("guild", {})
+            guild_id = guild.get("id", "Unknown")
+            guild_name = guild.get("name", "Unknown")
+            guild_icon = guild.get("icon")
+
+            if guild_icon:
+                ext = "gif" if guild_icon.startswith("a_") else "png"
+                icon_url = f"https://cdn.discordapp.com/icons/{guild_id}/{guild_icon}.{ext}"
+            else:
+                icon_url = "https://cdn.discordapp.com/embed/avatars/0.png"
+
+            embed = {
+                "author": {
+                    "name": guild_name,
+                    "icon_url": icon_url
+                },
+                "title": "New Bot Authorization",
+                "description": f"**{guild_name}** (`{guild_id}`) has authorized Shapes.",
+                "color": 3066993,
+                "timestamp": event_data.get("timestamp")
+            }
+
+            requests.post(webhook, json={"embeds": [embed]})
+
+        return Response(status=200)
+
+    # Any unknown type
+    return Response("unhandled event", 400)
 
 # === Globals for caching and ready state ===
 cached_guilds = []

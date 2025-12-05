@@ -9,3 +9,4 @@ pandas
 slpp
 flask-cors
 openai
+PyNaCl

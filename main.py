@@ -641,10 +641,6 @@ colors = lua.decode(colors_lua)
 bot = Shapes(command_prefix="/", intents=discord.Intents.all())
 #tree = app_commands.CommandTree(bot)
 
-@app.route('/topgg/webhook', methods=['POST'])
-def topgg_webhook():
-    return "", 204
-
 class TopGGIntegration:
     """Handles Top.gg API integration for command posting"""
     
@@ -659,8 +655,7 @@ class TopGGIntegration:
             "Content-Type": "application/json"
         }
         payload = {
-            "server_count": len(self.bot.guilds),
-            "shard_count": getattr(self.bot, 'shard_count', 1) or 1
+            "server_count": len(self.bot.guilds)
         }
     
         # POST request to Top.gg API
@@ -904,6 +899,11 @@ class CommandSyncer:
         except Exception as e:
             print(f"❌ Failed to sync commands: {e}")
             return 0
+
+@app.route('/topgg/commands', methods=['POST'])
+def topgg_webhook():
+    top_gg_test = TopGGInteraction(bot)
+    return top_gg_test._get_bot_commands_for_topgg()
 
 # == save databases if bot closes/goes offline == #
 # async def update_db_on_close():
@@ -1150,12 +1150,6 @@ async def on_ready():
     BotInfo = await bot.application_info()
     #print(BotInfo)
     await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 shapes.lol/discord"))
-    if len(bot.guilds) == 1:
-        print(bot.guilds[0].name)
-        #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
-    else:
-        print(f"Watching {len(bot.guilds)} Servers")
-        #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
     # Start the cache updater task
     Shapes(command_prefix="/", intents=discord.Intents.all())
     bot.loop.create_task(update_guild_cache())

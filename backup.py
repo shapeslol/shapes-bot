@@ -53,7 +53,7 @@ Emojis = {
 }
 
 # OpenAI client
-chatgpt = OpenAI(api_key=os.getenv("OPENAI_KEY"), base_url="https://api.mapleai.de/v1")
+chatgpt = OpenAI(api_key=os.getenv("OPENAI_KEY"), base_url="https://api.mapleai.de/v1") # MapleAI isn't trustworthy anymore.
 AIModel = "gpt-5"
 
 #=== Database Setup ===
@@ -75,6 +75,7 @@ searchengine = "621a38269031b4e89" # PLEASE USE YOUR OWN SEARCH ENGINE ID FROM h
 # get the public key and api key for our api from .env
 PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
 APIBaseURL_Key = os.environ.get("Shapes_API_Key")
+APIBaseURL_Headers = {"Authorization": APIBaseURL_Key}
 
 # get the bot token from TOKEN.txt
 try:
@@ -1066,7 +1067,7 @@ async def discord2roblox(interaction: discord.Interaction, user: discord.User): 
     url = f"{APIBaseURL}/d2r/{userid}"
 
     try:
-        response = requests.get(url, headers={"Authorization": "Bearer " + APIKey})
+        response = requests.get(url, headers={"Authorization": f"Bearer {APIBaseURL_Key}"})
         response.raise_for_status()
         APIData = response.json()
         print(APIData)
@@ -1564,7 +1565,7 @@ async def ping(interaction: discord.Interaction):
 async def roblox2discord(interaction: discord.Interaction, user: str = "LCJUNIOR1220"):
     await interaction.response.defer()
     
-    print(f"Searching For {user}")
+    #print(f"Searching For {user}")
     thinkingembed = discord.Embed(
         title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {user}!",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
@@ -1592,7 +1593,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "LCJUNIOR
                 Username = f"@{user}"
             else:
                 Username = f"{Display} (@{user})"
-            print(f"UserInfo: {userinfo}")
+            #print(f"UserInfo: {userinfo}")
         else:
             #print(f"{user} not found.")
             failedembed7 = discord.Embed(
@@ -1611,10 +1612,10 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "LCJUNIOR
         await interaction.edit_original_response(embed=failedembed8)
         return
 
-    url = f"{APIBaseURL}/r2d{UserID}"
+    url = f"{APIBaseURL}/r2d/{UserID}"
 
     try:
-        response = requests.get(url, headers={"Authorization": "Bearer " + APIKey})
+        response = requests.get(url, headers=APIBaseURL_Headers)
         response.raise_for_status()
         APIData = response.json()
         print(APIData)
@@ -1650,7 +1651,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "LCJUNIOR
 @bot.tree.command(name="discord2roblox", description="Get a roblox profile from their Discord UserID.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discord2roblox(interaction: discord.Interaction, user: discord.User): # = 481295611417853982):
+async def discord2roblox(interaction: discord.Interaction, user: discord.User):
     userid = user.id
     await interaction.response.defer(thinking=True)
 
@@ -1664,7 +1665,7 @@ async def discord2roblox(interaction: discord.Interaction, user: discord.User): 
     url = f"{APIBaseURL}/d2r/{userid}"
 
     try:
-        response = requests.get(url, headers={"Authorization": "Bearer " + APIKey})
+        response = requests.get(url, headers=APIBaseURL_Headers)
         response.raise_for_status()
         APIData = response.json()
         print(APIData)
@@ -1675,7 +1676,7 @@ async def discord2roblox(interaction: discord.Interaction, user: discord.User): 
                 description=f"[View Roblox Profile](https://www.roblox.com/users/{APIData['data']}/profile)",
                 color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
             )
-            successembed.set_author(url=f"https://www.roblox.com/headshot-thumbnail/image?userId={APIData['data']}&width=420&height=420&format=png")
+            successembed.set_author(url=f"https://roblox.com/headshot-thumbnail/image?userId={APIData['data']}&width=420&height=420&format=png")
             successembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
             await interaction.edit_original_response(embed=successembed)
             return
@@ -1789,7 +1790,7 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
         data = response.json()
 
         # Get First 5 results
-        if "items" in data and len(data["items"]) > 0:
+        if "items" in data and len(data["items"]) >= 5:
             first_result = data["items"][0]
             title = first_result.get("title", "No Title")
             snippet = first_result.get("snippet", "No Description")
@@ -2345,7 +2346,7 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
 
             url = f"{APIBaseURL}/r2d/{UserID}"
             try:
-                response = requests.get(url, headers={'Authorization': 'Bearer ' + APIBaseURL_Key})
+                response = requests.get(url, headers={"Authorization": f"Bearer {APIBaseURL_Key}"})
                 response.raise_for_status()
                 Data = response.json()
                 

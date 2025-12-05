@@ -72,8 +72,9 @@ co_owner = "<@481295611417853982>"
 MainURL = "https://shapes.lol"
 searchengine = "621a38269031b4e89" # PLEASE USE YOUR OWN SEARCH ENGINE ID FROM https://cse.google.com/
 
-# get the public key from .env
+# get the public key and api key for our api from .env
 PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
+APIBaseURL_Key = os.environ.get("Shapes_API_Key")
 
 # get the bot token from TOKEN.txt
 try:
@@ -111,14 +112,6 @@ except FileNotFoundError:
 except Exception as e:
     print(f"An error occurred: {e}")
 
-# get the API data url from APIDataURL.txt
-try:
-    with open('APIDataURL.txt', 'r') as f:
-        APIDataURL = f.read()
-except FileNotFoundError:
-    print("Error: The file 'APIDataURL.txt' was not found.")
-except Exception as e:
-    print(f"An error occurred: {e}")
 
 # last online cache
 def load_cached_timestamps():
@@ -1395,30 +1388,31 @@ async def counting(interaction: discord.Interaction):
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
-    url = f"https://spook.bio/u/{username}/pfp.jpg"
+    url = f"https://spook.bio/api/profiles/{username}"
     response = requests.get(url)
+    data = response.json()
     if response.status_code == 200:
-        await interaction.response.send_message(url, ephemeral=False)
+        await interaction.response.send_message(data.avatar, ephemeral=False)
         print("Fetched data successfully!")
     else:
-        await interaction.response.send_message(f":x: {response.status_code} Not Found :x:", ephemeral=True)
+        await interaction.response.send_message(f":x: {username} Not Found :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
 
 @bot.tree.command(name="discord2spook", description="Get a spook.bio profile from a discord user.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def discord2spook(interaction: discord.Interaction, user: discord.User): # = 481295611417853982):
-    url = f"https://api.prp.bio/discord/{user.name}"
+    url = f"https://spook.bio/api/profiles?discordId={user.id}"
     print(user.id)
     print(url)
     response = requests.get(url)
-    print(response.text)
+    data = response.json()
     if response.status_code == 200:
-        await interaction.response.send_message(f"{user.mention}'s [spook.bio Profile]({response.text})", ephemeral=False)
-        print(f"Fetched {response.text} successfully!")
+        await interaction.response.send_message(f"{user.mention}'s [spook.bio Profile](https://spook.bio/@{data.username})", ephemeral=False)
+        print(f"Fetched {data.username} successfully!")
     else:
         if interaction.user.name == user.name:
-            await interaction.response.send_message(f":x: You don't have a spook.bio profile linked to your account {user.mention}! :x: To link your profile to your account please DM {owner} or {co_owner}")
+            await interaction.response.send_message(f":x: You don't have a spook.bio profile linked to your account {user.mention}! :x: To link your profile to your account create a spook.bio account [here](https://spook.bio/login)")
             return
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
@@ -1477,10 +1471,13 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "LCJUNIOR
             UserID = userinfo["id"]
             Display = userinfo["displayName"]
             user = userinfo["name"]
+            if user == Display:
+                Username = f"@{user}"
+            else:
+                Username = f"{Display} (@{user})"
             print(f"UserInfo: {userinfo}")
-
         else:
-            print(f"{user} not found.")
+            #print(f"{user} not found.")
             failedembed7 = discord.Embed(
                 title=f":warning: {user} not found.",
                 color=discord.Color.yellow()
@@ -1489,7 +1486,7 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "LCJUNIOR
             return
 
     except requests.exceptions.RequestException as e:
-        print(f"An error occurred during the API request: {e}")
+        #print(f"An error occurred during the API request: {e}")
         failedembed8 = discord.Embed(
             title=f":warning: {user} not found.",
             color=discord.Color.yellow()
@@ -1497,40 +1494,36 @@ async def roblox2discord(interaction: discord.Interaction, user: str = "LCJUNIOR
         await interaction.edit_original_response(embed=failedembed8)
         return
 
-    url = APIDataURL
+    url = f"{APIBaseURL}/r2d{UserID}"
 
     try:
-        response = requests.get(url)
+        response = requests.get(url, headers={"Authorization": "Bearer " + APIKey})
         response.raise_for_status()
         APIData = response.json()
         print(APIData)
-        Discord = "Unknown"
-        for d in APIData:
-            if str(d.get("roblox_id", "Unknown")) == str(UserID):
-                DiscordID = d.get("discord_id", "Unknown")
-                if DiscordID != "Unknown":
-                    Discord = f"https://discord.com/users/{DiscordID}"
-                    print(f"Found Discord User: {Discord} for {user}")
-                    successembed2 = discord.Embed(
-                        title=f"Discord User for Roblox User {Display} ({user})",
-                        description=f"[Click Here To View Discord Profile For {user}]({Discord})",
-                        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-                    )
-                    successembed2.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-                    await interaction.edit_original_response(embed=successembed2)
-                    return
-        # If no matching Discord user found
-        print(f"No Discord User found for {user}")
-        failedembed2 = discord.Embed(
-            title=f"No Discord User found for Roblox User {Display} ({user})",
-            color=discord.Color.red()
-        )
-        await interaction.edit_original_response(embed=failedembed2)
-        return
+        Discord = None
+        if APIData.get("data") and APIData.get("success", False) == True:
+            successembed2 = discord.Embed(
+                title=f"Discord User for {Username}",
+                description=f"[View Discord Profile](https://discord.com/users/{APIData['data']})",
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+            )
+
+            successembed2.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=successembed2)
+            return
+        else:
+            #print(f"No matching Discord user found for {Username}")
+            failedembed1 = discord.Embed(
+                title=f"No Discord User found for {Username}",
+                color=discord.Color.red()
+            )
+            await interaction.edit_original_response(embed=failedembed1)
+            return
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching RoPro data for ID {UserID}: {e}")
+        #print(f"Error fetching data for ID {UserID}: {e}")
         failedembed2 = discord.Embed(
-            title=f"Error retrieving Discord User from {user}",
+            title=f"Error retrieving Discord User from {Username}",
             color=discord.Color.red()
         )
         await interaction.edit_original_response(embed=failedembed2)
@@ -1551,40 +1544,36 @@ async def discord2roblox(interaction: discord.Interaction, user: discord.User): 
 
     await interaction.followup.send(embed=loading)
 
-    url = APIDataURL
+    url = f"{APIBaseURL}/d2r/{userid}"
 
     try:
-        response = requests.get(url)
+        response = requests.get(url, headers={"Authorization": "Bearer " + APIKey})
         response.raise_for_status()
         APIData = response.json()
         print(APIData)
-        Roblox = "Unknown"
-        for d in APIData:
-            if str(d.get("discord_id", "Unknown")) == str(userid):
-                RobloxID = d.get("roblox_id", "Unknown")
-                if RobloxID != "Unknown":
-                    Roblox = f"https://roblox.com/users/{RobloxID}/profile"
-                    print(f"Found Roblox User: {Roblox} for {user.name}")
-                    successembed3 = discord.Embed(
-                        title=f"Roblox Profile for {user.name}",
-                        description=f"[Click Here To View Roblox Profile For {user.name}]({Roblox})",
-                        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-                    )
-                    successembed3.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-                    await interaction.edit_original_response(embed=successembed3)
-                    return
-        # If no matching Roblox user found
-        print(f"No Roblox User found for {user.name}")
-        failedembed3 = discord.Embed(
-            title=f"No Roblox User found for {user.name}",
-            color=discord.Color.red()
-        )
-        await interaction.edit_original_response(embed=failedembed3)
-        return
+        Roblox = None
+        if APIData.get("data") and APIData.get("success", False) == True:
+            successembed = discord.Embed(
+                title=f"Roblox Profile for {user.name}",
+                description=f"[View Roblox Profile](https://www.roblox.com/users/{APIData['data']}/profile)",
+                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+            )
+            successembed.set_author(url=f"https://www.roblox.com/headshot-thumbnail/image?userId={APIData['data']}&width=420&height=420&format=png")
+            successembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+            await interaction.edit_original_response(embed=successembed)
+            return
+        else:
+            #print(f"No Roblox Profile found for {user.name}")
+            failedembed = discord.Embed(
+                title=f"No Roblox Profile found for {user.name}",
+                color=discord.Color.red()
+            )
+            await interaction.edit_original_response(embed=failedembed)
+            return
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching RoPro data for {user.name}: {e}")
+        #print(f"Error fetching data for Discord ID: {userid}: {e}")
         failedembed3 = discord.Embed(
-            title=f"Error retrieving Roblox Profile for {user.name}",
+            title=f"Error retrieving Roblox Profile from {user.name}",
             color=discord.Color.red()
         )
         await interaction.edit_original_response(embed=failedembed3)
@@ -2237,15 +2226,21 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                 except Exception as e:
                     print(f"Error fetching terminated user data: {e}")
 
-            url = f"https://api.ropro.io/getUserInfoTest.php?userid={UserID}"
+            url = f"{APIBaseURL}/r2d/{UserID}"
             try:
-                response = requests.get(url)
+                response = requests.get(url, headers={'Authorization': 'Bearer ' + APIBaseURL_Key})
                 response.raise_for_status()
-                RoProData = response.json()
-                Discord = RoProData["discord"]
+                Data = response.json()
+                
+                if Data["success"] == False:
+                    Discord = None
+                elif Data["success"] == True:
+                    Discord = Data["data"]
+                else:
+                    Discord = None
             except requests.exceptions.RequestException as e:
-                print(f"Error fetching RoPro data for ID {UserID}: {e}")
-                Discord = ""
+                #print(f"Error fetching data for ID: {UserID}: {e}")
+                Discord = None
 
             profileurl = f"https://www.roblox.com/users/{UserID}/profile"
 
@@ -2369,9 +2364,9 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
                     inline=False
                 )
             
-            if Discord != "":
+            if Discord != None:
                 embed.add_field(
-                    name="Discord (RoPro)",
+                    name="Discord",
                     value=f"```txt\n{Discord}\n```",
                     inline=False
                 )
@@ -4729,24 +4724,11 @@ async def discordbanner(interaction: discord.Interaction, user: Optional[discord
     target = user or interaction.user
     
     try:
-        try:
-            with open('TOKEN.txt', 'r') as f:
-                bot_token = f.read().strip()
-        except FileNotFoundError:
-            errorembed = discord.Embed(
-                title="configuration error",
-                description="Bot token file not found",
-                color=discord.Color.red()
-            )
-            errorembed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
-            await interaction.followup.send(embed=errorembed)
-            return
-
         connector = aiohttp.TCPConnector(family=socket.AF_INET)
         async with aiohttp.ClientSession(connector=connector) as session:
             async with session.get(
                 f'https://discord.com/api/v9/users/{target.id}',
-                headers={'Authorization': f'Bot {bot_token}'}
+                headers={'Authorization': f'Bot {token}'}
             ) as resp:
                 if resp.status != 200:
                     errorembed = discord.Embed(

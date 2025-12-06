@@ -900,11 +900,6 @@ class CommandSyncer:
             print(f"❌ Failed to sync commands: {e}")
             return 0
 
-@app.route('/topgg/commands', methods=['POST'])
-def topgg_webhook():
-    top_gg_test = TopGGInteraction(bot)
-    return top_gg_test._get_bot_commands_for_topgg()
-
 # == save databases if bot closes/goes offline == #
 # async def update_db_on_close():
     #while True:
@@ -1184,6 +1179,11 @@ async def on_ready():
         print("✅ Server count updated successfully")
     except Exception as e:
         print(f"❌ Failed to update server count: {e}")
+
+@app.route('/topgg/commands', methods=['POST'])
+def topgg_webhook():
+    top_gg_test = TopGGIntegration(bot)
+    return top_gg_test._get_bot_commands_for_topgg()
 
 @bot.event
 async def on_member_join(member):
@@ -5752,6 +5752,126 @@ async def recent_badges(interaction: discord.Interaction, user: str):
                 color=discord.Color.red()
             )
             await interaction.edit_original_response(embed=embed)
+
+@bot.tree.command(name="instagram", description="Get detailed information about an Instagram user")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.describe(username="Instagram username")
+async def instagram_command(interaction: discord.Interaction, username: str):
+    await interaction.response.defer(thinking=True)
+    
+    loading = discord.Embed(
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Getting Roblox Profile For {user.name}",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    
+    try:
+        username = username.strip().replace('@', '')
+        
+        if not username:
+            errorembed = discord.Embed(
+                description="Please provide a valid Instagram username",
+                color=discord.Color.red()
+            )
+            await interaction.edit_original_response(embed=errorembed)
+            return
+        
+        profile_info = await fetch_and_parse_instagram_profile(username)
+        
+        if isinstance(profile_info, str):
+            errorembed = discord.Embed(description=f"{profile_info}", color=discord.Color.red())
+            await interaction.edit_original_response(embed=errorembed)
+            return
+        
+        embed = create_instagram_embed(username, profile_info, interaction.user.name)
+        await interaction.edit_original_response(embed=embed)
+            
+    except Exception as e:
+        errorembed = discord.Embed(
+            description="Failed to fetch Instagram profile information",
+            color=discord.Color.red()
+        )
+        await interaction.edit_original_response(embed=errorembed)
+
+async def get_instagram_profile(session, username):
+    url = f"https://i.instagram.com/api/v1/users/web_profile_info/?username={username}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "X-IG-App-ID": "936619743392459",
+        "Referer": f"https://www.instagram.com/{username}/",
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+    }
+    
+    try:
+        async with session.get(url, headers=headers, timeout=10) as response:
+            if response.status == 404:
+                return None, "User not found"
+            response.raise_for_status()
+            data = await response.json()
+            return data["data"]["user"], None
+    except aiohttp.ClientError as e:
+        return None, f"Connection error: {str(e)}"
+    except Exception as e:
+        return None, f"Error fetching profile: {str(e)}"
+
+def parse_instagram_data(user):
+    return {
+        "username": user["username"],
+        "full_name": user["full_name"],
+        "biography": user["biography"],
+        "followers": user["edge_followed_by"]["count"],
+        "following": user["edge_follow"]["count"],
+        "posts": user["edge_owner_to_timeline_media"]["count"],
+        "profile_pic_url": user["profile_pic_url_hd"],
+        "is_verified": user["is_verified"],
+        "is_private": user["is_private"],
+    }
+
+async def fetch_and_parse_instagram_profile(username):
+    async with aiohttp.ClientSession() as session:
+        user, error = await get_instagram_profile(session, username)
+        
+        if error:
+            return error
+        
+        return parse_instagram_data(user)
+
+def create_instagram_embed(username, profile_info, requester_name):
+    profile_url = f"https://www.instagram.com/{username}/"
+    
+    title_display = f"@{username}"
+    if profile_info['is_verified']:
+        title_display += " <:VerifiedInstagram:1440454757822107678>"
+    
+    embed = discord.Embed(
+        title=title_display,
+        url=profile_url,
+        color=0xE1306C
+    )
+    
+    if profile_info['profile_pic_url']:
+        embed.set_thumbnail(url=profile_info['profile_pic_url'])
+    
+    embed.add_field(name="Posts", value=f"**{profile_info['posts']:,}**", inline=True)
+    embed.add_field(name="Followers", value=f"**{profile_info['followers']:,}**", inline=True)
+    embed.add_field(name="Following", value=f"**{profile_info['following']:,}**", inline=True)
+    embed.add_field(name="Account Type", value="Private" if profile_info['is_private'] else "Public", inline=True)
+    
+    if profile_info['full_name']:
+        embed.add_field(name="Full Name", value=profile_info['full_name'], inline=True)
+    
+    if profile_info['biography']:
+        bio_text = profile_info['biography']
+        if len(bio_text) > 1024:
+            bio_text = bio_text[:1021] + "..."
+        embed.add_field(name="Description", value=bio_text, inline=False)
+    
+    embed.set_footer(text=f"Requested By {requester_name} │ {MainURL}")
+    
+    return embed
         
 # === Flask Runner in Thread ===
 def run_flask():

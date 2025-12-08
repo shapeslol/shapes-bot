@@ -1,1 +1,0 @@
-# Discord Bot Code For shapes.lol

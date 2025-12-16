@@ -54,8 +54,8 @@ Emojis = {
 }
 
 # OpenAI client
-chatgpt = OpenAI(api_key=os.getenv("OPENAI_KEY"), base_url="https://api.mapleai.de/v1") # MapleAI isn't trustworthy anymore.
-AIModel = "gpt-5"
+chatgpt = OpenAI(api_key=os.getenv("OPENAI_KEY"), base_url="https://openrouter.ai/api/v1") # MapleAI is a scam.
+AIModel = "openai/gpt-oss-20b:free"
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
@@ -219,7 +219,7 @@ def admin_login():
         return redirect(url_for("dashboard"))
 
     if request.method == "POST":
-        key = request.form.get("key")
+        key = request.form.get("pass")
         if key == ADMIN_KEY:
             session["admin"] = True
             return redirect(url_for("dashboard"))
@@ -301,7 +301,7 @@ def admin_login():
         <div class="login-container">
             <h2>Admin Login</h2>
             <form method="POST">
-                <input type="password" name="key" placeholder="Enter admin key" required>
+                <input type="password" name="pass" placeholder="Enter admin key" required>
                 <button type="submit">Login</button>
             </form>
         </div>
@@ -466,8 +466,8 @@ def send_webhook():
 
                 embed = {
                     "author": {"name": guild_name, "icon_url": icon_url},
-                    "title": "New Bot Authorization",
-                    "description": f"**{guild_name}** (`{guild_id}`) has authorized Shapes. Added To {guild_name} by {user_name} (`{user_id}`) with the scopes: {scopes}",
+                    "title": "Shapes Added To A New Server",
+                    "description": f"**{guild_name}** (`{guild_id}`) has authorized Shapes. Added by {user_name} (`{user_id}`) with the scopes: {scopes}",
                     "color": 3066993,
                     "timestamp": data.get("timestamp")
                 }
@@ -577,7 +577,7 @@ class Shapes(Bot):
         backoff = discord.client.ExponentialBackoff()
         ws_params = {
             'initial': True,
-            'shard_id': 1,
+            'shard_id': 0,
         }
         while not self.is_closed():
             try:
@@ -900,11 +900,6 @@ class CommandSyncer:
             print(f"❌ Failed to sync commands: {e}")
             return 0
 
-@app.route('/topgg/commands', methods=['POST'])
-def topgg_webhook():
-    top_gg_test = TopGGInteraction(bot)
-    return top_gg_test._get_bot_commands_for_topgg()
-
 # == save databases if bot closes/goes offline == #
 # async def update_db_on_close():
     #while True:
@@ -935,7 +930,7 @@ async def update_db():
     
             for guild in bot.guilds:
                 if not countingDB.get(f"{guild.id}"):
-                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber":0})
+                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber":0, "banned":False})
                     countingDB.save()
         if bot.is_closed():
             countingDB.save()
@@ -1185,6 +1180,11 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Failed to update server count: {e}")
 
+@app.route('/topgg/commands', methods=['GET'])
+def topgg_webhook():
+    top_gg_test = TopGGIntegration(bot)
+    return jsonify(top_gg_test._get_bot_commands_for_topgg())
+
 @bot.event
 async def on_member_join(member):
     if member.bot:
@@ -1233,8 +1233,14 @@ def countinglb():
         lb = {}
         for server in countingDB.all():
             data = countingDB.get(f"{server}")
+            if data.get("banned", False) == True:
+                print(f'{bot.get_guild(int(server)).name if bot.get_guild(int(server)) else "Unknown"} Is Banned From Counting.')
+                continue
             if data["enabled"] == True:
-                lb[f"{server}"] = {"currentnumber": data['number'],"highestnumber": data['highestnumber'], "serverName": bot.get_guild(int(server)).name if bot.get_guild(int(server)) else "Unknown"}
+                server_name = bot.get_guild(int(server)).name if bot.get_guild(int(server)) else None
+                if server_name == None:
+                    continue
+                lb[f"{server}"] = {"currentnumber": data['number'],"highestnumber": data['highestnumber'], "serverName": server_name}
         FullLB = sorted(lb.items(), key=lambda x: x[1]['highestnumber'], reverse=True)
         return {"Leaderboard":FullLB}, 200
     else:
@@ -1245,13 +1251,13 @@ def mutualservers():
     if bot.is_ready():
         servers = {}
         for s in bot.guilds:
-            servers[s.id] = {"name": s.name, "botcount": 0, "membercount": 0, "iconurl": str(s.icon.url) if s.icon else None, "owner": str(s.owner), "ownerid": s.owner.id, "members": [], "bots": [], "verificationlevel": str(s.verification_level), "createdat": str(s.created_at), "joinedat": str(s.me.joined_at), "roles": len(s.roles), "channels": len(s.channels),"bannerurl": str(s.banner.url) if s.banner else None}
+            servers[s.id] = {"name": s.name, "botcount": 0, "membercount": 0, "iconurl": str(s.icon.url) if s.icon else "https://cdn.discordapp.com/embed/avatars/0.png", "owner": str(s.owner), "ownerid": s.owner.id, "members": [], "bots": [], "verificationlevel": str(s.verification_level), "createdat": str(s.created_at), "joinedat": str(s.me.joined_at), "roles": len(s.roles), "channels": len(s.channels),"bannerurl": str(s.banner.url) if s.banner else None}
             for m in s.members:
                 if m.bot:
-                    servers[s.id]["bots"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else None})
+                    servers[s.id]["bots"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else "https://cdn.discordapp.com/embed/avatars/0.png"})
                     servers[s.id]["botcount"] += 1
                 else:
-                    servers[s.id]["members"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else None})
+                    servers[s.id]["members"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else "https://cdn.discordapp.com/embed/avatars/0.png"})
                     servers[s.id]["membercount"] += 1
         return {"Servers":servers}, 200
 
@@ -1727,7 +1733,7 @@ async def restart(interaction: discord.Interaction):
     else:
         await interaction.response.send_message(f"Only <@481295611417853982 and <@1129085908390518895> can use this command.", ephemeral=True)
 
-@bot.tree.command(name="counting", description="Counting Settings")
+@bot.tree.command(name="counting", description="Counting Settings For Shapes")
 @app_commands.default_permissions(administrator=True)
 @commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -1850,7 +1856,7 @@ async def ping(interaction: discord.Interaction):
 @bot.tree.command(name="roblox2discord", description="Get a roblox user's Discord from their username.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def roblox2discord(interaction: discord.Interaction, user: str = "LCJUNIOR1220"):
+async def roblox2discord(interaction: discord.Interaction, user: str):
     await interaction.response.defer()
     
     #print(f"Searching For {user}")
@@ -2024,8 +2030,8 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
 
     # Include previous conversation
     for u_msg, a_msg in zip(user_data["user_messages"], user_data["ai_responses"]):
-        messages_for_ai.append({"role": "user", "content": u_msg})
-        messages_for_ai.append({"role": "assistant", "content": a_msg})
+        messages_for_ai.append({"role": "user", "content": u_msg[:1024]})
+        messages_for_ai.append({"role": "assistant", "content": a_msg[:1024]})
 
     # Add latest message
     messages_for_ai.append({"role": "user", "content": prompt})
@@ -5752,14 +5758,134 @@ async def recent_badges(interaction: discord.Interaction, user: str):
                 color=discord.Color.red()
             )
             await interaction.edit_original_response(embed=embed)
-        
-# === Flask Runner in Thread ===
-def run_flask():
-    port = int(os.environ.get("PORT", 13455))
-    print(f"Starting Flask on port {port}")
-    app.run(host="0.0.0.0", port=port)
 
+@bot.tree.command(name="instagram", description="Get detailed information about an Instagram user")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.describe(username="Instagram username")
+async def instagram_command(interaction: discord.Interaction, username: str):
+    await interaction.response.defer(thinking=True)
+    
+    loading = discord.Embed(
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Getting Instagram Profile For @{username}",
+        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+    )
+    await interaction.edit_original_response(embed=loading)
+    
+    try:
+        username = username.strip().replace('@', '')
+        
+        if not username:
+            errorembed = discord.Embed(
+                description="Please provide a valid Instagram username",
+                color=discord.Color.red()
+            )
+            await interaction.edit_original_response(embed=errorembed)
+            return
+        
+        profile_info = await fetch_and_parse_instagram_profile(username)
+        
+        if isinstance(profile_info, str):
+            errorembed = discord.Embed(description=f"{profile_info}", color=discord.Color.red())
+            await interaction.edit_original_response(embed=errorembed)
+            return
+        
+        embed = create_instagram_embed(username, profile_info, interaction.user.name)
+        await interaction.edit_original_response(embed=embed)
+            
+    except Exception as e:
+        errorembed = discord.Embed(
+            description="Failed to fetch Instagram profile information",
+            color=discord.Color.red()
+        )
+        await interaction.edit_original_response(embed=errorembed)
+
+async def get_instagram_profile(session, username):
+    url = f"https://i.instagram.com/api/v1/users/web_profile_info/?username={username}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        "X-IG-App-ID": "936619743392459",
+        "Referer": f"https://www.instagram.com/{username}/",
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+    }
+    
+    try:
+        async with session.get(url, headers=headers, timeout=10) as response:
+            if response.status == 404:
+                return None, "User not found"
+            response.raise_for_status()
+            data = await response.json()
+            return data["data"]["user"], None
+    except aiohttp.ClientError as e:
+        return None, f"Connection error: {str(e)}"
+    except Exception as e:
+        return None, f"Error fetching profile: {str(e)}"
+
+def parse_instagram_data(user):
+    return {
+        "username": user["username"],
+        "full_name": user["full_name"],
+        "biography": user["biography"],
+        "followers": user["edge_followed_by"]["count"],
+        "following": user["edge_follow"]["count"],
+        "posts": user["edge_owner_to_timeline_media"]["count"],
+        "profile_pic_url": user["profile_pic_url_hd"],
+        "is_verified": user["is_verified"],
+        "is_private": user["is_private"],
+    }
+
+async def fetch_and_parse_instagram_profile(username):
+    async with aiohttp.ClientSession() as session:
+        user, error = await get_instagram_profile(session, username)
+        
+        if error:
+            return error
+        
+        return parse_instagram_data(user)
+
+def create_instagram_embed(username, profile_info, requester_name):
+    profile_url = f"https://www.instagram.com/{username}/"
+    
+    title_display = f"@{username}"
+    if profile_info['is_verified']:
+        title_display += " <:VerifiedInstagram:1447033802802331760>"
+    
+    embed = discord.Embed(
+        title=title_display,
+        url=profile_url,
+        color=0xE1306C
+    )
+    
+    if profile_info['profile_pic_url']:
+        embed.set_thumbnail(url=profile_info['profile_pic_url'])
+    
+    embed.add_field(name="Posts", value=f"**{profile_info['posts']:,}**", inline=True)
+    embed.add_field(name="Followers", value=f"**{profile_info['followers']:,}**", inline=True)
+    embed.add_field(name="Following", value=f"**{profile_info['following']:,}**", inline=True)
+    embed.add_field(name="Account Type", value="Private" if profile_info['is_private'] else "Public", inline=True)
+    
+    if profile_info['full_name']:
+        embed.add_field(name="Full Name", value=profile_info['full_name'], inline=True)
+    
+    if profile_info['biography']:
+        bio_text = profile_info['biography']
+        if len(bio_text) > 1024:
+            bio_text = bio_text[:1021] + "..."
+        embed.add_field(name="Description", value=bio_text, inline=False)
+    
+    embed.set_footer(text=f"Requested By {requester_name} │ {MainURL}")
+    
+    return embed
+        
+# === Bot Runner in Thread ===
+def run_bot():
+    bot.run(token)
 # === Run Bot + Flask Webserver ===
 if __name__ == "__main__":
-    threading.Thread(target=run_flask).start()
-    bot.run(token)
+    port = int(os.environ.get("PORT", 13455))
+    threading.Thread(target=run_bot).start()
+    print(f"Starting Flask on port {port}")
+    app.run(host="0.0.0.0", port=port, debug=True)

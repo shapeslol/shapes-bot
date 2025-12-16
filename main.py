@@ -54,8 +54,8 @@ Emojis = {
 }
 
 # OpenAI client
-chatgpt = OpenAI(api_key=os.getenv("OPENAI_KEY"), base_url="https://api.mapleai.de/v1") # MapleAI isn't trustworthy anymore.
-AIModel = "gpt-5"
+chatgpt = OpenAI(api_key=os.getenv("OPENAI_KEY"), base_url="https://openrouter.ai/api/v1") # MapleAI is a scam.
+AIModel = "openai/gpt-oss-20b:free"
 
 #=== Database Setup ===
 countingDB = PickleDB('counting.db')
@@ -219,7 +219,7 @@ def admin_login():
         return redirect(url_for("dashboard"))
 
     if request.method == "POST":
-        key = request.form.get("key")
+        key = request.form.get("pass")
         if key == ADMIN_KEY:
             session["admin"] = True
             return redirect(url_for("dashboard"))
@@ -301,7 +301,7 @@ def admin_login():
         <div class="login-container">
             <h2>Admin Login</h2>
             <form method="POST">
-                <input type="password" name="key" placeholder="Enter admin key" required>
+                <input type="password" name="pass" placeholder="Enter admin key" required>
                 <button type="submit">Login</button>
             </form>
         </div>
@@ -466,8 +466,8 @@ def send_webhook():
 
                 embed = {
                     "author": {"name": guild_name, "icon_url": icon_url},
-                    "title": "New Bot Authorization",
-                    "description": f"**{guild_name}** (`{guild_id}`) has authorized Shapes. Added To {guild_name} by {user_name} (`{user_id}`) with the scopes: {scopes}",
+                    "title": "Shapes Added To A New Server",
+                    "description": f"**{guild_name}** (`{guild_id}`) has authorized Shapes. Added by {user_name} (`{user_id}`) with the scopes: {scopes}",
                     "color": 3066993,
                     "timestamp": data.get("timestamp")
                 }
@@ -577,7 +577,7 @@ class Shapes(Bot):
         backoff = discord.client.ExponentialBackoff()
         ws_params = {
             'initial': True,
-            'shard_id': 1,
+            'shard_id': 0,
         }
         while not self.is_closed():
             try:
@@ -930,7 +930,7 @@ async def update_db():
     
             for guild in bot.guilds:
                 if not countingDB.get(f"{guild.id}"):
-                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber":0})
+                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber":0, "banned":False})
                     countingDB.save()
         if bot.is_closed():
             countingDB.save()
@@ -1180,10 +1180,10 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Failed to update server count: {e}")
 
-@app.route('/topgg/commands', methods=['POST'])
+@app.route('/topgg/commands', methods=['GET'])
 def topgg_webhook():
     top_gg_test = TopGGIntegration(bot)
-    return top_gg_test._get_bot_commands_for_topgg()
+    return jsonify(top_gg_test._get_bot_commands_for_topgg())
 
 @bot.event
 async def on_member_join(member):
@@ -1233,8 +1233,14 @@ def countinglb():
         lb = {}
         for server in countingDB.all():
             data = countingDB.get(f"{server}")
+            if data.get("banned", False) == True:
+                print(f'{bot.get_guild(int(server)).name if bot.get_guild(int(server)) else "Unknown"} Is Banned From Counting.')
+                continue
             if data["enabled"] == True:
-                lb[f"{server}"] = {"currentnumber": data['number'],"highestnumber": data['highestnumber'], "serverName": bot.get_guild(int(server)).name if bot.get_guild(int(server)) else "Unknown"}
+                server_name = bot.get_guild(int(server)).name if bot.get_guild(int(server)) else None
+                if server_name == None:
+                    continue
+                lb[f"{server}"] = {"currentnumber": data['number'],"highestnumber": data['highestnumber'], "serverName": server_name}
         FullLB = sorted(lb.items(), key=lambda x: x[1]['highestnumber'], reverse=True)
         return {"Leaderboard":FullLB}, 200
     else:
@@ -1245,13 +1251,13 @@ def mutualservers():
     if bot.is_ready():
         servers = {}
         for s in bot.guilds:
-            servers[s.id] = {"name": s.name, "botcount": 0, "membercount": 0, "iconurl": str(s.icon.url) if s.icon else None, "owner": str(s.owner), "ownerid": s.owner.id, "members": [], "bots": [], "verificationlevel": str(s.verification_level), "createdat": str(s.created_at), "joinedat": str(s.me.joined_at), "roles": len(s.roles), "channels": len(s.channels),"bannerurl": str(s.banner.url) if s.banner else None}
+            servers[s.id] = {"name": s.name, "botcount": 0, "membercount": 0, "iconurl": str(s.icon.url) if s.icon else "https://cdn.discordapp.com/embed/avatars/0.png", "owner": str(s.owner), "ownerid": s.owner.id, "members": [], "bots": [], "verificationlevel": str(s.verification_level), "createdat": str(s.created_at), "joinedat": str(s.me.joined_at), "roles": len(s.roles), "channels": len(s.channels),"bannerurl": str(s.banner.url) if s.banner else None}
             for m in s.members:
                 if m.bot:
-                    servers[s.id]["bots"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else None})
+                    servers[s.id]["bots"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else "https://cdn.discordapp.com/embed/avatars/0.png"})
                     servers[s.id]["botcount"] += 1
                 else:
-                    servers[s.id]["members"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else None})
+                    servers[s.id]["members"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else "https://cdn.discordapp.com/embed/avatars/0.png"})
                     servers[s.id]["membercount"] += 1
         return {"Servers":servers}, 200
 
@@ -1727,7 +1733,7 @@ async def restart(interaction: discord.Interaction):
     else:
         await interaction.response.send_message(f"Only <@481295611417853982 and <@1129085908390518895> can use this command.", ephemeral=True)
 
-@bot.tree.command(name="counting", description="Counting Settings")
+@bot.tree.command(name="counting", description="Counting Settings For Shapes")
 @app_commands.default_permissions(administrator=True)
 @commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
 @app_commands.allowed_installs(guilds=True, users=False)
@@ -1850,7 +1856,7 @@ async def ping(interaction: discord.Interaction):
 @bot.tree.command(name="roblox2discord", description="Get a roblox user's Discord from their username.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def roblox2discord(interaction: discord.Interaction, user: str = "LCJUNIOR1220"):
+async def roblox2discord(interaction: discord.Interaction, user: str):
     await interaction.response.defer()
     
     #print(f"Searching For {user}")
@@ -2024,8 +2030,8 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
 
     # Include previous conversation
     for u_msg, a_msg in zip(user_data["user_messages"], user_data["ai_responses"]):
-        messages_for_ai.append({"role": "user", "content": u_msg})
-        messages_for_ai.append({"role": "assistant", "content": a_msg})
+        messages_for_ai.append({"role": "user", "content": u_msg[:1024]})
+        messages_for_ai.append({"role": "assistant", "content": a_msg[:1024]})
 
     # Add latest message
     messages_for_ai.append({"role": "user", "content": prompt})
@@ -5761,9 +5767,10 @@ async def instagram_command(interaction: discord.Interaction, username: str):
     await interaction.response.defer(thinking=True)
     
     loading = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Getting Roblox Profile For {user.name}",
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Getting Instagram Profile For @{username}",
         color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
     )
+    await interaction.edit_original_response(embed=loading)
     
     try:
         username = username.strip().replace('@', '')
@@ -5844,7 +5851,7 @@ def create_instagram_embed(username, profile_info, requester_name):
     
     title_display = f"@{username}"
     if profile_info['is_verified']:
-        title_display += " <:VerifiedInstagram:1440454757822107678>"
+        title_display += " <:VerifiedInstagram:1447033802802331760>"
     
     embed = discord.Embed(
         title=title_display,
@@ -5873,13 +5880,12 @@ def create_instagram_embed(username, profile_info, requester_name):
     
     return embed
         
-# === Flask Runner in Thread ===
-def run_flask():
-    port = int(os.environ.get("PORT", 13455))
-    print(f"Starting Flask on port {port}")
-    app.run(host="0.0.0.0", port=port)
-
+# === Bot Runner in Thread ===
+def run_bot():
+    bot.run(token)
 # === Run Bot + Flask Webserver ===
 if __name__ == "__main__":
-    threading.Thread(target=run_flask).start()
-    bot.run(token)
+    port = int(os.environ.get("PORT", 13455))
+    threading.Thread(target=run_bot).start()
+    print(f"Starting Flask on port {port}")
+    app.run(host="0.0.0.0", port=port, debug=True)

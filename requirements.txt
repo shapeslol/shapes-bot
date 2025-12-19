@@ -11,3 +11,4 @@ flask-cors
 openai
 PyNaCl
 topggpy
+dotenv

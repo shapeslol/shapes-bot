@@ -1,5 +1,6 @@
-discord.py
-Flask
+yapper.py
+flask
+flask-cors
 requests
 pytz
 aiohttp
@@ -7,8 +8,7 @@ bs4
 pickledb
 pandas
 slpp
-flask-cors
 openai
-PyNaCl
-topggpy
+pynacl
+cloudflare
 dotenv

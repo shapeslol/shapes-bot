@@ -1,14 +1,10 @@
 yapper.py
+python-dotenv
 flask
 flask-cors
 requests
 pytz
 aiohttp
-bs4
-pickledb
-pandas
 slpp
 openai
-pynacl
 cloudflare
-dotenv

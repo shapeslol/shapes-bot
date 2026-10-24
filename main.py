@@ -1,33 +1,46 @@
+"""Shapes for Yapper.
+
+Same commands as the Discord bot, running on Yapper through yapper.py. Data lives in Cloudflare Workers KV
+(see cfstore.py), and a small web server runs on port 5004.
+
+Layout of this file:
+  1. setup (env, databases, helpers)
+  2. commands rewritten for Yapper (no select menus / modals / ephemeral replies there)
+  3. commands carried over from the Discord bot (Roblox, Google, AI, GitHub, Instagram, ...)
+  4. events (counting, autorole, ready)
+  5. web server + startup
+"""
+import asyncio
+import base64
+import hmac
+import io
+import json
 import os
+import re
+import socket
 import sys
 import threading
 import time
-import json
-import signal
-import asyncio
-import yapper
+import typing
+import urllib
+import urllib.parse
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
+
 import aiohttp
 import pytz
-import numbers
-#import pandas as pd # Last resort if i keep getting json errors
-from slpp import slpp as lua
-from pickledb import PickleDB
-from datetime import datetime, timezone
 import requests
-from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify, Response
+import yapper
+from flask import Flask, Response, jsonify, redirect, render_template_string, request, session, url_for
 from flask_cors import CORS
-import base64
-import urllib
-import re
-import io
-import socket
-import typing
-from typing import Dict, Any, Optional
 from openai import OpenAI
-import nacl.signing
-import nacl.exceptions
+from slpp import slpp as lua
 
-# Setup Emojis
+import yshim
+from cfstore import CloudflareKV
+from yshim import app_commands, commands, discord
+
+# Emoji used by the Discord version were custom server emoji. yshim.clean() turns them into plain text/emoji.
 Emojis = {
     "loading": "<a:loading:1416950730094542881>",
     "RobloxEmojis": {
@@ -35,80 +48,68 @@ Emojis = {
         "logo": "<:RobloxLogo:1416951004607418398>",
         "verified": "<:RobloxVerified:1416951927513677874>",
         "premium": "<:RobloxPremium:1416951078200541378>",
-        "admin": "<:RobloxAdmin:1416951128876122152>",
-        "inviter": "<:RobloxInviter:1416952415772479559>",
-        "homestead": "<:Roblox100Visits:1416952056324952184>",
-        "ambassador": "<:Ambassador:1430627877337960548>",
-        "friendship": "<:Friendship:1430641140679577630>",
-        "warrior": "<:Warrior:1430640757403943063>",
-        "game": "<:RobloxInGame:1430640335393915041>",
-        "studio": "<:RobloxInStudio:1430627885261262869>",
-        "online": "<:RobloxOnline:1430627882912190608>",
-        "offline": "<:RobloxOffline:1430627883809902632>"
-    }
+    },
 }
 
-# OpenAI client
-chatgpt = OpenAI(api_key=os.getenv("OPENAI_KEY"), base_url="https://api.navy/v1") # MapleAI is a scam.
+
+def _secret(env_name, file_name=None):
+    """A secret from the environment, or from a local text file (how the Discord bot stored them)."""
+    value = os.environ.get(env_name)
+    if value:
+        return value.strip()
+    if file_name:
+        try:
+            with open(file_name, "r") as f:
+                return f.read().strip()
+        except OSError:
+            pass
+    return None
+
+
+# OpenAI-compatible client for /ai
+chatgpt = OpenAI(api_key=os.getenv("OPENAI_KEY") or "missing", base_url="https://api.navy/v1")
 AIModel = "openai/gpt-oss-20b:free"
 
-#=== Database Setup ===
-countingDB = PickleDB('counting.db')
-embedDB = PickleDB('embed.db')
-usersDB = PickleDB('users.db')
-autoroleDB = PickleDB('autorole.db')
-AI_DB = PickleDB('ai.db')
+# === Databases (Cloudflare Workers KV, or local JSON when the Cloudflare env vars are not set) ===
+countingDB = CloudflareKV("counting")
+embedDB = CloudflareKV("embed")
+usersDB = CloudflareKV("users")
+autoroleDB = CloudflareKV("autorole")
+AI_DB = CloudflareKV("ai")
+DATABASES = {"embedDB": embedDB, "countingDB": countingDB, "usersDB": usersDB, "autoroleDB": autoroleDB, "AI_DB": AI_DB}
 
-# === Yapper Bot Setup ===
+# === Yapper bot ===
 bot = yapper.Bot()
+bot.tree = yshim.tree
+yshim.BOT = bot
 owner = "sl.ip"
-co_owner = "<@481295611417853982>"
 MainURL = "https://shapes.lol"
-searchengine = "621a38269031b4e89" # PLEASE USE YOUR OWN SEARCH ENGINE ID FROM https://cse.google.com/
+InviteURL = os.environ.get("YAPPER_INVITE_URL", "https://our-websites.github.io/shapes.lol/yapper")
+searchengine = "621a38269031b4e89"  # PLEASE USE YOUR OWN SEARCH ENGINE ID FROM https://cse.google.com/
 
-# get the public key and api key for our api from .env
-PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
-APIBaseURL_Key = os.environ.get("Shapes_API_Key")
+APIBaseURL_Key = _secret("Shapes_API_Key")
 APIBaseURL_Headers = {"Authorization": f"Bearer {APIBaseURL_Key}"}
+APIBaseURL = os.environ.get("SHAPES_API_URL", "http://localhost:25574")
+GoogleAPIKey = _secret("GOOGLE_API_KEY", "GoogleToken.txt")
+ADMIN_KEY = _secret("ADMIN_KEY", "akey.txt")
 
-# get the bot token from TOKEN.txt
-try:
-    with open('TOKEN.txt', 'r') as f:
-        token = f.read()
-except FileNotFoundError:
-    print("Error: The file 'TOKEN.txt' was not found.")
-except Exception as e:
-    print(f"An error occurred: {e}")
-
-# get the admin key from akey.txt
-try:
-    with open('akey.txt', 'r') as f:
-        ADMIN_KEY = f.read()
-except FileNotFoundError:
-    print("Error: The file 'akey.txt' was not found.")
-except Exception as e:
-    print(f"An error occurred: {e}")
-
-# get the google API key from GoogleToken.txt
-try:
-    with open('GoogleToken.txt', 'r') as f:
-        GoogleAPIKey = f.read()
-except FileNotFoundError:
-    print("Error: The file 'GoogleToken.txt' was not found.")
-except Exception as e:
-    print(f"An error occurred: {e}")
-
-# get the API url
-APIBaseURL = "http://localhost:25574"
+bot_ready = False
+started_at = time.time()
 
 
-# last online cache
+def ecolor(user_id):
+    """A user's saved embed colour, or blue."""
+    return embedDB.get(f"{user_id}") or discord.Color.blue()
+
+
+# last online cache (Roblox)
 def load_cached_timestamps():
     try:
         with open('lastonline.json', 'r') as f:
             return json.load(f)
     except FileNotFoundError:
         return {}
+
 
 def update_cached_timestamp(user_id, timestamp):
     try:
@@ -119,1315 +120,429 @@ def update_cached_timestamp(user_id, timestamp):
     except Exception as e:
         print(f"Error updating cached timestamp: {e}")
 
-# === Flask App Setup ===
-app = Flask(__name__)
-CORS(app)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "keepthisasecret")
-
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Bot Dashboard</title>
-    <style>
-        body { font-family: Arial, sans-serif; background: #1e1e2f; color: #fff; padding: 20px; }
-        h1 { color: #50fa7b; }
-        select, input[type=text] { padding: 6px; border-radius: 5px; border: none; margin: 5px 0; }
-        input[type=submit] { background: #50fa7b; border: none; padding: 8px 12px; border-radius: 5px; color: #000; cursor: pointer; }
-        .server { background: #282a36; padding: 10px; margin-bottom: 15px; border-radius: 10px; }
-        .logout { margin-top: 20px; }
-        .presence-button {
-            display: inline-block;
-            margin-top: 10px;
-            background-color: #7289da;
-            color: white;
-            padding: 10px 18px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: bold;
-            transition: background-color 0.3s ease;
-        }
-        .presence-button:hover {
-            background-color: #5b6eae;
-        }
-    </style>
-</head>
-<body>
-    <h1>🤖 Bot Dashboard</h1>
-    <p>Status: <b style="color:lime;">Online</b></p>
-    <p>Connected to {{ guilds|length }} {{ 'server' if guilds|length == 1 else 'servers' }}</p>
-
-    <!-- Presence Button -->
-    <a href="https://our-websites.github.io/shapes.lol/yapper" target="_blank" rel="noopener" class="presence-button">
-        Join Our Server
-    </a>
-
-    {% for g in guilds %}
-        <div class="server">
-            <h3>{{ g.name }}</h3>
-            <form action="/send" method="post">
-                <input type="hidden" name="guild_id" value="{{ g.id }}">
-                <label for="channel">Channel:</label>
-                <select name="channel_id">
-                    {% for c in g.text_channels %}
-                        <option value="{{ c.id }}">{{ c.name }}</option>
-                    {% endfor %}
-                </select>
-                <br>
-                <label for="message">Message:</label>
-                <input type="text" name="message" placeholder="Enter your message" required>
-                <br>
-                <input type="submit" value="Send">
-            </form>
-        </div>
-    {% endfor %}
-    <div class="logout">
-        <a href="/logout" style="color: #ff5555;">Logout</a>
-    </div>
-</body>
-</html>
-"""
-
-# === Admin Auth Decorator ===
-def admin_required(f):
-    def wrapped(*args, **kwargs):
-        if session.get("admin") != True:
-            return redirect(url_for("admin_login"))
-        return f(*args, **kwargs)
-    wrapped.__name__ = f.__name__
-    return wrapped
-
-# === Flask Routes ===
-@app.route("/status")
-def status():
-    return "OK", 200
-
-@app.route("/activity")
-def activity():
-    return redirect(url_for("admin_login"))
-
-@app.route("/login", methods=["GET", "POST"])
-def admin_login():
-    if session.get("admin") == True:
-        return redirect(url_for("dashboard"))
-
-    if request.method == "POST":
-        key = request.form.get("pass")
-        if key == ADMIN_KEY:
-            session["admin"] = True
-            return redirect(url_for("dashboard"))
-        else:
-            return '''
-                <h3 style="color: red; font-family: Arial, sans-serif;">Incorrect key.</h3>
-                <a href="/login" style="font-family: Arial, sans-serif; color: #50fa7b;">Try again</a>
-            '''
-
-    return '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Admin Login</title>
-        <style>
-            body {
-                background: #121212;
-                color: #eee;
-                font-family: Arial, sans-serif;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                margin: 0;
-            }
-            .login-container {
-                background: #282a36;
-                padding: 40px 50px;
-                border-radius: 12px;
-                box-shadow: 0 0 15px #50fa7b;
-                text-align: center;
-                width: 320px;
-            }
-            h2 {
-                margin-bottom: 25px;
-                color: #50fa7b;
-            }
-            input[type=password] {
-                width: 100%;
-                padding: 12px;
-                margin-bottom: 20px;
-                border: none;
-                border-radius: 6px;
-                font-size: 16px;
-                background: #44475a;
-                color: #f8f8f2;
-            }
-            input[type=password]::placeholder {
-                color: #bd93f9;
-            }
-            button {
-                background: #50fa7b;
-                border: none;
-                color: #000;
-                padding: 12px 0;
-                width: 100%;
-                font-size: 16px;
-                font-weight: bold;
-                border-radius: 6px;
-                cursor: pointer;
-                transition: background 0.3s ease;
-            }
-            button:hover {
-                background: #44d366;
-            }
-            a {
-                display: inline-block;
-                margin-top: 15px;
-                color: #50fa7b;
-                text-decoration: none;
-                font-size: 14px;
-            }
-            a:hover {
-                text-decoration: underline;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="login-container">
-            <h2>Admin Login</h2>
-            <form method="POST">
-                <input type="password" name="pass" placeholder="Enter admin key" required>
-                <button type="submit">Login</button>
-            </form>
-        </div>
-    </body>
-    </html>
-    '''
-
-@app.route("/logout")
-def admin_logout():
-    session.clear()
-    return redirect(url_for("admin_login"))
-
-# Dashboard at root /
-@app.route("/", methods=["GET"])
-@admin_required
-def dashboard():
-    if not bot_ready:
-        return "<h3>Bot is not ready yet, please try again in a moment.</h3>"
-    return render_template_string(HTML_TEMPLATE, guilds=cached_guilds)
-
-@app.route("/send", methods=["POST"])
-@admin_required
-def send_message():
-    guild_id = int(request.form["guild_id"])
-    channel_id = int(request.form["channel_id"])
-    message = request.form["message"]
-
-    guild = yapper.utils.get(bot.guilds, id=guild_id)
-    if guild:
-        channel = yapper.utils.get(guild.text_channels, id=channel_id)
-        if channel:
-            try:
-                bot.loop.create_task(channel.send(message))
-            except Exception as e:
-                print(f"Failed to send message: {e}")
-
-    return redirect(url_for("dashboard"))
-
-@app.route('/shutdown', methods=['POST'])
-def shutdown():
-    if request.remote_addr not in ['127.0.0.1', '::1']:
-        return 'Forbidden', 403
-
-    func = request.environ.get('werkzeug.server.shutdown')
-    if func is None:
-        return 'Not running with the Werkzeug Server', 500
-
-    func()
-    return 'Server shutting down...'  
-
-@app.route('/commands', methods=['GET'])
-def send_commands():
-    commands = {}
-    commands['Commands'] = {}
-    for cmd in bot.tree.get_commands():
-        if isinstance(cmd, yapper.app_commands.ContextMenu):
-            # Context menu commands don't have description/options
-            cmd_data = {
-                "name": cmd.qualified_name,
-                "type": "context_menu_command"
-            }
-        else:  # Slash commands
-            cmd_data = {
-                "name": cmd.qualified_name,
-                "description": getattr(cmd, "description", ""),
-                "options": [opt.name for opt in getattr(cmd, "options", [])],
-                "choices": [choice.name for choice in getattr(cmd, "choices", [])],
-                "type": "slash_command"
-            }
-        
-        commands['Commands'][cmd.qualified_name] = cmd_data
-    commands['success'] = True
-    return jsonify(commands), 200
-    
-@app.route('/count/commands', methods=['GET'])
-def get_command_count():
-    return {'Commands': str(len(bot.tree.get_commands()))}, 200
-
-@app.route('/yapper/webhook', methods=['POST'])
-def send_webhook():
-    signature = request.headers.get("X-Signature-Ed25519")
-    timestamp = request.headers.get("X-Signature-Timestamp")
-    body = request.data.decode("utf-8")
-
-    if not signature or not timestamp:
-        return Response("missing signature", 401)
-
-    try:
-        verify_key = nacl.signing.VerifyKey(bytes.fromhex(PUBLIC_KEY))
-        verify_key.verify(f'{timestamp}{body}'.encode(), bytes.fromhex(signature))
-    except nacl.exceptions.BadSignatureError:
-        return Response("invalid signature", 401)
-
-    payload = request.json
-
-    # Ping Check
-    if payload.get("type") == 0:
-        return Response(status=204)
-
-    # Event Sent
-    if payload.get("type") == 1:
-        event = payload.get("event", {})
-        data = event.get("data", {})
-        integration_type = data.get("integration_type")
-        event_type = event.get("type")
-
-        print("Received event:", event)  # debugging
-
-
-        webhook = os.environ.get('webhook_url')
-        if not webhook:
-            print("Webhook URL not set in environment")
-            return "webhook missing", 500
-
-        if event_type == "APPLICATION_AUTHORIZED":
-            # User authorization
-            if integration_type == 1:
-                user = data.get("user", {})
-                user_id = user.get("id", "Unknown")
-                user_name = user.get("username", "Unknown")
-                user_avatar = user.get("avatar")
-
-                scopes_data = data.get("scopes", [])
-                scopes = ", ".join(scopes_data)
-
-                if user_avatar:
-                    ext = "gif" if user_avatar.startswith("a_") else "png"
-                    avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{user_avatar}.{ext}"
-                else:
-                    avatar_url = "https://cdn.discordapp.com/embed/avatars/0.png"
-
-                embed = {
-                    "author": {"name": user_name, "icon_url": avatar_url},
-                    "title": f"{user_name} Installed Shapes to their apps",
-                    "description": f"**{user_name}** (`{user_id}`) has authorized Shapes. With the scopes: {scopes}",
-                    "color": 3066993,
-                    "timestamp": data.get("timestamp")
-                }
-
-                requests.post(webhook, json={"embeds": [embed]})
-
-            # Guild authorization
-            elif integration_type == 0:
-                user = data.get("user", {})
-                user_id = user.get("id", "Unknown")
-                user_name = user.get("username", "Unknown")
-
-                guild = data.get("guild", {})
-                guild_id = guild.get("id", "Unknown")
-                guild_name = guild.get("name", "Unknown")
-                guild_icon = guild.get("icon")
-
-                scopes_data = data.get("scopes", [])
-                scopes = ", ".join(scopes_data)
-
-
-                if guild_icon:
-                    ext = "gif" if guild_icon.startswith("a_") else "png"
-                    icon_url = f"https://cdn.discordapp.com/icons/{guild_id}/{guild_icon}.{ext}"
-                else:
-                    icon_url = "https://cdn.discordapp.com/embed/avatars/0.png"
-
-                embed = {
-                    "author": {"name": guild_name, "icon_url": icon_url},
-                    "title": "Shapes Added To A New Server",
-                    "description": f"**{guild_name}** (`{guild_id}`) has authorized Shapes. Added by {user_name} (`{user_id}`) with the scopes: {scopes}",
-                    "color": 3066993,
-                    "timestamp": data.get("timestamp")
-                }
-
-                requests.post(webhook, json={"embeds": [embed]})
-            return Response(status=204)
-        elif event_type == "APPLICATION_DEAUTHORIZED":
-            # User de-authorization
-            user = data.get("user", {})
-            user_id = user.get("id", "Unknown")
-            user_name = user.get("username", "Unknown")
-            user_avatar = user.get("avatar")
-
-            if user_avatar:
-                ext = "gif" if user_avatar.startswith("a_") else "png"
-                avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{user_avatar}.{ext}"
-            else:
-                avatar_url = "https://cdn.discordapp.com/embed/avatars/0.png"
-
-            embed = {
-                "author": {"name": user_name, "icon_url": avatar_url},
-                "title": f"{user_name} Removed Shapes from their apps",
-                "description": f"**{user_name}** (`{user_id}`) has deauthorized Shapes.",
-                "color": 15158332,
-                "timestamp": data.get("timestamp")
-            }
-
-            requests.post(webhook, json={"embeds": [embed]})
-            return Response(status=204)
-        else:
-            # Unknown type
-            return Response("Unhandled Event", 400)
-    else:
-        return Response("invalid type", 400)
-
-# === Globals for caching and ready state ===
-cached_guilds = []
-bot_ready = False
-colors_lua = """{[3447003] = "Blue", [15158332] = "Red", [3066993] = "Green", [10181046] = "Purple", [15105570] = "Orange", [15844367] = "Gold", [1752220] = "Teal", [2123412] = "Dark Blue", [10038562] = "Dark Red", [2067276] = "Dark Green", [7419530] = "Dark Purple", [11027200] = "Dark Orange", [12745742] = "Dark Gold", [1146986] = "Dark Teal"}"""
-colors = lua.decode(colors_lua)
-#print(colors)
-
-#bot = commands.Bot(command_prefix="/", intents=intents)
-bot = Yapper.Bot()
-#tree = app_commands.CommandTree(bot)
-
-class CommandSyncer:
-    """Handles command synchronization with Discord"""
-    
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
-        
-    async def sync_commands(self, guild_id: Optional[int] = None) -> int:
-        """Sync commands to Yapper"""
-        try:
-            if guild_id:
-                # Sync to specific guild (faster for testing)
-                guild = yapper.Object(id=guild_id)
-                synced = await self.bot.tree.sync(guild=guild)
-                print(f"✅ Synced {len(synced)} commands to guild {guild_id}")
-            else:
-                # Sync globally (takes up to 1 hour to propagate)
-                synced = await self.bot.tree.sync()
-                print(f"✅ Synced {len(synced)} commands globally")
-            
-            return len(synced)
-            
-        except Exception as e:
-            print(f"❌ Failed to sync commands: {e}")
-            return 0
-
-# == save databases if bot closes/goes offline == #
-# async def update_db_on_close():
-    #while True:
-        #time.sleep(2)
-        #if bot.is_closed():
-            #countingDB.save()
-            #embedDB.save()
-            #usersDB.save()
-            #print(f"Saved EmbedDB {embedDB.all()}")
-            #print(f"Saved CountingDB {countingDB.all()}")
-            #print(f"Saved UsersDB {usersDB.all()}")
-            #print("Bot Closed, Shutting Down Flask Server.")
-            #os._exit(0)
-
-# == update databases 0.5 seconds == #
-
-async def update_db():
-    while True:
-        await asyncio.sleep(0.5)
-        if not bot.is_closed():
-            countingDB.save()
-            embedDB.save()
-            usersDB.save()
-            autoroleDB.save()
-            #print(f"EmbedDB = {embedDB.all()}")
-            #print(f"CountingDB = {countingDB.all()}")
-            #print(f"UsersDB = {usersDB.all()}")
-    
-            for guild in bot.guilds:
-                if not countingDB.get(f"{guild.id}"):
-                    countingDB.set(f"{guild.id}", {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber":0, "banned":False})
-                    countingDB.save()
-        if bot.is_closed():
-            countingDB.save()
-            embedDB.save()
-            usersDB.save()
-            autoroleDB.save()
-            AI_DB.save()
-            print(f"Saved EmbedDB {embedDB.all()}")
-            print(f"Saved CountingDB {countingDB.all()}")
-            print(f"Saved UsersDB {usersDB.all()}")
-            print(f"Saved AutoRoleDB {autoroleDB.all()}")
-            print(f"Saved AI_DB {AI_DB.all()}")
-            print("Bot Closed, Shutting Down Flask Server.")
-            os._exit(0)
-
-
-# === Background task to update cached guilds every 2 seconds ===
-async def update_guild_cache():
-    global cached_guilds
-    while True:
-        #await bot.tree.sync()
-        #BotInfo = await bot.application_info()
-        cached_guilds = list(bot.guilds)
-        print(f"[SYSTEM] Watching {len(cached_guilds)} Servers!")
-        print(f"[SYSTEM] Watching {BotInfo.approximate_user_install_count} Users!")
-        await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 shapes.lol/discord"))
-        await asyncio.sleep(2)
-        #if len(bot.guilds) == 1:
-            #print(bot.guilds[0].name)
-            #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=bot.guilds[0].name))
-        #else:
-            #print(f"Watching {len(bot.guilds)} Servers")
-            #await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers"))
-
-        await asyncio.sleep(30)
 
 def IsInteger(s):
     try:
         int(s)
-        return True  # Conversion succeeded, it is an integer
-    except ValueError:
-        return False  # Conversion failed, it is not an integer
+        return True
+    except (TypeError, ValueError):
+        return False
 
-# === Bot Events ===
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
-    if message.author.bot:
-        return
-
-    if message.guild:
-        server = message.guild
-        countingjson = countingDB.get(server.id)
-        counting_data = countingjson
-        enabled = counting_data['enabled']
-        number = counting_data['number']
-        channel = counting_data['channel']
-        warnings = counting_data['warnings']
-        LastCounter = counting_data['lastcounter']
-        HighestNumber = counting_data['highestnumber']
-        next_number = number + 1
-        if enabled == False or message.channel.id != channel:
-            return
-        
-        messagecontent = message.content
-        messagecontent = messagecontent.replace(" ", "")
-        InputNumber = None
-        
-        if not any(op in messagecontent for op in "+-*/x"):
-            if IsInteger(messagecontent):
-                InputNumber = int(messagecontent)
-            else:
-                ##print("stop")
-                return
-        else:
-            num = ''
-            parts = []
-            for ch in messagecontent:
-                if IsInteger(ch):
-                    num += ch
-                else:
-                    parts.append(num)
-                    parts.append(ch)
-                    num = ''
-            parts.append(num)
-        
-            if not IsInteger(parts[0]):
-                return
-            InputNumber = int(parts[0])
-            i = 1
-            while i < len(parts):
-                op = parts[i]
-                val = int(parts[i + 1])
-        
-                if op == '+':
-                    InputNumber += val
-                elif op == '-':
-                    InputNumber -= val
-                elif op == '*' or op == 'x':
-                    InputNumber *= val
-                elif op == '/':
-                    result = InputNumber / val
-                    InputNumber = int(result) if IsInteger(ch) else result
-        
-                i += 2
-        
-        if str(InputNumber) == str(next_number) and message.author.id != LastCounter:
-            
-            LastCounter = message.author.id
-            number = next_number
-            if number > HighestNumber:
-                HighestNumber = number
-            counting_data['highestnumber'] = HighestNumber
-            counting_data['number'] = number
-            counting_data["lastcounter"] = LastCounter
-            countingDB.set(server.id, counting_data)
-            countingDB.save()
-            await message.add_reaction('👍')
-        else:
-            if InputNumber == None:
-                return
-            if enabled == False:
-                return
-            
-            if channel != message.channel.id:
-                return
-            
-            if message.author.id == LastCounter and warnings != 3:
-                await message.add_reaction('⚠️')
-                await message.reply(f":warning: You can't count by yourself!")
-                warnings = warnings + 1
-                counting_data['warnings'] = warnings
-                countingDB.set(server.id, counting_data)
-                countingDB.save()
-                return
-            if warnings < 3:
-                await message.add_reaction('⚠️')
-                if number == 0:
-                    await message.reply(f":warning: The next number is 1")
-                await message.reply(f":warning: The next number is {next_number}")
-                warnings = warnings + 1
-                counting_data['warnings'] = warnings
-                countingDB.set(server.id, counting_data)
-                countingDB.save()
-                return
-            if warnings >= 3:
-                await message.add_reaction('❌')
-                if number > HighestNumber:
-                    HighestNumber = number
-                counting_data['highestnumber'] = HighestNumber
-                if number == 0:
-                    await message.channel.send(f":x: {message.author.mention} ruined it at 1, the next number is 1 (again)")
-                    next_number = 1
-                    warnings = 0
-                    counting_data['warnings'] = warnings
-                    counting_data['number'] = number
-                    countingDB.set(server.id, counting_data)
-                    countingDB.save()
-                    return
-                await message.channel.send(f":x: {message.author.mention} ruined it at {number}, the next number is 1")
-                number = 0
-                next_number = 1
-                warnings = 0
-                LastCounter = None
-                counting_data['lastcounter'] = LastCounter
-                counting_data['warnings'] = warnings
-                counting_data['number'] = number
-                countingDB.set(server.id, counting_data)
-                countingDB.save()
-                return
-    else:
-        invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}"
-        invite_embed = discord.Embed(
-            description=f"[Click Here To Add Shapes To Your Server or Apps]({invite_url})",
-            color=embedDB.get(f"{message.author.id}") if embedDB.get(f"{message.author.id}") else discord.Color.blue()
-        )
-        await message.channel.send(embed=invite_embed)
-
-@bot.event
-async def on_message_delete(message):
-    print(f"Message by {message.author} deleted in channel {message.channel}: {message.content}")
-
-    if message.guild:
-        server = message.guild
-        counting = countingDB.get(f"{server.id}")
-        if counting:
-            if message.author.id == counting['lastcounter'] and message.channel.id == counting['channel'] and IsInteger(message.content):
-                nextnumber = counting['number'] + 1
-                await message.channel.send(f"{message.author.mention} deleted their message containing the last number. The next number is {nextnumber}")
-
-@bot.event
-async def on_message_edit(before, after):
-    if before.author.bot:
-        return
-
-    if before.guild:
-        server = before.guild
-        counting = countingDB.get(f"{server.id}")
-        if counting:
-            if before.author.id == counting['lastcounter'] and before.channel.id == counting['channel'] and IsInteger(before.content):
-                nextnumber = counting['number'] + 1
-                await before.channel.send(f"{before.author.mention} edited their message containing the last number. The next number is {nextnumber}")
-
-@bot.event
-async def on_ready():
-    global bot_ready
-    global BotInfo
-    bot_ready = True
-    await bot.tree.sync()
-    print(f"Logged in as {bot.user}")
-    BotInfo = await bot.application_info()
-    #print(BotInfo)
-    await bot.change_presence(activity=discord.CustomActivity(name=f"🔗 shapes.lol/discord"))
-    # Start the cache updater task
-    Shapes(command_prefix="/", intents=discord.Intents.all())
-    bot.loop.create_task(update_guild_cache())
-    bot.loop.create_task(update_db())
-    #bot.loop.create_task(update_db_on_close())
-
-    TOP_GG = TopGGIntegration(bot)
-    TOP_GG_COMMANDS = CommandSyncer(bot)
-
-    print("Loading top.gg API")
-
-    try:
-        synced_count = await TOP_GG_COMMANDS.sync_commands()
-        print(f"✅ Command sync completed: {synced_count} commands")
-    except Exception as e:
-        print(f"❌ Command sync failed: {e}")
-    
-    try:
-        await TOP_GG.start_periodic_updates()
-        print("✅ Top.gg integration started")
-    except Exception as e:
-        print(f"❌ Top.gg integration failed: {e}")
-    
-    try:
-        await TOP_GG.post_commands_to_topgg()
-        print("✅ Initial Top.gg commands posted")
-    except Exception as e:
-        print(f"❌ Failed to post initial Top.gg commands: {e}")
-
-    try:
-        await TOP_GG.post_server_count()
-        print("✅ Server count updated successfully")
-    except Exception as e:
-        print(f"❌ Failed to update server count: {e}")
-
-@app.route('/topgg/commands', methods=['GET'])
-def topgg_webhook():
-    top_gg_test = TopGGIntegration(bot)
-    return jsonify(top_gg_test._get_bot_commands_for_topgg())
-
-@bot.event
-async def on_member_join(member):
-    if member.bot:
-        return
-        
-    autorole_data = autoroleDB.get(f"{member.guild.id}")
-    if autorole_data and autorole_data.get("enabled"):
-        role_id = autorole_data.get("role_id")
-        if role_id:
-            role = member.guild.get_role(role_id)
-            if role:
-                await member.add_roles(role)
-
-@app.route('/botinfo', methods=["GET"])
-def get_bot_info():
-    # Ensure the bot is ready before accessing guilds
-    if bot.is_ready():
-        server_count = len(bot.guilds)
-        jsonData = {"Servers":str(server_count),"Users":str(BotInfo.approximate_user_install_count)}
-        return jsonify(jsonData), 200
-    else:
-        jsonData = {"Servers":"Unknown","Users":"Unknown"}
-        return jsonify(jsonData), 503
-        
-@app.route('/count/servers', methods=["GET"])
-def get_server_count():
-    if bot.is_ready():
-        server_count = len(bot.guilds)
-        jsondata = {"Servers":str(server_count)}
-        return jsonify(jsondata), 200
-    else:
-        return {"Servers":"Unknown"}, 503
-        
-@app.route('/count/users', methods=["GET"])
-def get_user_count():
-    if bot.is_ready():
-        user_count = BotInfo.approximate_user_install_count
-        jsondata = {"Users":str(user_count)}
-        return jsonify(jsondata), 200
-    else:
-        return {"Users":"Unknown"}, 503
-
-@app.route('/clb', methods=["GET"])
-def countinglb():
-    if bot.is_ready():
-        lb = {}
-        for server in countingDB.all():
-            data = countingDB.get(f"{server}")
-            if data.get("banned", False) == True:
-                print(f'{bot.get_guild(int(server)).name if bot.get_guild(int(server)) else "Unknown"} Is Banned From Counting.')
-                continue
-            if data["enabled"] == True:
-                server_name = bot.get_guild(int(server)).name if bot.get_guild(int(server)) else None
-                if server_name == None:
-                    continue
-                lb[f"{server}"] = {"currentnumber": data['number'],"highestnumber": data['highestnumber'], "serverName": server_name}
-        FullLB = sorted(lb.items(), key=lambda x: x[1]['highestnumber'], reverse=True)
-        return {"Leaderboard":FullLB}, 200
-    else:
-        return jsonify("Bot is still starting"), 503
-
-@app.route('/mutuals', methods=["GET"])
-def mutualservers():
-    if bot.is_ready():
-        servers = {}
-        for s in bot.guilds:
-            servers[s.id] = {"name": s.name, "botcount": 0, "membercount": 0, "iconurl": str(s.icon.url) if s.icon else "https://cdn.discordapp.com/embed/avatars/0.png", "owner": str(s.owner), "ownerid": s.owner.id, "members": [], "bots": [], "verificationlevel": str(s.verification_level), "createdat": str(s.created_at), "joinedat": str(s.me.joined_at), "roles": len(s.roles), "channels": len(s.channels),"bannerurl": str(s.banner.url) if s.banner else None}
-            for m in s.members:
-                if m.bot:
-                    servers[s.id]["bots"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else "https://cdn.discordapp.com/embed/avatars/0.png"})
-                    servers[s.id]["botcount"] += 1
-                else:
-                    servers[s.id]["members"].append({"name": str(m), "id": m.id, "icon": str(m.display_avatar.url) if m.display_avatar else "https://cdn.discordapp.com/embed/avatars/0.png"})
-                    servers[s.id]["membercount"] += 1
-        return {"Servers":servers}, 200
-
-async def restartbot():
-    print("Bot Restarting.")
-    await bot.close(close=True)
-    await asyncio.sleep(20)
-    bot.run(token)
 
 def isotodiscordtimestamp(iso_timestamp_str: str, format_type: str = "D") -> str:
+    """ISO timestamp -> a <t:unix:style> marker. yshim.clean() turns the marker into readable text when sending."""
     try:
         if '.' in iso_timestamp_str and iso_timestamp_str.endswith('Z'):
-            main_part = iso_timestamp_str.split('.')[0]
-            iso_timestamp_str = main_part + '+00:00'
+            iso_timestamp_str = iso_timestamp_str.split('.')[0] + '+00:00'
         elif '.' in iso_timestamp_str and '+00:00' in iso_timestamp_str:
-            main_part = iso_timestamp_str.split('.')[0]
-            iso_timestamp_str = main_part + '+00:00'
+            iso_timestamp_str = iso_timestamp_str.split('.')[0] + '+00:00'
         elif iso_timestamp_str.endswith('Z'):
             iso_timestamp_str = iso_timestamp_str.replace('Z', '+00:00')
-        
         dt_object = datetime.fromisoformat(iso_timestamp_str)
-
         if dt_object.tzinfo is None:
             dt_object = pytz.utc.localize(dt_object)
         else:
             dt_object = dt_object.astimezone(pytz.utc)
-
-        unix_timestamp = int(dt_object.timestamp())
-        return f"<t:{unix_timestamp}:{format_type}>"
-    except ValueError as e:
+        return f"<t:{int(dt_object.timestamp())}:{format_type}>"
+    except ValueError:
         return None
 
+
 DiscordColors = [
-    discord.Color.blue(),
-    discord.Color.red(),
-    discord.Color.green(),
-    discord.Color.purple(),
-    discord.Color.orange(),
-    discord.Color.gold(),
-    discord.Color.teal(),
-    discord.Color.dark_blue(),
-    discord.Color.dark_red(),
-    discord.Color.dark_green(),
-    discord.Color.dark_purple(),
-    discord.Color.dark_orange(),
-    discord.Color.dark_gold(),
-    discord.Color.dark_teal(),
-    discord.Color.random()
+    ("Blue", discord.Color.blue()), ("Red", discord.Color.red()), ("Green", discord.Color.green()),
+    ("Purple", discord.Color.purple()), ("Orange", discord.Color.orange()), ("Gold", discord.Color.gold()),
+    ("Teal", discord.Color.teal()), ("Dark Blue", discord.Color.dark_blue()), ("Dark Red", discord.Color.dark_red()),
+    ("Dark Green", discord.Color.dark_green()), ("Dark Purple", discord.Color.dark_purple()),
+    ("Dark Orange", discord.Color.dark_orange()), ("Dark Gold", discord.Color.dark_gold()),
+    ("Dark Teal", discord.Color.dark_teal()),
 ]
 
-class EmbedColorSelection(discord.ui.Modal, title="Test Modal"):
-    modal_choices = [discord.Color.blue(), discord.Color.red(), discord.Color.green(), discord.Color.purple(), discord.Color.orange(), discord.Color.gold(), discord.Color.teal(), discord.Color.dark_blue(), discord.Color.dark_red(), discord.Color.dark_green(), discord.Color.dark_purple(), discord.Color.dark_orange(), discord.Color.dark_gold(), discord.Color.dark_teal(), discord.Color.random()]
-    color_select = discord.ui.Select(
-        options=[discord.SelectOption(label="Blue", description="A nice blue color", value=str(discord.Color.blue().value), emoji="🔵"),
-        discord.SelectOption(label="Red", description="A vibrant red color", value=str(discord.Color.red().value), emoji="🔴"),
-            discord.SelectOption(label="Green", description="A refreshing green color", value=str(discord.Color.green().value), emoji="🟢"),
-            discord.SelectOption(label="Purple", description="A royal purple color", value=str(discord.Color.purple().value), emoji="🟣"),
-            discord.SelectOption(label="Orange", description="A bright orange color", value=str(discord.Color.orange().value), emoji="🟠"),
-            discord.SelectOption(label="Gold", description="A shiny gold color", value=str(discord.Color.gold().value), emoji="🟡"),
-            discord.SelectOption(label="Teal", description="A cool teal color", value=str(discord.Color.teal().value), emoji="🔷"),
-            discord.SelectOption(label="Dark Blue", description="A deep dark blue color", value=str(discord.Color.dark_blue().value), emoji="🔷"),
-            discord.SelectOption(label="Dark Red", description="A deep dark red color", value=str(discord.Color.dark_red().value), emoji="🔴"),
-            discord.SelectOption(label="Dark Green", description="A deep dark green color", value=str(discord.Color.dark_green().value), emoji="🟢"),
-            discord.SelectOption(label="Dark Purple", description="A deep dark purple color", value=str(discord.Color.dark_purple().value), emoji="🟣"),
-            discord.SelectOption(label="Dark Orange", description="A deep dark orange color", value=str(discord.Color.dark_orange().value), emoji="🟠"),
-            discord.SelectOption(label="Dark Gold", description="A deep dark gold color", value=str(discord.Color.dark_gold().value), emoji="🟡"),
-            discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷"),
-            discord.SelectOption(label="Random", description="A random color", value=str(discord.Color.random().value), emoji="🔷"),
-        ]
-    )
-    def __init__(self):
-        super().__init__()
-        self.add_item(self.color_select)
-    async def on_submit(self, interaction: discord.Interaction):
-        selected_color_value = int(self.color_select.values[0])
-        embedDB.set(f"{interaction.user.id}", selected_color_value)
-        embedDB.save()
-        embed = discord.Embed(
-            title="Embed Color Changed!",
-            description=f"Your embed color has been changed successfully to {selected_color_value}!",
-            color=selected_color_value
-        )
-        embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# === User Commands ===
-@bot.tree.context_menu(name="discord2roblox")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discord2roblox(interaction: discord.Interaction, user: discord.User): # = 481295611417853982):
-    userid = user.id
-    await interaction.response.defer(thinking=True)
+# === Server / channel helpers ===
+_chan_server = {}
 
-    loading = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Getting Roblox Profile For {user.name}",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
 
-    await interaction.followup.send(embed=loading)
+def server_of(channel_id, hint=None):
+    """The server a channel belongs to (None for a DM)."""
+    if hint:
+        return str(hint)
+    key = str(channel_id)
+    if key not in _chan_server:
+        ch = bot.channel(channel_id)
+        _chan_server[key] = str(yshim._first(ch or {}, "server_id", "guild_id") or "") or None
+    return _chan_server[key]
 
-    url = f"{APIBaseURL}/d2r/{userid}"
 
-    try:
-        response = requests.get(url, headers=APIBaseURL_Headers)
-        response.raise_for_status()
-        APIData = response.json()
-        print(APIData)
-        Roblox = None
-        if APIData.get("data") and APIData.get("success", False) == True:
-            successembed = discord.Embed(
-                title=f"Roblox Profile for {user.name}",
-                description=f"[View Roblox Profile](https://www.roblox.com/users/{APIData['data']}/profile)",
-                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-            )
-            successembed.set_thumbnail(url=f"https://www.roblox.com/headshot-thumbnail/image?userId={APIData['data']}&width=420&height=420&format=png")
-            successembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=successembed)
-            return
-        else:
-            #print(f"No Roblox Profile found for {user.name}")
-            failedembed = discord.Embed(
-                title=f"No Roblox Profile found for {user.name}",
-                color=discord.Color.red()
-            )
-            await interaction.edit_original_response(embed=failedembed)
-            return
-    except requests.exceptions.RequestException as e:
-        #print(f"Error fetching data for Discord ID: {userid}: {e}")
-        failedembed3 = discord.Embed(
-            title=f"Error retrieving Roblox Profile from {user.name}",
-            color=discord.Color.red()
-        )
-        await interaction.edit_original_response(embed=failedembed3)
-        return
+def resolve_channel(server_id, token):
+    """A text channel from a <#id> mention, an id, or a name."""
+    token = (token or "").strip()
+    m = re.match(r"^<#([^>\s]+)>$", token)
+    wanted = (m.group(1) if m else token).lstrip("#")
+    for c in bot.channels(server_id, type="text"):
+        if str(c.get("id")) == wanted or str(c.get("name", "")).lower() == wanted.lower():
+            return c
+    return None
 
-@bot.tree.context_menu(name="discord2spook")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discord2spook(interaction: discord.Interaction, user: discord.User):
-    url = f"https://spook.bio/api/profiles?discordId={user.id}"
-    print(user.id)
-    print(url)
-    response = requests.get(url)
-    data = response.json()
-    if response.status_code == 200:
-        await interaction.response.send_message(f"{user.mention}'s [spook.bio Profile](https://spook.bio/@{data.get('username')})", ephemeral=False)
-        print(f"Fetched {data['username']} successfully!")
-    else:
-        if interaction.user.name == user.name:
-            await interaction.response.send_message(f":x: You don't have a spook.bio profile linked to your account {user.mention}! :x: To link your profile to your account create a spook.bio account [here](https://spook.bio/login)")
-            return
-        await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
-        print(f"Error fetching data: {response.status_code}")
 
-# === Message Commands ===
-@bot.tree.context_menu(name="ai")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def ai(interaction: discord.Interaction, prompt: discord.Message):
-    await interaction.response.defer(thinking=True)
+_member_cache = {"at": 0, "value": 0}
 
-    loading = discord.Embed(
-    title=f"{Emojis.get('loading')} {interaction.user.mention} Getting AI Response For: {prompt}",
-    color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-)
 
-    await interaction.followup.send(embed=loading)
-    
-    user_id = str(interaction.user.id)
-    username = interaction.user.name
+def total_members():
+    """Approximate number of people across every server the bot is in (cached for 5 minutes)."""
+    if time.time() - _member_cache["at"] < 300:
+        return _member_cache["value"]
+    total = 0
+    for s in bot.servers():
+        n = yshim._first(s, "member_count", "members_count", "memberCount")
+        if n is None:
+            try:
+                n = len(bot.members(s.get("id")))
+            except Exception:
+                n = 0
+        total += int(n)
+    _member_cache.update(at=time.time(), value=total)
+    return total
 
-    # Load or initialize user data
-    user_data = AI_DB.get(user_id) or {"username": username, "user_messages": [], "ai_responses": []}
-    user_data["username"] = username
-    user_data["user_messages"].append(prompt)
-    
-    # Keep last 50 messages
-    user_data["user_messages"] = user_data["user_messages"][-50:]
-    user_data["ai_responses"] = user_data["ai_responses"][-50:]
 
-    # System instructions for the AI
-    messages_for_ai = [
-        {
-            "role": "system",
-            "content": (
-                f"You are a helpful Discord assistant chatting with {username}. "
-                "Always respond in a single concise paragraph. Otherwise your response will not be recieved due to the embed text limit"
-                "Follow Discord TOS. Do not provide instructions for illegal activity. "
-                "Stay safe, respectful, and friendly."
-            )
-        }
-    ]
+def default_counting():
+    return {"channel": None, "number": 0, "enabled": False, "warnings": 0, "lastcounter": None, "highestnumber": 0, "banned": False}
 
-    # Include previous conversation
-    for u_msg, a_msg in zip(user_data["user_messages"], user_data["ai_responses"]):
-        messages_for_ai.append({"role": "user", "content": u_msg})
-        messages_for_ai.append({"role": "assistant", "content": a_msg})
 
-    # Add latest message
-    messages_for_ai.append({"role": "user", "content": prompt})
+async def need_admin(interaction):
+    """True if the caller may manage this server (replies and returns False otherwise)."""
+    if interaction.is_dm:
+        await interaction.response.send_message("This command only works inside a server.")
+        return False
+    if not yshim.is_admin(interaction.guild_id, interaction.user.id):
+        await interaction.response.send_message("You need to be a server admin to use this command.")
+        return False
+    return True
 
-    try:
-        response = chatgpt.chat.completions.create(
-            model=AIModel,
-            messages=messages_for_ai
-        )
-        ai_reply = response.choices[0].message.content.strip()
-    except Exception as e:
-        ai_reply = f"⚠️ API error: {e}"
 
-    # Save AI response
-    user_data["ai_responses"].append(ai_reply)
-    AI_DB.set(user_id, user_data)
-    AI_DB.save()
 
-    # Create embed
-    embed = discord.Embed(
-        title=f"💬 Chat with {username}",
-        color=embedDB.get(user_id) or discord.Color.blue()
-    )
-    embed.add_field(name="🧍 You said:", value=prompt, inline=False)
-    embed.add_field(name="🤖 AI replied:", value=ai_reply, inline=False)
-    embed.set_footer(text=f"Requested by {username} | {MainURL}")
+# =====================================================================================
+# Commands rewritten for Yapper
+# (select menus, modals and ephemeral replies do not exist for commands, so these take arguments instead)
+# =====================================================================================
 
-    await interaction.edit_original_response(embed=embed)
-
-@bot.tree.context_menu(name="google")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def google(interaction: discord.Interaction, message: discord.Message):
-    await interaction.response.defer(thinking=True)
-    query = message.content
-    thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching Google For {query}!",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    await interaction.followup.send(embed=thinkingembed)
-    # replace spaces with + in query for google search link
-    properquery = query.replace(" ", "+")
-    
-    url = f"https://www.googleapis.com/customsearch/v1?key={GoogleAPIKey}&cx={searchengine}&q={properquery}"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
-
-        # Get First 5 results
-        if "items" in data and len(data["items"]) >= 5:
-            first_result = data["items"][0]
-            title = first_result.get("title", "No Title")
-            snippet = first_result.get("snippet", "No Description")
-            link = first_result.get("link", "No Link")
-            print(f"First Result: {title} - {link}")
-            second_result = data["items"][1]
-            second_result_title = second_result.get("title", "No Title")
-            second_result_snippet = second_result.get("snippet", "No Description")
-            second_result_link = second_result.get("link", "No Link")
-            print(f"Second Result: {second_result_title} - {second_result_link}")
-            third_result = data["items"][2]
-            third_result_title = third_result.get("title", "No Title")
-            third_result_snippet = third_result.get("snippet", "No Description")
-            third_result_link = third_result.get("link", "No Link")
-            print(f"Third Result: {third_result_title} - {third_result_link}")
-            fourth_result = data["items"][3]
-            fourth_result_title = fourth_result.get("title", "No Title")
-            fourth_result_snippet = fourth_result.get("snippet", "No Description")
-            fourth_result_link = fourth_result.get("link", "No Link")
-            print(f"Fourth Result: {fourth_result_title} - {fourth_result_link}")
-            fifth_result = data["items"][4]
-            fifth_result_title = fifth_result.get("title", "No Title")
-            fifth_result_snippet = fifth_result.get("snippet", "No Description")
-            fifth_result_link = fifth_result.get("link", "No Link")
-            print(f"Fifth Result: {fifth_result_title} - {fifth_result_link}")
-            
-            embed = discord.Embed(
-                title=f"Google Results For {query}",
-                description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n{second_result_snippet}\n\n**3. [{third_result_title}]({third_result_link})**\n{third_result_snippet}\n\n**4. [{fourth_result_title}]({fourth_result_link})**\n{fourth_result_snippet}\n\n**5. [{fifth_result_title}]({fifth_result_link})**\n{fifth_result_snippet}\n\n[Search For More Results](https://google.com/search?q={properquery})",
-                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-            )
-            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=embed)
-        else:
-            if "items" in data and len(data["items"]) > 0:
-                notenoughresultsembed = discord.Embed(
-                title=":x: Not enough results found! :x:",
-                description=f"Please search on google yourself as there wasn't enough results to generate an embed | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
-                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-                )
-                noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-
-                await interaction.edit_original_response(embed=notenoughresultsembed)
-                return
-            noresultembed = discord.Embed(
-                title=":x: No results found! :x:",
-                description=f"No Results for {query} | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
-                color=discord.Color.red()
-            )
-            noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=noresultembed)
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred during the API request: {e}")
-        errorembed = discord.Embed(
-            title=":x: An error occurred while searching Google. Please try again later. :x:",
-            color=discord.Color.red()
-        )
-        errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=errorembed)
-
-# === Bot Commands ===
 @bot.tree.command(name="userinstalls", description="Get The User Installation Count For Shapes!")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def userinstalls(interaction: discord.Interaction):
-    await interaction.response.send_message(f"{BotInfo.approximate_user_install_count} Users Use Shapes!")
+    await interaction.response.send_message(f"{total_members():,} Users Use Shapes!")
+
 
 @bot.tree.command(name="servercount", description="Get The Server Count For Shapes!")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def servercount(interaction: discord.Interaction):
-    await interaction.response.send_message(f"{len(bot.guilds)} Servers Use Shapes!")
+    await interaction.response.send_message(f"{len(bot.servers()):,} Servers Use Shapes!")
 
-@bot.tree.command(name="getdata", description="Get The Data From One Of Our Databases")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@app_commands.describe(database="The database to get data from", key="The key to get data for")
-@app_commands.choices(database=[
-    app_commands.Choice(name="embedDB", value="embedDB"),
-    app_commands.Choice(name="countingDB", value="countingDB"),
-    app_commands.Choice(name="usersDB", value="usersDB"),
-    app_commands.Choice(name="autoroleDB", value="autoroleDB"),
-    app_commands.Choice(name="AI_DB", value="AI_DB"),
-])
+
+@bot.tree.command(name="getdata", description="Owner only: /getdata <embedDB|countingDB|usersDB|autoroleDB|AI_DB> <key>")
 async def getdata(interaction: discord.Interaction, database: str, key: str):
-    # add options for each database and each key and restrict who can use the command.
-    if not interaction.user.id in [481295611417853982, 1129085908390518895]:
-        await interaction.response.send_message(":x: You don't have permission to use this command! :x:", ephemeral=True)
+    # Yapper commands cannot reply privately, so the data goes to the owner's DMs, never into the channel.
+    if not yshim.is_owner(interaction.user):
+        await interaction.response.send_message(":x: You don't have permission to use this command! :x:")
         return
-    db_map = {
-        "embedDB": embedDB,
-        "countingDB": countingDB,
-        "usersDB": usersDB,
-        "autoroleDB": autoroleDB,
-        "AI_DB": AI_DB,
-    }
-    selected_db = db_map.get(database)
-    if selected_db:
-        data = selected_db.get(f"{key}")
-        if data:
-            await interaction.response.send_message(f"Data for key `{key}` in database `{database}`: ```{data}```", ephemeral=True)
-        else:
-            await interaction.response.send_message(f":x: No data found for key `{key}` in database `{database}`! :x:", ephemeral=True)
+    db = DATABASES.get(database)
+    if db is None:
+        await interaction.response.send_message(f":x: Database `{database}` not found! Options: {', '.join(DATABASES)}")
+        return
+    data = db.get(key)
+    dm = bot.dm(interaction.user.id)
+    if data:
+        text = f"Data for key `{key}` in database `{database}`:\n```{json.dumps(data, indent=2, default=str)[:1800]}```"
     else:
-        await interaction.response.send_message(f":x: Database `{database}` not found! :x:", ephemeral=True)
-
-@bot.tree.command(name="settings", description="Your Settings For Shapes")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def settings(interaction: discord.Interaction):
-    current = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    # loop through the colors to figure out which one is the current one and set the default value on the selectoption as True
-    defaults = []
-    for color in DiscordColors:
-        if color.value == current:
-            defaults.append(True)
-        else:
-            defaults.append(False)
+        text = f":x: No data found for key `{key}` in database `{database}`! :x:"
+    yshim.post(dm, text)
+    await interaction.response.send_message("📬 Sent to your DMs.")
 
 
-    view = discord.ui.View()
-    color_select = discord.ui.Select(
-        placeholder="Select your embed color",
-        options=[
-            discord.SelectOption(label="Blue", description="A nice blue color", value=str(discord.Color.blue().value), emoji="🔵", default=defaults[0]),
-            discord.SelectOption(label="Red", description="A vibrant red color", value=str(discord.Color.red().value), emoji="🔴", default=defaults[1]),
-            discord.SelectOption(label="Green", description="A refreshing green color", value=str(discord.Color.green().value), emoji="🟢", default=defaults[2]),
-            discord.SelectOption(label="Purple", description="A royal purple color", value=str(discord.Color.purple().value), emoji="🟣", default=defaults[3]),
-            discord.SelectOption(label="Orange", description="A bright orange color", value=str(discord.Color.orange().value), emoji="🟠", default=defaults[4]),
-            discord.SelectOption(label="Gold", description="A shiny gold color", value=str(discord.Color.gold().value), emoji="🟡", default=defaults[5]),
-            discord.SelectOption(label="Teal", description="A cool teal color", value=str(discord.Color.teal().value), emoji="🔷", default=defaults[6]),
-            discord.SelectOption(label="Dark Blue", description="A deep dark blue color", value=str(discord.Color.dark_blue().value), emoji="🔷", default=defaults[7]),
-            discord.SelectOption(label="Dark Red", description="A deep dark red color", value=str(discord.Color.dark_red().value), emoji="🔴", default=defaults[8]),
-            discord.SelectOption(label="Dark Green", description="A deep dark green color", value=str(discord.Color.dark_green().value), emoji="🟢", default=defaults[9]),
-            discord.SelectOption(label="Dark Purple", description="A deep dark purple color", value=str(discord.Color.dark_purple().value), emoji="🟣", default=defaults[10]),
-            discord.SelectOption(label="Dark Orange", description="A deep dark orange color", value=str(discord.Color.dark_orange().value), emoji="🟠", default=defaults[11]),
-            discord.SelectOption(label="Dark Gold", description="A deep dark gold color", value=str(discord.Color.dark_gold().value), emoji="🟡", default=defaults[12]),
-            discord.SelectOption(label="Dark Teal", description="A deep dark teal color", value=str(discord.Color.dark_teal().value), emoji="🔷", default=defaults[13]),
-            discord.SelectOption(label="Random", description="A random color", value=str(discord.Color.random().value), emoji="🔷", default=defaults[14]),
-        ]
-    )
-    async def on_submit(interaction: discord.Interaction):
-        selected_color_value = int(color_select.values[0])
-        selected_color_name = colors.get(selected_color_value, "Unknown")
-        print(selected_color_name)
-        print(color_select)
-        print(color_select.values)
-        embedDB.set(f"{interaction.user.id}", selected_color_value)
-        embed = discord.Embed(
-            title="Embed Color Changed!",
-            description=f"Your embed color has been changed successfully to {selected_color_name}!",
-            color=selected_color_value
-        )
+@bot.tree.command(name="settings", description="Your Settings For Shapes: /settings color <name>")
+async def settings(interaction: discord.Interaction, option: str = "", value: str = ""):
+    uid = interaction.user.id
+    names = [n for n, _ in DiscordColors]
+    if option.lower() in ("color", "colour"):
+        pick = value.strip().lower().replace("_", " ")
+        match = next(((n, c) for n, c in DiscordColors if n.lower() == pick), None)
+        if pick == "random":
+            match = ("Random", discord.Color.random())
+        if not match:
+            await interaction.response.send_message(f"Pick one of: {', '.join(names)}, Random")
+            return
+        embedDB.set(f"{uid}", match[1].value)
+        embed = discord.Embed(title="Embed Color Changed!",
+                              description=f"Your embed color has been changed successfully to {match[0]}!", color=match[1])
         embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-    color_select.callback = on_submit
-    view.add_item(color_select)
-
-    class SettingsView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=None)  # No timeout
-
-        @discord.ui.button(label="Change Embed Color", style=discord.ButtonStyle.primary, custom_id="change_embed_color", emoji="🎨")
-        async def change_embed_color(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await interaction.response.send_message(content="Select an embed color from the menu", view=view, ephemeral=True)
-            #await interaction.response.send_modal(EmbedColorModal())
-        #@discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting")
-        #async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
-        #    current_setting = countingDB.get("enabled")
-        #    if current_setting:
-        #        countingDB.set("enabled", False)
-        #        await interaction.response.send_message("Counting feature disabled.", ephemeral=True)
-        #    else:
-        #        countingDB.set("enabled", True)
-        #        await interaction.response.send_message("Counting feature enabled.", ephemeral=True)
-    embed = discord.Embed(
-        title="Settings",
-        description="Choose a setting below to modify it.",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
+        await interaction.response.send_message(embed=embed)
+        return
+    current = embedDB.get(f"{uid}")
+    current_name = next((n for n, c in DiscordColors if c.value == current), "Blue" if not current else "Custom")
+    embed = discord.Embed(title="Settings", color=ecolor(uid),
+                          description=f"**Embed color:** {current_name}\n\nChange it with `/settings color <name>`\n"
+                                      f"Colors: {', '.join(names)}, Random")
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-    await interaction.response.send_message(embed=embed, view=SettingsView(), ephemeral=True)
+    await interaction.response.send_message(embed=embed)
 
 
 @bot.tree.command(name="status", description=f"Get the {MainURL} status")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def ping(interaction: discord.Interaction):
+async def status_command(interaction: discord.Interaction):
     await interaction.response.send_message(f"[shapes.lol Status Page](https://shapes.lol/status)")
 
-@bot.tree.command(name="stop", description="Stop the bot.")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def stop(interaction: discord.Interaction):
-    if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip" or interaction.user.name == "kiwixor":
-        await interaction.response.send_message(":white_check_mark: Shutdown Successfully!", ephemeral=False)
-        
-        countingDB.save()
-        embedDB.save()
-        usersDB.save()
-        autoroleDB.save()
-        AI_DB.save()
-        
-        print("Bot shutdown initiated by command")
-        
+
+def _save_everything():
+    for db in DATABASES.values():
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post('http://localhost:13455/shutdown') as resp:
-                    pass
-        except:
-            pass
-        
-        await bot.close()
-        os._exit(0)
-    else:
-        await interaction.response.send_message(f"Only {owner}, and {co_owner} can use this command.", ephemeral=True)
+            db.save()
+        except Exception as e:
+            print(f"save failed for {db.name}: {e}")
+
+
+@bot.tree.command(name="stop", description="Stop the bot.")
+async def stop(interaction: discord.Interaction):
+    if not yshim.is_owner(interaction.user):
+        await interaction.response.send_message(f"Only {owner} can use this command.")
+        return
+    await interaction.response.send_message(":white_check_mark: Shutdown Successfully!")
+    _save_everything()
+    print("Bot shutdown initiated by command")
+    bot.stop()
+    threading.Timer(1.0, lambda: os._exit(0)).start()
+
 
 @bot.tree.command(name="restart", description="Restart the bot.")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def restart(interaction: discord.Interaction):
-    if interaction.user.name == "lcjunior1220" or interaction.user.name == "sl.ip" or interaction.user.name == "kiwixor":
-        await interaction.response.send_message(":white_check_mark: Restarted Successfully!!", ephemeral=False)
-        await restartbot()
-    else:
-        await interaction.response.send_message(f"Only <@481295611417853982 and <@1129085908390518895> can use this command.", ephemeral=True)
+    if not yshim.is_owner(interaction.user):
+        await interaction.response.send_message(f"Only {owner} can use this command.")
+        return
+    await interaction.response.send_message(":white_check_mark: Restarting...")
+    _save_everything()
+    print("Bot restart initiated by command")
+    threading.Timer(1.0, lambda: os.execv(sys.executable, [sys.executable] + sys.argv)).start()
 
-@bot.tree.command(name="counting", description="Counting Settings For Shapes")
-@app_commands.default_permissions(administrator=True)
-@commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
-@app_commands.allowed_installs(guilds=True, users=False)
-@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-async def counting(interaction: discord.Interaction):
-    server = interaction.guild
-    print(server.id)
-    counting_json = countingDB.get(server.id)
-    countingData = counting_json
-    print(countingData)
-    if not countingData:
-        countingDB.set(server.id, {"channel":None,"number":0,"enabled":False,"warnings":0,"lastcounter":None,"highestnumber":0})
-        countingDB.save()
-        counting_json = countingDB.get(server.id)
-        countingData = counting_json
-    print(countingData)
-    print(countingData['channel'])
-    print(countingData['number'])
-    print(countingData['enabled'])
-    print(countingData['warnings'])
-    print(countingData['lastcounter'])
-    channels = server.channels
-    channel_options = []
-    ccount = 0
-    for channel in channels:
-        ccount = ccount + 1
-        if isinstance(channel, discord.TextChannel) and ccount != 25:
-            channel_options.append(discord.SelectOption(label=channel.name, value=str(channel.id)))
-    class CountingView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=None)
 
-        @discord.ui.button(label="Toggle Counting", style=discord.ButtonStyle.primary, custom_id="toggle_counting", emoji="🔢")
-        async def toggle_counting(self, interaction: discord.Interaction, button: discord.ui.Button):
-            counting_json = countingDB.get(server.id)
-            countingData = counting_json
-            current_setting = countingData['enabled']
-            if current_setting:
-                countingData['enabled'] = False
-                countingDB.set(server.id, countingData)
-                await interaction.response.send_message("Counting disabled.", ephemeral=True)
-            else:
-                countingData['enabled'] = True
-                countingDB.set(server.id, countingData)
-                await interaction.response.send_message("Counting enabled.", ephemeral=True)
-
-        @discord.ui.select(placeholder="Select Counting Channel", options=channel_options, custom_id="select_channel")
-        async def select_channel(self, interaction: discord.Interaction, select: discord.ui.Select):
-            selected_channel_id = int(select.values[0])
-            counting_json = countingDB.get(server.id)
-            countingData = counting_json
-            countingData['channel'] = selected_channel_id
-            countingDB.set(server.id, countingData)
-            await interaction.response.send_message(f"Counting channel set to <#{selected_channel_id}>.", ephemeral=True)
+@bot.tree.command(name="counting", description="Counting Settings: /counting [toggle|channel <#channel>]")
+async def counting(interaction: discord.Interaction, action: str = "", value: str = ""):
+    if not await need_admin(interaction):
+        return
+    sid = str(interaction.guild_id)
+    data = countingDB.get(sid) or default_counting()
+    action = action.lower()
+    if action == "toggle":
+        data["enabled"] = not data["enabled"]
+        countingDB.set(sid, data)
+        await interaction.response.send_message(f"Counting {'enabled' if data['enabled'] else 'disabled'}.")
+        return
+    if action == "channel":
+        ch = resolve_channel(sid, value) if value else None
+        if not ch:
+            await interaction.response.send_message("Tell me which text channel: `/counting channel #general`")
+            return
+        data["channel"] = str(ch.get("id"))
+        countingDB.set(sid, data)
+        await interaction.response.send_message(f"Counting channel set to <#{ch.get('id')}>.")
+        return
+    countingDB.set(sid, data)
+    channel = f"<#{data['channel']}>" if data["channel"] else "not set"
     embed = discord.Embed(
-        title="Counting Settings",
-        description=f"**Current Settings:**\n- Counting Enabled: `{countingData['enabled']}`\n- Counting Channel: `<#{countingData['channel']}>`\n- Current Number: `{countingData['number']}`\n- Highest Number: `{countingData.get('highestnumber', 0)}`\n- Warnings: `{countingData['warnings']}`\n- Last Counter: `{countingData['lastcounter']}`",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
+        title="Counting Settings", color=ecolor(interaction.user.id),
+        description=f"**Current Settings:**\n- Counting Enabled: `{data['enabled']}`\n- Counting Channel: {channel}\n"
+                    f"- Current Number: `{data['number']}`\n- Highest Number: `{data.get('highestnumber', 0)}`\n"
+                    f"- Warnings: `{data['warnings']}`\n- Last Counter: `{data['lastcounter']}`\n\n"
+                    f"Change it with `/counting toggle` or `/counting channel #channel`")
     embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-    await interaction.response.send_message(embed=embed, view=CountingView(), ephemeral=True)
+    await interaction.response.send_message(embed=embed)
 
+
+@bot.tree.command(name="autorole", description="Automatically give new members a role: /autorole <role> [true|false]")
+async def autorole(interaction: discord.Interaction, role: discord.Role, enable: bool = True):
+    if not await need_admin(interaction):
+        return
+    sid = str(interaction.guild_id)
+    autoroleDB.set(sid, {"role_id": str(role.id), "enabled": enable})
+    server_id = interaction.guild_id
+
+    class AutoroleView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=300)
+
+        async def interaction_check(self, click):
+            if not yshim.is_admin(server_id, click.user.id):
+                await click.response.send_message("Only server admins can do this.", ephemeral=True)
+                return False
+            return True
+
+        @discord.ui.button(label="Assign to Existing Members", style=discord.ButtonStyle.primary)
+        async def assign_existing(self, click, button):
+            await click.response.send_message("Working on it...", ephemeral=True)
+            count, after, seen = 0, None, set()
+            while True:
+                page = bot.members(server_id, after=after)
+                fresh = [m for m in page if str(yshim._first(m, "user_id", "id")) not in seen]
+                if not fresh:
+                    break
+                for m in fresh:
+                    uid = str(yshim._first(m, "user_id", "id"))
+                    seen.add(uid)
+                    if m.get("bot") or m.get("is_bot") or str(role.id) in {str(r.get("id") if isinstance(r, dict) else r) for r in (m.get("roles") or [])}:
+                        continue
+                    try:
+                        bot.add_role(server_id, uid, role.id)
+                        count += 1
+                    except Exception:
+                        pass
+                after = yshim._first(fresh[-1], "user_id", "id")
+                if len(page) < 200:
+                    break
+            yshim.post(click.channel_id, f"Assigned {role.name} to {count} existing members.")
+
+    status = "enabled" if enable else "disabled"
+    await interaction.response.send_message(f"Autorole {status} for {role.name}. Assign to existing members?", view=AutoroleView())
+
+
+@bot.tree.command(name="help", description="Get help with all available commands")
+async def help_command(interaction: discord.Interaction):
+    embed = discord.Embed(title="Bot Help & Commands", color=ecolor(interaction.user.id),
+                          description="Use `/command` or `!command`. Put names with spaces in quotes.")
+    embed.add_field(name="Counting", value="• /counting - Counting settings (`toggle`, `channel #channel`)\n• /countingleaderboard - Leaderboard website", inline=False)
+    embed.add_field(name="User Settings", value="• /settings - Customize your embed color\n• /autorole - Give new members a role", inline=False)
+    embed.add_field(name="Roblox", value=(
+        "• /robloxinfo - User information\n• /roblox2discord - Find a Roblox user's linked account\n• /discord2roblox - Find a user's Roblox\n"
+        "• /britishuser - Check if a user is British\n• /iteminfo - Item information\n• /placeinfo - Place/game information\n"
+        "• /badge - Badge information\n• /badges - Check a user's badges\n• /recentbadges - Latest badges\n• /outfits - A user's outfits\n"
+        "• /limiteds - Scan for limiteds\n• /bundle - Bundle information\n• /asset - Asset information\n• /avatar - Avatar\n• /linkroblox - Link your Roblox"), inline=False)
+    embed.add_field(name="Utility", value=(
+        "• /ping - Latency\n• /invite - Invite link\n• /google - Search Google\n• /ai - Chat with an AI\n• /github - GitHub user\n"
+        "• /instagram - Instagram user\n• /status - shapes.lol status\n• /servercount, /userinstalls - Counts\n• /spookpfp, /discord2spook - spook.bio"), inline=False)
+    embed.add_field(name="Yapper profile", value="• /discorduser - Info about a user\n• /discordavatar - Avatar\n• /discordbanner - Banner", inline=False)
+    embed.set_footer(text="Right-click context menus from the Discord bot are not available on Yapper; use the slash commands.")
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="countingleaderboard", description="View the counting leaderboard website")
+async def countingleaderboard(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="Counting Leaderboard",
+        description="[Click here to view the counting leaderboard](https://shapes.lol/counting/leaderboard/)",
+        color=ecolor(interaction.user.id))
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="invite", description="Get the bot's invite link.")
+async def invite(interaction: discord.Interaction):
+    embed = discord.Embed(description=f"[Click Here To Add Shapes To Your Server]({InviteURL})", color=ecolor(interaction.user.id))
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.response.send_message(embed=embed)
+
+
+def _latency_ms():
+    start = time.perf_counter()
+    bot.api("GET", "/me", retries=0)
+    return (time.perf_counter() - start) * 1000
+
+
+def _quality(ms):
+    return "Good" if ms < 200 else "Average" if ms < 400 else "Poor"
+
+
+@bot.tree.command(name="ping", description="Check the bot's latency.")
+async def ping(interaction: discord.Interaction):
+    latency = _latency_ms()
+    embed = discord.Embed(title="Bot Server Stats", description=f"Latency: `{latency:.2f}ms` ({_quality(latency)} Connection)",
+                          color=ecolor(interaction.user.id))
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.response.send_message(embed=embed)
+    await asyncio.sleep(2)
+    updated = _latency_ms()
+    embed = discord.Embed(
+        title="Bot Server Stats", color=ecolor(interaction.user.id),
+        description=f"OriginalLatency: `{latency:.2f}ms` ({_quality(latency)} Connection)\nEditLatency: `{updated:.2f}ms` ({_quality(updated)} Connection)")
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.edit_original_response(embed=embed, content=None)
+
+
+# --- Yapper profile commands (these were /discorduser, /discordavatar, /discordbanner on Discord) ---
+
+def _profile_target(interaction, user):
+    """The user to look up. Fills in the full profile from Yapper so avatar/banner/bio are available."""
+    target = user or interaction.user
+    data = yshim.fetch_user(target.id)
+    if data:
+        target.data = {**data, **target.data}
+        target.name = yshim._first(data, "username", "name") or target.name
+        target.display_name = yshim._first(data, "display_name", "displayName") or target.display_name
+    return target
+
+
+@bot.tree.command(name="discorduser", description="Get information about a user")
+async def discorduser(interaction: discord.Interaction, user: discord.User = None):
+    target = _profile_target(interaction, user)
+    embed = discord.Embed(title=f"{target.display_name}" + (f" (@{target.name})" if target.display_name != target.name else ""),
+                          color=ecolor(interaction.user.id))
+    bio = yshim._first(target.data, "bio", "about", "description")
+    if bio:
+        embed.description = str(bio)
+    embed.add_field(name="ID", value=f"`{target.id}`", inline=True)
+    embed.add_field(name="Bot", value="Yes" if target.bot else "No", inline=True)
+    created = target.created_at
+    if created:
+        embed.add_field(name="Created", value=f"<t:{int(created.timestamp())}:D>", inline=True)
+    if target.avatar_url:
+        embed.set_thumbnail(url=target.avatar_url)
+    if target.banner_url:
+        embed.set_image(url=target.banner_url)
+
+    mutual = []
+    try:
+        for s in bot.servers():
+            try:
+                bot.member(s.get("id"), target.id)
+                mutual.append(s.get("name") or str(s.get("id")))
+            except Exception:
+                continue   # not a member of that server
+    except Exception as e:
+        print(f"mutual server lookup failed: {e}")
+    if mutual:
+        embed.add_field(name=f"Mutual Servers ({len(mutual)})", value="\n".join(mutual[:15]) + ("\n..." if len(mutual) > 15 else ""), inline=False)
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="discordavatar", description="Get a user's avatar")
+async def discordavatar(interaction: discord.Interaction, user: discord.User = None):
+    target = _profile_target(interaction, user)
+    url = target.avatar_url
+    if not url:
+        await interaction.response.send_message(f"{target.name} doesn't have an avatar.")
+        return
+    embed = discord.Embed(title=f"{target.name}'s Avatar", color=ecolor(interaction.user.id), timestamp=interaction.created_at)
+    embed.set_image(url=url)
+    embed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(label="Download Avatar", style=discord.ButtonStyle.link, url=url))
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+@bot.tree.command(name="discordbanner", description="Get a user's banner")
+async def discordbanner(interaction: discord.Interaction, user: discord.User = None):
+    target = _profile_target(interaction, user)
+    url = target.banner_url
+    if not url:
+        await interaction.response.send_message(f"{target.name} doesn't have a banner image.")
+        return
+    embed = discord.Embed(title=f"{target.name}'s Banner", color=ecolor(interaction.user.id), timestamp=interaction.created_at)
+    embed.set_image(url=url)
+    embed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(label="Download Banner", style=discord.ButtonStyle.link, url=url))
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+
+# =====================================================================================
+# Commands carried over from the Discord bot
+# =====================================================================================
+
+
+# --- spookpfp ---
 @bot.tree.command(name="spookpfp", description="Get a pfp from a user's spook.bio profile.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1436,12 +551,14 @@ async def spookpfp(interaction: discord.Interaction, username: str = "phis"):
     response = requests.get(url)
     data = response.json()
     if response.status_code == 200:
-        await interaction.response.send_message(data.avatar, ephemeral=False)
+        await interaction.response.send_message(data.get('avatar') or f":x: {username} has no profile picture :x:", ephemeral=False)
         print("Fetched data successfully!")
     else:
         await interaction.response.send_message(f":x: {username} Not Found :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
 
+
+# --- discord2spook ---
 @bot.tree.command(name="discord2spook", description="Get a spook.bio profile from a discord user.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1461,30 +578,8 @@ async def discord2spook(interaction: discord.Interaction, user: discord.User): #
         await interaction.response.send_message(f":x: {user.mention} doesn't have a spook.bio profile linked to their account! :x:", ephemeral=False)
         print(f"Error fetching data: {response.status_code}")
 
-@bot.tree.command(name="ping", description="Check the bot's latency.")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def ping(interaction: discord.Interaction):
-    latency = bot.latency * 1000
-    connection = "Good" if latency < 200 else "Average" if latency < 400 else "Poor"
-    embed = discord.Embed(
-        title="Bot Server Stats"
-        , description=f"Latency: `{latency:.2f}ms` ({connection} Connection)"
-        , color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-    await interaction.response.send_message(embed=embed)
-    await asyncio.sleep(2)
-    updatedlatency = bot.latency * 1000
-    updatedconnection = "Good" if updatedlatency < 200 else "Average" if updatedlatency < 400 else "Poor"
-    embed = discord.Embed(
-        title="Bot Server Stats"
-        , description=f"OriginalLatency: `{latency:.2f}ms` ({connection} Connection)\nEditLatency: `{updatedlatency:.2f}ms` ({updatedconnection} Connection)"
-        , color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-    await interaction.edit_original_response(embed=embed, content=None)
 
+# --- roblox2discord ---
 @bot.tree.command(name="roblox2discord", description="Get a roblox user's Discord from their username.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1574,6 +669,8 @@ async def roblox2discord(interaction: discord.Interaction, user: str):
         # await interaction.edit_original_response(f"Error retrieving Discord User from {url}")
         return
 
+
+# --- discord2roblox ---
 @bot.tree.command(name="discord2roblox", description="Get a roblox profile from their Discord UserID.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1622,6 +719,8 @@ async def discord2roblox(interaction: discord.Interaction, user: discord.User):
         await interaction.edit_original_response(embed=failedembed3)
         return
 
+
+# --- ai ---
 @bot.tree.command(name="ai", description="Chat with an AI assistant.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1652,9 +751,9 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
         {
             "role": "system",
             "content": (
-                f"You are a helpful Discord assistant chatting with {username}. "
+                f"You are a helpful Yapper assistant chatting with {username}. "
                 "Always respond in a single concise paragraph. Otherwise your response will not be recieved due to the embed text limit"
-                "Follow Discord TOS. Do not provide instructions for illegal activity. "
+                "Follow Yapper's rules. Do not provide instructions for illegal activity. "
                 "Stay safe, respectful, and friendly."
             )
         }
@@ -1693,6 +792,8 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
 
     await interaction.edit_original_response(embed=embed)
 
+
+# --- google ---
 @bot.tree.command(name="google", description="Search Something On Google.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -1766,19 +867,8 @@ async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
         errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=errorembed)
 
-@bot.tree.command(name="invite", description="Get the bot's invite link.")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def invite(interaction: discord.Interaction):
-    invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}"
-    invite_embed = discord.Embed(
-        description=f"[Click Here To Add Shapes To Your Server or Apps]({invite_url})",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    invite_embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-    await interaction.response.send_message(embed=invite_embed, ephemeral=False)
-    #await interaction.response.send_message(f"Invite me to your server or add me to your apps using this link: {invite_url}", ephemeral=False)
-    
+
+# --- robloxinfo ---
 @bot.tree.command(name="robloxinfo", description="Get a Roblox user's profile information.")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -2440,7 +1530,9 @@ async def robloxinfo(interaction: discord.Interaction, user: str = "Roblox"):
         )
         await interaction.edit_original_response(embed=failedembed8)
         return
-        
+
+
+# --- britishuser ---
 @bot.tree.command(name="britishuser", description="Check if a user has their language set to British")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -2522,6 +1614,8 @@ async def british_check(interaction: discord.Interaction, user_input: str):
         embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=embed)
 
+
+# --- iteminfo ---
 @bot.tree.command(name="iteminfo", description="Get detailed information about a Roblox item")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -2673,6 +1767,8 @@ async def item(interaction: discord.Interaction, item_query: str = "Dominus Empy
         await interaction.edit_original_response(embed=failedembed)
         return
 
+
+# --- placeinfo+badge ---
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @bot.tree.command(name="placeinfo", description="Get detailed information about a Roblox place")
@@ -3003,139 +2099,9 @@ async def badge_info(interaction: discord.Interaction, badge_id: str):
             
         except Exception as e:
             await send_error_embed(interaction, "Unexpected Error", f"An error occurred: {str(e)}")
-            
-@bot.tree.command(name="autorole", description="Set a role to be automatically given to members")
-@app_commands.default_permissions(administrator=True)
-@commands.bot_has_permissions(add_reactions=True, moderate_members=True, read_message_history=True, view_channel=True, send_messages=True)
-@app_commands.allowed_installs(guilds=True, users=False)
-@app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-@app_commands.describe(
-    role="The role to automatically assign to members",
-    enable="Whether to enable or disable autorole (default: True)"
-)
-async def autorole(interaction: discord.Interaction, role: discord.Role, enable: bool = True):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("You need administrator permissions to use this command.", ephemeral=True)
-        return
-    
-    autorole_data = {"role_id": role.id, "enabled": enable}
-    autoroleDB.set(f"{interaction.guild.id}", autorole_data)
-    autoroleDB.save()
-    
-    class AutoroleView(discord.ui.View):
-        @discord.ui.button(label="Assign to Existing Members", style=discord.ButtonStyle.primary)
-        async def assign_existing(self, interaction: discord.Interaction, button: discord.ui.Button):
-            count = 0
-            for member in interaction.guild.members:
-                if not member.bot and role not in member.roles:
-                    try:
-                        await member.add_roles(role)
-                        count += 1
-                    except:
-                        pass
-            await interaction.response.send_message(f"Assigned {role.mention} to {count} existing members", ephemeral=True)
-    
-    status = "enabled" if enable else "disabled"
-    await interaction.response.send_message(
-        f"Autorole {status} for {role.mention}. Assign to existing members?", 
-        view=AutoroleView(), 
-        ephemeral=True
-    )
 
-class HelpDropdown(discord.ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="Counting Commands", description="Counting game and settings"),
-            discord.SelectOption(label="User Settings", description="Personal bot settings"),
-            discord.SelectOption(label="Roblox Commands", description="Roblox user and item information"),
-            discord.SelectOption(label="Utility Commands", description="General utility commands"),
-            discord.SelectOption(label="Context Menu Commands", description="Right-click context commands")
-        ]
-        super().__init__(placeholder="Choose a command category...", options=options)
 
-    async def callback(self, interaction: discord.Interaction):
-        category = self.values[0]
-        embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-        
-        if category == "Counting Commands":
-            embed = discord.Embed(title="Counting Commands", color=embed_color)
-            embed.add_field(name="Commands", value=
-                "• /counting - Counting in a specific channel", inline=False)
-                
-        elif category == "User Settings":
-            embed = discord.Embed(title="User Settings", color=embed_color)
-            embed.add_field(name="Commands", value=
-                "• /settings - Customize your personal bot settings", inline=False)
-                
-        elif category == "Roblox Commands":
-            embed = discord.Embed(title="Roblox Commands", color=embed_color)
-            embed.add_field(name="Commands", value=
-                "• /robloxinfo - Get detailed Roblox user information\n"
-                "• /roblox2discord - Find a Roblox user's Discord\n"
-                "• /britishuser - Check if user is british\n"
-                "• /iteminfo - Get Roblox item information\n"
-                "• /groupinfo - Get Roblox group information\n"
-                "• /placeinfo - Get Roblox place/game information\n"
-                "• /badge - Get Roblox badge information", inline=False)
-                
-        elif category == "Utility Commands":
-            embed = discord.Embed(title="Utility Commands", color=embed_color)
-            embed.add_field(name="Commands", value=
-                "• /ping - Check bot latency and connection\n"
-                "• /invite - Get bot invite link\n"
-                "• /google - Search something on Google\n"
-                "• /status - Check shapes.lol status\n"
-                "• /userinstalls - Get user installation count\n"
-                "• /servercount - Get server count\n"
-                "• /spookpfp - Get profile picture from spook.bio", inline=False)
-                
-        elif category == "Context Menu Commands":
-            embed = discord.Embed(title="Context Menu Commands", color=embed_color)
-            embed.add_field(name="Commands", value=
-                "• Right-click a user → Apps → sayhitouser - Say hello to a user\n"
-                "• Right-click a user → Apps → discord2spook - Get user's spook.bio profile\n"
-                "• Right-click a message → Apps → google - Search message content on Google", inline=False)
-        
-        embed.set_footer(text="Use slash commands (/) to interact")
-        await interaction.response.edit_message(embed=embed, ephemeral=True)
-
-class HelpView(discord.ui.View):
-    def __init__(self):
-        super().__init__()
-        self.add_item(HelpDropdown())
-
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@bot.tree.command(name="help", description="Get help with all available commands")
-async def help_command(interaction: discord.Interaction):
-    """Display help information for all bot commands"""
-    
-    embed_color = embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    
-    embed = discord.Embed(
-        title="Bot Help & Commands",
-        description="Use the dropdown menu below to browse commands by category.",
-        color=embed_color
-    )
-    
-    view = HelpView()
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-@bot.tree.command(name="countingleaderboard", description="View the counting leaderboard website")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def countingleaderboard(interaction: discord.Interaction):
-    """Send the counting leaderboard website link"""
-    
-    embed = discord.Embed(
-        title="Counting Leaderboard",
-        description=f"[Click here to view the counting leaderboard](https://shapes.lol/counting/leaderboard/)",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-    )
-    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-    
-    await interaction.response.send_message(embed=embed)
-            
+# --- outfits ---
 @bot.tree.command(name="outfits", description="Get all outfits for a Roblox user")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -3376,7 +2342,9 @@ async def outfits(interaction: discord.Interaction, user: str = "Roblox"):
         )
         await interaction.edit_original_response(embed=failedembed)
         return
-        
+
+
+# --- badges ---
 @bot.tree.command(name="badges", description="Check if a user has a specific badge and get detailed information")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -3670,102 +2638,6 @@ async def badges(interaction: discord.Interaction, username: str, badge_id: str 
                 self.current_index = (self.current_index + 1) % len(self.badges)
                 await self.update_badge_display(interaction)
             
-            @discord.ui.button(emoji="🔍", style=discord.ButtonStyle.primary)
-            async def search_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                if interaction.user.id != self.requester_id:
-                    await interaction.response.send_message("This is not your command!", ephemeral=True)
-                    return
-                
-                modal = BadgeSearchModal(self.badges, self.user_id, self.username, self.requester_id, self.current_index)
-                await interaction.response.send_modal(modal)
-        
-        class BadgeSearchModal(discord.ui.Modal, title="Search Badge by ID"):
-            def __init__(self, badges, user_id, username, requester_id, current_index):
-                super().__init__()
-                self.badges = badges
-                self.user_id = user_id
-                self.username = username
-                self.requester_id = requester_id
-                self.current_index = current_index
-            
-            badge_id_input = discord.ui.TextInput(
-                label="Badge ID",
-                placeholder="Enter the badge ID to search...",
-                required=True,
-                max_length=20
-            )
-            
-            async def on_submit(self, interaction: discord.Interaction):
-                badge_id = self.badge_id_input.value.strip()
-                found_index = -1
-                
-                for i, badge in enumerate(self.badges):
-                    if str(badge.get("id")) == badge_id:
-                        found_index = i
-                        break
-                
-                if found_index == -1:
-                    await interaction.response.defer()
-                    errorembed = discord.Embed(
-                        title=f":x: Badge Not Found :x:",
-                        description=f"User `{self.username}` does not have badge ID `{badge_id}`",
-                        color=discord.Color.red()
-                    )
-                    errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-                    
-                    original_view = BadgePaginator(self.badges, self.user_id, self.username, self.requester_id, self.current_index)
-                    await interaction.edit_original_response(embed=errorembed, view=original_view)
-                    return
-                
-                await interaction.response.defer()
-                
-                badge = self.badges[found_index]
-                badge_id = str(badge.get("id"))
-                
-                badge_info_task = asyncio.create_task(get_badge_info(badge_id))
-                awarded_date_task = asyncio.create_task(get_awarded_date(self.user_id, badge_id))
-                thumbnail_task = asyncio.create_task(get_badge_thumbnail(badge_id))
-                
-                badge_info, badge_error = await badge_info_task
-                awarded_data, awarded_error = await awarded_date_task
-                badge_thumbnail = await thumbnail_task
-                
-                if badge_error:
-                    await interaction.followup.send("Failed to fetch badge information.", ephemeral=True)
-                    return
-                
-                awarded_date = "Unknown"
-                if awarded_data and awarded_data.get("data") and len(awarded_data["data"]) > 0:
-                    awarded_date_str = awarded_data["data"][0].get("awardedDate")
-                    if awarded_date_str:
-                        awarded_timestamp = isotodiscordtimestamp(awarded_date_str, "F")
-                        awarded_date = awarded_timestamp if awarded_timestamp else awarded_date_str
-                
-                badge_name = badge_info.get("displayName") or badge_info.get("name", "Unknown Badge")
-                badge_description = badge_info.get("displayDescription") or badge_info.get("description", "No description available")
-                badge_enabled = badge_info.get("enabled", False)
-                
-                created_date = badge_info.get("created", "Unknown")
-                created_timestamp = isotodiscordtimestamp(created_date, "F") if created_date != "Unknown" else "Unknown"
-                
-                embed_color = embedDB.get(f"{self.requester_id}") if embedDB.get(f"{self.requester_id}") else discord.Color.blue()
-                
-                embed = discord.Embed(
-                    title=f"✅ {self.username}'s Badges",
-                    description=f"**{badge_name}**\n{badge_description}",
-                    color=embed_color
-                )
-                
-                if badge_thumbnail:
-                    embed.set_thumbnail(url=badge_thumbnail)
-                
-                embed.add_field(name="Badge Information", value=f"**ID:** `{badge_id}`\n**Status:** {'Enabled' if badge_enabled else 'Disabled'}", inline=True)
-                embed.add_field(name="Awarded", value=f"**Date:** {awarded_date}", inline=True)
-                embed.add_field(name="Created", value=f"**Date:** {created_timestamp}", inline=True)
-                embed.set_footer(text=f"Badge {found_index + 1}/{len(self.badges)} | Requested By {interaction.user.name} | {MainURL}")
-                
-                view = BadgePaginator(self.badges, self.user_id, self.username, self.requester_id, found_index)
-                await interaction.edit_original_response(embed=embed, view=view)
         
         embed = discord.Embed(
             title=f"✅ {username}'s Badges",
@@ -3793,334 +2665,8 @@ async def badges(interaction: discord.Interaction, username: str, badge_id: str 
         errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=errorembed)
 
-@bot.tree.command(name="discorduser", description="Get information about a user")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-async def discorduser(interaction: discord.Interaction, user: discord.User = None):
-    await interaction.response.defer()
-    
-    if user is None:
-        user = interaction.user
-    
-    target_member = None
-    guild = interaction.guild
-    
-    if guild:
-        target_member = guild.get_member(user.id)
-    
-    created_at = isotodiscordtimestamp(user.created_at.isoformat(), "D")
-    
-    BADGE_FLAGS = {
-        4194304: "<:activedeveloper:1431764482312372385>",
-        512: "<:earlysupporter:1431764483000504351>",
-        64: "<:hypesquadp:1431764484179099788>",
-        128: "<:hypesquadr:1431764485374214267>",
-        256: "<:hypesquadg:1431764486636830780>",
-    }
-    
-    badges = []
-    public_flags = user.public_flags.value if user.public_flags else 0
-    
-    for flag, emoji in BADGE_FLAGS.items():
-        if public_flags & flag:
-            badges.append(emoji)
-    
-    has_nitro = False
-    if user.avatar:
-        if user.avatar.is_animated():
-            has_nitro = True
-            badges.append("<:Nitro:1431740129726300191>")
-    
-    try:
-        user_data = await bot.fetch_user(user.id)
-        if user_data.banner:
-            has_nitro = True
-            if "<:Nitro:1431777332552536155>" not in badges:
-                badges.append("<:Nitro:1431777332552536155>")
-    except:
-        pass
-    
-    badges_display = " ".join(badges) if badges else "None"
-    
-    embed = discord.Embed(
-        title=f"{user.name}",
-        url=f"https://discord.com/users/{user.id}",
-        color=discord.Color.blue(),
-        timestamp=interaction.created_at
-    )
-    
-    if user.avatar:
-        embed.set_thumbnail(url=user.avatar.url)
-    
-    user_info = f"""
-    > **Username:** `{user.name}`
-    > **ID:** `{user.id}`
-    > **Created:** {created_at}
-    > **Bot:** `{user.bot}`
-    > **Nitro:** `{has_nitro}`
-    > **Badges:** {badges_display}
-    """
-    
-    embed.add_field(
-        name="User Information",
-        value=user_info,
-        inline=False
-    )
-    
-    if guild and target_member:
-        if target_member.joined_at:
-            joined_at = isotodiscordtimestamp(target_member.joined_at.isoformat(), "D")
-        else:
-            joined_at = "Unknown"
-        
-        roles = [role.mention for role in target_member.roles[1:][:10]]
-        roles_display = ", ".join(roles) if roles else "None"
-        if len(target_member.roles) > 11:
-            roles_display += f" (+{len(target_member.roles) - 11} more)"
-        
-        server_info = f"""
-        > **Joined:** {joined_at}
-        > **Nickname:** `{target_member.nick or 'None'}`
-        > **Top Role:** {target_member.top_role.mention}
-        """
-        
-        embed.add_field(
-            name="Server Info",
-            value=server_info,
-            inline=False
-        )
-        
-        embed.add_field(
-            name=f"Roles ({len(target_member.roles)})",
-            value=f"> {roles_display}",
-            inline=False
-        )
-    
-    embed.set_footer(text=f"Requested by {interaction.user.display_name} | {MainURL}")
 
-    class MutualServersView(discord.ui.View):
-        def __init__(self, user_id, username, requester_id, main_embed):
-            super().__init__(timeout=60)
-            self.user_id = user_id
-            self.username = username
-            self.requester_id = requester_id
-            self.main_embed = main_embed
-
-        async def interaction_check(self, interaction: discord.Interaction) -> bool:
-            return interaction.user.id == self.requester_id
-
-        @discord.ui.button(label="View Mutual Servers", style=discord.ButtonStyle.blurple)
-        async def mutuals_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-            await interaction.response.defer()
-            
-            try:
-                import aiohttp
-                async with aiohttp.ClientSession() as session:
-                    async with session.get("http://localhost:13455/mutuals") as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            
-                            if not data or "Servers" not in data:
-                                class NoServersView(discord.ui.View):
-                                    def __init__(self, main_embed, requester_id, user_id, username):
-                                        super().__init__(timeout=120)
-                                        self.main_embed = main_embed
-                                        self.requester_id = requester_id
-                                        self.user_id = user_id
-                                        self.username = username
-
-                                    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-                                        return interaction.user.id == self.requester_id
-
-                                    @discord.ui.button(label="Back to User Info", style=discord.ButtonStyle.gray)
-                                    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                                        view = MutualServersView(self.user_id, self.username, self.requester_id, self.main_embed)
-                                        await interaction.response.edit_message(content="", embed=self.main_embed, view=view)
-                                
-                                no_servers_view = NoServersView(self.main_embed, self.requester_id, self.user_id, self.username)
-                                await interaction.edit_original_response(content="No mutual servers data available.", embed=None, view=no_servers_view)
-                                return
-
-                            user_servers = []
-                            for server_id, server_data in data["Servers"].items():
-                                members = server_data.get("members", [])
-                                for member in members:
-                                    if str(member.get("id")) == str(self.user_id):
-                                        user_servers.append({
-                                            "server_id": server_id,
-                                            "server_name": server_data.get("name", "Unknown Server"),
-                                            "member_count": server_data.get("membercount", 0),
-                                            "bot_count": server_data.get("botcount", 0),
-                                            "channel_count": server_data.get("channels", 0),
-                                            "icon_url": server_data.get("iconurl"),
-                                            "created_at": server_data.get("createdat"),
-                                            "roles": server_data.get("roles", 0),
-                                            "verification_level": server_data.get("verificationlevel", "Unknown"),
-                                            "owner": server_data.get("owner", "Unknown"),
-                                            "owner_id": server_data.get("ownerid", "Unknown")
-                                        })
-                                        break
-
-                            if not user_servers:
-                                class NoMutualServersView(discord.ui.View):
-                                    def __init__(self, main_embed, requester_id, user_id, username):
-                                        super().__init__(timeout=120)
-                                        self.main_embed = main_embed
-                                        self.requester_id = requester_id
-                                        self.user_id = user_id
-                                        self.username = username
-
-                                    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-                                        return interaction.user.id == self.requester_id
-
-                                    @discord.ui.button(label="Back to User Info", style=discord.ButtonStyle.gray)
-                                    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                                        view = MutualServersView(self.user_id, self.username, self.requester_id, self.main_embed)
-                                        await interaction.response.edit_message(content="", embed=self.main_embed, view=view)
-                                
-                                no_mutual_view = NoMutualServersView(self.main_embed, self.requester_id, self.user_id, self.username)
-                                await interaction.edit_original_response(content="No mutual servers found for this user.", embed=None, view=no_mutual_view)
-                                return
-
-                            pages = []
-                            for server in user_servers:
-                                server_embed = discord.Embed(
-                                    title=f"Mutual Server: {server['server_name']}",
-                                    color=discord.Color.green(),
-                                    timestamp=discord.utils.utcnow()
-                                )
-                                
-                                if server['icon_url']:
-                                    server_embed.set_thumbnail(url=server['icon_url'])
-                                
-                                if server['created_at']:
-                                    created_at_display = isotodiscordtimestamp(server['created_at'], "D")
-                                else:
-                                    created_at_display = "Unknown"
-                                
-                                server_info = f"""
-                                > **Name:** {server['server_name']}
-                                > **ID:** `{server['server_id']}`
-                                > **Created:** {created_at_display}
-                                > **Owner:** {server['owner']} (`{server['owner_id']}`)
-                                > **Verification:** {server['verification_level'].title()}
-                                """
-                                
-                                server_stats = f"""
-                                > **Members:** {server['member_count']}
-                                > **Bots:** {server['bot_count']}
-                                > **Channels:** {server['channel_count']}
-                                > **Roles:** {server['roles']}
-                                """
-                                
-                                server_embed.add_field(
-                                    name="Server Information",
-                                    value=server_info,
-                                    inline=False
-                                )
-                                
-                                server_embed.add_field(
-                                    name="Server Stats",
-                                    value=server_stats,
-                                    inline=False
-                                )
-                                
-                                server_embed.set_footer(text=f"Page {len(pages) + 1}/{len(user_servers)} | {MainURL}")
-                                pages.append(server_embed)
-
-                            if len(pages) == 1:
-                                class SingleServerView(discord.ui.View):
-                                    def __init__(self, main_embed, requester_id, user_id, username):
-                                        super().__init__(timeout=120)
-                                        self.main_embed = main_embed
-                                        self.requester_id = requester_id
-                                        self.user_id = user_id
-                                        self.username = username
-
-                                    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-                                        return interaction.user.id == self.requester_id
-
-                                    @discord.ui.button(label="Back to User Info", style=discord.ButtonStyle.gray)
-                                    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                                        view = MutualServersView(self.user_id, self.username, self.requester_id, self.main_embed)
-                                        await interaction.response.edit_message(content="", embed=self.main_embed, view=view)
-                                
-                                single_view = SingleServerView(self.main_embed, self.requester_id, self.user_id, self.username)
-                                await interaction.edit_original_response(content="", embed=pages[0], view=single_view)
-                            else:
-                                class PaginationView(discord.ui.View):
-                                    def __init__(self, pages, main_embed, requester_id, user_id, username):
-                                        super().__init__(timeout=120)
-                                        self.pages = pages
-                                        self.current_page = 0
-                                        self.main_embed = main_embed
-                                        self.requester_id = requester_id
-                                        self.user_id = user_id
-                                        self.username = username
-
-                                    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-                                        return interaction.user.id == self.requester_id
-
-                                    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.gray)
-                                    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                                        self.current_page = (self.current_page - 1) % len(self.pages)
-                                        await interaction.response.edit_message(content="", embed=self.pages[self.current_page], view=self)
-                                    
-                                    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.gray)
-                                    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                                        self.current_page = (self.current_page + 1) % len(self.pages)
-                                        await interaction.response.edit_message(content="", embed=self.pages[self.current_page], view=self)
-                                    
-                                    @discord.ui.button(label="Back to User Info", style=discord.ButtonStyle.gray)
-                                    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                                        view = MutualServersView(self.user_id, self.username, self.requester_id, self.main_embed)
-                                        await interaction.response.edit_message(content="", embed=self.main_embed, view=view)
-                                
-                                pagination_view = PaginationView(pages, self.main_embed, self.requester_id, self.user_id, self.username)
-                                await interaction.edit_original_response(content="", embed=pages[0], view=pagination_view)
-                                
-                        else:
-                            class ErrorView(discord.ui.View):
-                                def __init__(self, main_embed, requester_id, user_id, username):
-                                    super().__init__(timeout=120)
-                                    self.main_embed = main_embed
-                                    self.requester_id = requester_id
-                                    self.user_id = user_id
-                                    self.username = username
-
-                                async def interaction_check(self, interaction: discord.Interaction) -> bool:
-                                    return interaction.user.id == self.requester_id
-
-                                @discord.ui.button(label="Back to User Info", style=discord.ButtonStyle.gray)
-                                async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                                    view = MutualServersView(self.user_id, self.username, self.requester_id, self.main_embed)
-                                    await interaction.response.edit_message(content="", embed=self.main_embed, view=view)
-                            
-                            error_view = ErrorView(self.main_embed, self.requester_id, self.user_id, self.username)
-                            await interaction.edit_original_response(content="Failed to fetch mutual servers data.", embed=None, view=error_view)
-            except Exception as e:
-                class ExceptionView(discord.ui.View):
-                    def __init__(self, main_embed, requester_id, user_id, username):
-                        super().__init__(timeout=120)
-                        self.main_embed = main_embed
-                        self.requester_id = requester_id
-                        self.user_id = user_id
-                        self.username = username
-
-                    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-                        return interaction.user.id == self.requester_id
-
-                    @discord.ui.button(label="Back to User Info", style=discord.ButtonStyle.gray)
-                    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                        view = MutualServersView(self.user_id, self.username, self.requester_id, self.main_embed)
-                        await interaction.response.edit_message(content="", embed=self.main_embed, view=view)
-                
-                exception_view = ExceptionView(self.main_embed, self.requester_id, self.user_id, self.username)
-                await interaction.edit_original_response(content=f"Error fetching mutual servers: {str(e)}", embed=None, view=exception_view)
-
-    view = MutualServersView(user.id, user.name, interaction.user.id, embed)
-    await interaction.followup.send(content="", embed=embed, view=view)
-    
+# --- limiteds ---
 @bot.tree.command(name="limiteds", description="Scan a roblox users inventory for limiteds")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -4379,7 +2925,9 @@ async def limiteds(interaction: discord.Interaction, username: str):
         )
         errorembed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=errorembed)
-        
+
+
+# --- bundle ---
 @bot.tree.command(name="bundle", description="Get information about a Roblox bundle")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -4496,7 +3044,9 @@ async def bundle(interaction: discord.Interaction, bundleid: str):
         )
         failedembed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=failedembed)
-        
+
+
+# --- github ---
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @bot.tree.command(name="github", description="Get detailed information about a GitHub user")
@@ -4607,7 +3157,9 @@ async def github(interaction: discord.Interaction, username: str):
         )
         errorembed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=errorembed)
-        
+
+
+# --- asset ---
 @bot.tree.command(name="asset", description="Get information about a Roblox asset")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -4718,124 +3270,9 @@ async def asset(interaction: discord.Interaction, id: str):
         )
         errorembed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
         await interaction.edit_original_response(embed=errorembed)
-        
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@bot.tree.command(name="discordavatar", description="Get a user's Discord avatar")
-@app_commands.describe(user="The user to get the avatar from (leave empty for yourself)")
-async def discordavatar(interaction: discord.Interaction, user: Optional[discord.User] = None):
-    """Get a user's Discord avatar with high quality options"""
-    await interaction.response.defer()
-    target = user or interaction.user
-    
-    try:
-        avatar_url = target.display_avatar.with_size(4096).url
-        
-        embed = discord.Embed(
-            title=f"{target.name}'s Avatar",
-            color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue(),
-            timestamp=interaction.created_at
-        )
-        embed.set_image(url=avatar_url)
-        embed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
-        
-        view = discord.ui.View(timeout=120)
-        view.add_item(discord.ui.Button(
-            label="Download Avatar",
-            style=discord.ButtonStyle.link,
-            url=avatar_url
-        ))
-        
-        await interaction.followup.send(embed=embed, view=view)
-        
-    except Exception as e:
-        errorembed = discord.Embed(
-            title="❌ Failed to fetch avatar",
-            description=f"An error occurred: {str(e)}",
-            color=discord.Color.red()
-        )
-        errorembed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
-        await interaction.followup.send(embed=errorembed)
 
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@bot.tree.command(name="discordbanner", description="Get a user's Discord banner")
-@app_commands.describe(user="The user to get the banner from (leave empty for yourself)")
-async def discordbanner(interaction: discord.Interaction, user: Optional[discord.User] = None):
-    """Get a user's Discord banner using direct API call"""
-    await interaction.response.defer()
-    target = user or interaction.user
-    
-    try:
-        connector = aiohttp.TCPConnector(family=socket.AF_INET)
-        async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.get(
-                f'https://discord.com/api/v9/users/{target.id}',
-                headers={'Authorization': f'Bot {token}'}
-            ) as resp:
-                if resp.status != 200:
-                    errorembed = discord.Embed(
-                        title="User Not Found",
-                        description="Could not fetch user data ",
-                        color=discord.Color.red()
-                    )
-                    errorembed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
-                    await interaction.followup.send(embed=errorembed)
-                    return
-                
-                user_data = await resp.json()
 
-        if user_data.get('banner'):
-            banner_hash = user_data['banner']
-            
-            if banner_hash.startswith('a_'):
-                banner_url = f"https://cdn.discordapp.com/banners/{target.id}/{banner_hash}.gif?size=4096"
-            else:
-                banner_url = f"https://cdn.discordapp.com/banners/{target.id}/{banner_hash}.webp?size=4096"
-            
-            embed = discord.Embed(
-                title=f"{target.name}'s Banner",
-                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue(),
-                timestamp=interaction.created_at
-            )
-            embed.set_image(url=banner_url)
-            embed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
-            
-            view = discord.ui.View(timeout=120)
-            view.add_item(discord.ui.Button(
-                label="Download Banner",
-                style=discord.ButtonStyle.link,
-                url=banner_url
-            ))
-            
-            await interaction.followup.send(embed=embed, view=view)
-            
-        else:
-            errorembed = discord.Embed(
-                title="No Banner Found",
-                description=f"{target.name} doesn't have a banner image.",
-                color=discord.Color.orange()
-            )
-            errorembed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
-            await interaction.followup.send(embed=errorembed)
-        
-    except aiohttp.ClientError as e:
-        errorembed = discord.Embed(
-            title="❌ error",
-            description=f"api request failed{str(e)}",
-            color=discord.Color.red()
-        )
-        errorembed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
-        await interaction.followup.send(embed=errorembed)
-    except Exception as e:
-        errorembed = discord.Embed(
-            title="❌ Unexpected Error",
-            description=f"Failed to fetch banner: {str(e)}",
-            color=discord.Color.red()
-        )
-        errorembed.set_footer(text=f"Requested by {interaction.user.name} | {MainURL}")
-        await interaction.followup.send(embed=errorembed)
-        
+# --- linkroblox..instagram ---
 @bot.tree.command(name="linkroblox", description="Link your Roblox account to Discord")
 @app_commands.allowed_installs(guilds=True, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -5511,13 +3948,390 @@ def create_instagram_embed(username, profile_info, requester_name):
     embed.set_footer(text=f"Requested By {requester_name} │ {MainURL}")
     
     return embed
-        
-# === Bot Runner in Thread ===
-def run_bot():
-    bot.run(token)
-# === Run Bot + Flask Webserver ===
+
+
+
+# =====================================================================================
+# Events
+# =====================================================================================
+
+COUNT_RE = re.compile(r"^\d+(?:[+\-*/x]\d+)*$")
+
+
+def parse_count(text):
+    """'5', '2+3', '2x3' -> a number (evaluated left to right, like the Discord bot). None if it is not a count."""
+    text = text.replace(" ", "")
+    if not COUNT_RE.match(text):
+        return None
+    parts = re.findall(r"\d+|[+\-*/x]", text)
+    total = int(parts[0])
+    for op, val in zip(parts[1::2], parts[2::2]):
+        val = int(val)
+        if op == "+":
+            total += val
+        elif op == "-":
+            total -= val
+        elif op in ("*", "x"):
+            total *= val
+        elif op == "/":
+            if val == 0:
+                return None
+            total = total / val
+            if total == int(total):
+                total = int(total)
+    return total
+
+
+def handle_counting(msg):
+    if msg.get("author_bot") or msg.get("command"):
+        return
+    sid = server_of(msg.get("channel_id"), yshim._first(msg, "server_id", "guild_id"))
+    if not sid:
+        return
+    data = countingDB.get(sid)
+    if not data or not data.get("enabled") or str(data.get("channel")) != str(msg.get("channel_id")):
+        return
+    value = parse_count(msg.get("content") or "")
+    if value is None:
+        return
+
+    channel, mid, author = msg.get("channel_id"), msg.get("id"), str(msg.get("author_id"))
+    mention = f"<@{author}>"
+    number = data["number"]
+    next_number = number + 1
+    last = str(data["lastcounter"]) if data.get("lastcounter") is not None else None
+    warnings = data.get("warnings", 0)
+    highest = data.get("highestnumber", 0)
+
+    def save():
+        countingDB.set(sid, data)
+
+    if str(value) == str(next_number) and author != last:
+        data.update(number=next_number, lastcounter=author, highestnumber=max(highest, next_number))
+        save()
+        bot.react(channel, mid, "👍")
+        return
+
+    if author == last and warnings != 3:
+        bot.react(channel, mid, "⚠️")
+        bot.send(channel, ":warning: You can't count by yourself!".replace(":warning:", "⚠️"), reply_to=mid)
+        data["warnings"] = warnings + 1
+        save()
+        return
+    if warnings < 3:
+        bot.react(channel, mid, "⚠️")
+        bot.send(channel, f"⚠️ The next number is {next_number}", reply_to=mid)
+        data["warnings"] = warnings + 1
+        save()
+        return
+
+    bot.react(channel, mid, "❌")
+    data["highestnumber"] = max(highest, number)
+    if number == 0:
+        bot.send(channel, f"❌ {mention} ruined it at 1, the next number is 1 (again)")
+    else:
+        bot.send(channel, f"❌ {mention} ruined it at {number}, the next number is 1")
+    data.update(number=0, warnings=0, lastcounter=None)
+    save()
+
+
+@bot.on("message")
+def on_message(msg):
+    try:
+        handle_counting(msg)
+    except Exception as e:
+        print(f"[counting] {type(e).__name__}: {e}")
+
+
+@bot.on("member_join")
+def on_member_join(ev):
+    try:
+        cfg = autoroleDB.get(f"{ev.server_id}")
+        if cfg and cfg.get("enabled") and cfg.get("role_id"):
+            bot.add_role(ev.server_id, ev.user_id, cfg["role_id"])
+    except Exception as e:
+        print(f"[autorole] {type(e).__name__}: {e}")
+
+
+@bot.on("ready")
+def on_ready(me):
+    global bot_ready
+    bot_ready = True
+    try:
+        bot.set_status("online", "🔗 shapes.lol/yapper")
+    except Exception as e:
+        print(f"could not set status: {e}")
+    print(f"[SYSTEM] Logged in as {me.username}, watching {len(bot.servers())} servers. Storage: {__import__('cfstore').backend_summary()}")
+
+
+# =====================================================================================
+# Web server (port 5004)
+# =====================================================================================
+
+app = Flask(__name__)
+CORS(app)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32).hex()
+if not os.environ.get("FLASK_SECRET_KEY"):
+    print("FLASK_SECRET_KEY is not set: admin logins will reset whenever the bot restarts.")
+
+_cache = {}
+
+
+def cached(key, ttl, fn):
+    hit = _cache.get(key)
+    if hit and time.time() - hit[0] < ttl:
+        return hit[1]
+    value = fn()
+    _cache[key] = (time.time(), value)
+    return value
+
+
+def admin_required(f):
+    def wrapped(*args, **kwargs):
+        if session.get("admin") is not True:
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "login required"}), 401
+            return redirect(url_for("admin_login"))
+        return f(*args, **kwargs)
+    wrapped.__name__ = f.__name__
+    return wrapped
+
+
+def _name(d):
+    return yshim._first(d, "username", "display_name", "name") or str(yshim._first(d, "id", "user_id") or "?")
+
+
+LOGIN_HTML = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin Login</title><style>
+body{background:#121212;color:#eee;font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+.box{background:#282a36;padding:40px 50px;border-radius:12px;box-shadow:0 0 15px #50fa7b;text-align:center;width:320px;max-width:80vw}
+h2{margin:0 0 25px;color:#50fa7b}input{width:100%;box-sizing:border-box;padding:12px;margin-bottom:20px;border:none;border-radius:6px;font-size:16px;background:#44475a;color:#f8f8f2}
+button{background:#50fa7b;border:none;color:#000;padding:12px 0;width:100%;font-size:16px;font-weight:bold;border-radius:6px;cursor:pointer}
+.err{color:#ff5555;margin-bottom:12px}</style></head><body><div class="box"><h2>Admin Login</h2>
+{% if error %}<div class="err">{{ error }}</div>{% endif %}
+<form method="POST"><input type="password" name="pass" placeholder="Enter admin key" required autofocus><button type="submit">Login</button></form></div></body></html>"""
+
+DASHBOARD_HTML = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shapes Dashboard</title><style>
+:root{--bg:#1e1e2f;--card:#282a36;--line:#3a3d52;--fg:#f2f2f7;--mut:#a0a3b8;--acc:#50fa7b}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Arial,sans-serif;background:var(--bg);color:var(--fg)}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:20px;color:var(--acc)}a{color:var(--acc)}.mut{color:var(--mut);font-size:13px}
+main{display:grid;grid-template-columns:260px 240px 1fr;gap:12px;padding:12px;min-height:calc(100vh - 70px)}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.pane{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;overflow:auto;max-height:80vh}
+.item{padding:8px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:8px}
+.item:hover,.item.on{background:#3a3d52}.pane h3{margin:4px 6px 8px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.msg{padding:6px 8px;border-bottom:1px solid var(--line)}.msg b{color:var(--acc)}.msg time{color:var(--mut);font-size:12px;margin-left:6px}
+.msg p{margin:2px 0 0;white-space:pre-wrap;word-break:break-word}
+form{display:flex;gap:8px;margin-top:10px}input[type=text]{flex:1;padding:8px;border-radius:6px;border:1px solid var(--line);background:#1b1c2a;color:var(--fg)}
+button{background:var(--acc);border:none;border-radius:6px;padding:8px 14px;font-weight:bold;cursor:pointer}
+.stats span{margin-right:14px}</style></head><body>
+<header><h1>🤖 Shapes on Yapper</h1><div class="mut stats"><span>{{ servers|length }} servers</span><span>{{ command_count }} commands</span><span>storage: {{ storage }}</span></div>
+<span><a href="/api/overview">JSON</a> · <a href="/logout">Logout</a></span></header>
+<main>
+<div class="pane" id="servers"><h3>Servers</h3>{% for s in servers %}<div class="item" data-id="{{ s.id }}"><span>{{ s.name }}</span><span class="mut">{{ s.members }}</span></div>{% else %}<div class="mut" style="padding:8px">The bot is not in any server yet.</div>{% endfor %}</div>
+<div class="pane" id="channels"><h3>Channels</h3><div class="mut" style="padding:8px">Pick a server</div></div>
+<div class="pane" id="view"><h3 id="vt">Messages</h3><div id="msgs" class="mut" style="padding:8px">Pick a channel</div>
+<form id="send" style="display:none"><input type="text" id="text" placeholder="Send a message as the bot" required><button>Send</button></form></div>
+</main>
+<script>
+let cur=null,srv=null;
+const $=s=>document.querySelector(s),esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function j(u,o){const r=await fetch(u,o);if(!r.ok)throw new Error(r.status);return r.json()}
+$('#servers').onclick=async e=>{const it=e.target.closest('.item');if(!it)return;srv=it.dataset.id;
+ document.querySelectorAll('#servers .item').forEach(x=>x.classList.toggle('on',x===it));
+ const d=await j('/api/servers/'+srv);$('#channels').innerHTML='<h3>Channels</h3>'+d.channels.map(c=>`<div class="item" data-id="${esc(c.id)}"><span># ${esc(c.name)}</span></div>`).join('')};
+$('#channels').onclick=e=>{const it=e.target.closest('.item');if(!it)return;cur=it.dataset.id;
+ document.querySelectorAll('#channels .item').forEach(x=>x.classList.toggle('on',x===it));load()};
+async function load(){if(!cur)return;try{const d=await j('/api/channels/'+cur+'/messages');
+ $('#msgs').className='';$('#send').style.display='flex';
+ $('#msgs').innerHTML=d.messages.length?d.messages.map(m=>`<div class="msg"><b>${esc(m.author)}</b><time>${esc(m.created_at||'')}</time><p>${esc(m.content)}</p></div>`).join(''):'<div class="mut" style="padding:8px">No messages</div>'}
+ catch(e){$('#msgs').innerHTML='<div class="mut" style="padding:8px">Could not load messages ('+esc(e.message)+')</div>'}}
+$('#send').onsubmit=async e=>{e.preventDefault();await fetch('/api/channels/'+cur+'/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:$('#text').value})});$('#text').value='';load()};
+setInterval(load,8000);
+</script></body></html>"""
+
+
+@app.route("/status")
+def web_status():
+    return "OK", 200
+
+
+@app.route("/login", methods=["GET", "POST"])
+def admin_login():
+    if session.get("admin") is True:
+        return redirect(url_for("dashboard"))
+    error = None
+    if request.method == "POST":
+        if not ADMIN_KEY:
+            error = "No admin key is configured (set ADMIN_KEY)."
+        elif hmac.compare_digest(request.form.get("pass", ""), ADMIN_KEY):
+            session["admin"] = True
+            return redirect(url_for("dashboard"))
+        else:
+            error = "Incorrect key."
+    return render_template_string(LOGIN_HTML, error=error)
+
+
+@app.route("/logout")
+def admin_logout():
+    session.clear()
+    return redirect(url_for("admin_login"))
+
+
+def _server_rows():
+    rows = []
+    for s in cached("servers", 15, bot.servers):
+        n = yshim._first(s, "member_count", "members_count", "memberCount")
+        rows.append({"id": s.get("id"), "name": s.get("name") or str(s.get("id")), "members": n if n is not None else ""})
+    return rows
+
+
+@app.route("/", methods=["GET"])
+@admin_required
+def dashboard():
+    if not bot_ready:
+        return "<h3>Bot is not ready yet, please try again in a moment.</h3>"
+    return render_template_string(DASHBOARD_HTML, servers=_server_rows(), command_count=len(bot.commands),
+                                  storage=__import__("cfstore").backend_summary())
+
+
+@app.route("/api/overview")
+@admin_required
+def api_overview():
+    """Everything the API gives us about the bot, in one place."""
+    if not bot_ready:
+        return jsonify({"ready": False}), 503
+    return jsonify({
+        "ready": True, "me": dict(bot.me or {}), "uptime_seconds": int(time.time() - started_at),
+        "storage": __import__("cfstore").backend_summary(), "commands": sorted(bot.commands),
+        "servers": [dict(s) for s in cached("servers", 15, bot.servers)],
+    })
+
+
+@app.route("/api/servers/<server_id>")
+@admin_required
+def api_server(server_id):
+    try:
+        return jsonify({
+            "server": dict(bot.server(server_id)),
+            "channels": [dict(c) for c in bot.channels(server_id)],
+            "roles": [dict(r) for r in bot.roles(server_id)],
+            "members": [dict(m) for m in bot.members(server_id)],
+        })
+    except yapper.YapperError as e:
+        return jsonify({"error": str(e)}), e.status or 502
+
+
+@app.route("/api/channels/<channel_id>/messages")
+@admin_required
+def api_messages(channel_id):
+    limit = max(1, min(100, request.args.get("limit", 50, type=int)))
+    try:
+        out = []
+        for m in bot.messages(channel_id, limit=limit):
+            author = m.get("author") if isinstance(m.get("author"), dict) else {}
+            out.append({**dict(m), "author": _name(author) if author else str(m.get("author_id")), "content": m.get("content") or ""})
+        return jsonify({"messages": out})
+    except yapper.YapperError as e:
+        return jsonify({"error": str(e)}), e.status or 502
+
+
+@app.route("/api/channels/<channel_id>/send", methods=["POST"])
+@admin_required
+def api_send(channel_id):
+    text = (request.get_json(silent=True) or {}).get("message", "").strip()
+    if not text:
+        return jsonify({"error": "empty message"}), 400
+    try:
+        bot.send(channel_id, text)
+        return jsonify({"ok": True})
+    except yapper.YapperError as e:
+        return jsonify({"error": str(e)}), e.status or 502
+
+
+@app.route("/commands", methods=["GET"])
+def send_commands():
+    out = {}
+    for name, spec in yshim.tree.commands.items():
+        out[name] = {"name": name, "description": spec.description, "usage": spec.usage,
+                     "options": [p.name for p in spec.params], "type": "slash_command"}
+    return jsonify({"Commands": out, "success": True}), 200
+
+
+@app.route("/count/commands", methods=["GET"])
+def get_command_count():
+    return {"Commands": str(len(yshim.tree.commands))}, 200
+
+
+def _ready_or_503(payload):
+    return (payload, 200) if bot_ready else ({k: "Unknown" for k in payload}, 503)
+
+
+@app.route("/botinfo", methods=["GET"])
+def get_bot_info():
+    if not bot_ready:
+        return {"Servers": "Unknown", "Users": "Unknown"}, 503
+    return {"Servers": str(len(cached("servers", 15, bot.servers))), "Users": str(total_members())}, 200
+
+
+@app.route("/count/servers", methods=["GET"])
+def get_server_count():
+    if not bot_ready:
+        return {"Servers": "Unknown"}, 503
+    return {"Servers": str(len(cached("servers", 15, bot.servers)))}, 200
+
+
+@app.route("/count/users", methods=["GET"])
+def get_user_count():
+    if not bot_ready:
+        return {"Users": "Unknown"}, 503
+    return {"Users": str(total_members())}, 200
+
+
+@app.route("/clb", methods=["GET"])
+def countinglb():
+    if not bot_ready:
+        return jsonify("Bot is still starting"), 503
+    names = {str(s.get("id")): s.get("name") for s in cached("servers", 15, bot.servers)}
+    lb = {}
+    for sid in countingDB.all():
+        data = countingDB.get(sid) or {}
+        if data.get("banned") or not data.get("enabled") or sid not in names:
+            continue
+        lb[sid] = {"currentnumber": data["number"], "highestnumber": data["highestnumber"], "serverName": names[sid]}
+    return {"Leaderboard": sorted(lb.items(), key=lambda x: x[1]["highestnumber"], reverse=True)}, 200
+
+
+@app.route("/mutuals", methods=["GET"])
+def mutualservers():
+    if not bot_ready:
+        return {"Servers": "Unknown"}, 503
+    servers = {}
+    for s in cached("servers", 15, bot.servers):
+        sid = s.get("id")
+        entry = {"name": s.get("name"), "iconurl": yshim._first(s, "icon_url", "icon"), "owner": yshim._first(s, "owner_id", "owner"),
+                 "channels": len(bot.channels(sid)), "roles": len(bot.roles(sid)), "members": [], "bots": []}
+        for m in bot.members(sid):
+            row = {"name": _name(m), "id": yshim._first(m, "user_id", "id")}
+            (entry["bots"] if m.get("bot") or m.get("is_bot") else entry["members"]).append(row)
+        entry["membercount"], entry["botcount"] = len(entry["members"]), len(entry["bots"])
+        servers[sid] = entry
+    return {"Servers": servers}, 200
+
+
+# =====================================================================================
+# Startup
+# =====================================================================================
+
+def run_web():
+    port = int(os.environ.get("PORT", 5004))
+    print(f"Starting web server on port {port}")
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False, threaded=True)
+
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 13455))
-    threading.Thread(target=run_bot).start()
-    print(f"Starting Flask on port {port}")
-    app.run(host="0.0.0.0", port=port, debug=True)
+    yshim.install(bot)
+    threading.Thread(target=run_web, daemon=True, name="web").start()
+    bot.run()

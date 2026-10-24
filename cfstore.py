@@ -1,6 +1,6 @@
 """Cloudflare Workers KV storage with a pickledb-style API (get / set / remove / exists / all / save).
 
-Why this shape:
+Why this for shapes:
   * The bot code keeps calling `db.get(key)` / `db.set(key, value)` like it did with pickledb.
   * Reads come from an in-memory cache that is loaded once at startup, so commands never wait on the network.
   * Writes are batched in the background. KV allows roughly one write per second per key, so rapid updates to the

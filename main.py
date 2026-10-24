@@ -794,78 +794,94 @@ async def ai(interaction: discord.Interaction, *, prompt: str):
 
 
 # --- google ---
-@bot.tree.command(name="google", description="Search Something On Google.")
-@app_commands.allowed_installs(guilds=True, users=True)
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+# Google is retiring the Custom Search JSON API (discontinued January 1, 2027) and has no whole-web replacement.
+# /google now uses the Brave Search API (BRAVE_API_KEY). If only the old GOOGLE_API_KEY is set, it keeps using
+# Google's API until that shuts off. Adding another provider = one more function in SEARCH_PROVIDERS.
+BraveAPIKey = _secret("BRAVE_API_KEY", "BraveToken.txt")
+
+
+def _clean_snippet(text):
+    text = re.sub(r"<[^>]+>", "", text or "")
+    return re.sub(r"&(?:amp|quot|#x27|#39|lt|gt);", lambda m: {"&amp;": "&", "&quot;": '"', "&lt;": "<", "&gt;": ">"}.get(m.group(0), "'"), text).strip()
+
+
+async def _search_brave(session, query):
+    async with session.get(
+        "https://api.search.brave.com/res/v1/web/search",
+        params={"q": query, "count": 5},
+        headers={"X-Subscription-Token": BraveAPIKey, "Accept": "application/json"},
+        timeout=aiohttp.ClientTimeout(total=15),
+    ) as resp:
+        resp.raise_for_status()
+        data = await resp.json()
+    return [{"title": r.get("title") or "No Title", "link": r.get("url") or "", "snippet": _clean_snippet(r.get("description"))}
+            for r in (data.get("web") or {}).get("results", [])[:5]]
+
+
+async def _search_google_cse(session, query):
+    async with session.get(
+        "https://www.googleapis.com/customsearch/v1",
+        params={"key": GoogleAPIKey, "cx": searchengine, "q": query, "num": 5},
+        timeout=aiohttp.ClientTimeout(total=15),
+    ) as resp:
+        resp.raise_for_status()
+        data = await resp.json()
+    return [{"title": r.get("title") or "No Title", "link": r.get("link") or "", "snippet": _clean_snippet(r.get("snippet"))}
+            for r in data.get("items", [])[:5]]
+
+
+def _search_providers():
+    """Providers that have a key set, in order of preference."""
+    found = []
+    if BraveAPIKey:
+        found.append(("Brave", _search_brave))
+    if GoogleAPIKey:
+        found.append(("Google", _search_google_cse))
+    return found
+
+
+@bot.tree.command(name="google", description="Search the web.")
 async def google(interaction: discord.Interaction, query: str = "shapes.lol"):
     await interaction.response.defer()
-    
+
     thinkingembed = discord.Embed(
-        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching Google For {query}",
-        color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
+        title=f"{Emojis.get('loading')} {interaction.user.mention} Searching For {query}",
+        color=ecolor(interaction.user.id)
     )
     await interaction.followup.send(embed=thinkingembed)
-    
-    # replace spaces with + in query for google search link
-    properquery = query.replace(" ", "+")
-    
-    url = f"https://www.googleapis.com/customsearch/v1?key={GoogleAPIKey}&cx={searchengine}&q={properquery}"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
 
-        # Get First 5 results
-        if "items" in data and len(data["items"]) >= 5:
-            first_result = data["items"][0]
-            title = first_result.get("title", "No Title")
-            snippet = first_result.get("snippet", "No Description")
-            link = first_result.get("link", "No Link")
-            print(f"First Result: {title} - {link}")
-            second_result = data["items"][1]
-            second_result_title = second_result.get("title", "No Title")
-            second_result_snippet = second_result.get("snippet", "No Description")
-            second_result_link = second_result.get("link", "No Link")
-            print(f"Second Result: {second_result_title} - {second_result_link}")
-            third_result = data["items"][2]
-            third_result_title = third_result.get("title", "No Title")
-            third_result_snippet = third_result.get("snippet", "No Description")
-            third_result_link = third_result.get("link", "No Link")
-            print(f"Third Result: {third_result_title} - {third_result_link}")
-            fourth_result = data["items"][3]
-            fourth_result_title = fourth_result.get("title", "No Title")
-            fourth_result_snippet = fourth_result.get("snippet", "No Description")
-            fourth_result_link = fourth_result.get("link", "No Link")
-            print(f"Fourth Result: {fourth_result_title} - {fourth_result_link}")
-            fifth_result = data["items"][4]
-            fifth_result_title = fifth_result.get("title", "No Title")
-            fifth_result_snippet = fifth_result.get("snippet", "No Description")
-            fifth_result_link = fifth_result.get("link", "No Link")
-            print(f"Fifth Result: {fifth_result_title} - {fifth_result_link}")
-            
-            embed = discord.Embed(
-                title=f"Google Results For {query}",
-                description=f"**1. [{title}]({link})**\n{snippet}\n\n**2. [{second_result_title}]({second_result_link})**\n{second_result_snippet}\n\n**3. [{third_result_title}]({third_result_link})**\n{third_result_snippet}\n\n**4. [{fourth_result_title}]({fourth_result_link})**\n{fourth_result_snippet}\n\n**5. [{fifth_result_title}]({fifth_result_link})**\n{fifth_result_snippet}\n\n[Search For More Results](https://google.com/search?q={properquery})",
-                color=embedDB.get(f"{interaction.user.id}") if embedDB.get(f"{interaction.user.id}") else discord.Color.blue()
-            )
-            embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=embed)
-        else:
-            noresultembed = discord.Embed(
-                title=":x: No results found! :x:",
-                description=f"No Results for {query} | [Search on Google Yourself For More Results](https://google.com/search?q={properquery})",
-                color=discord.Color.red()
-            )
-            noresultembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-            await interaction.edit_original_response(embed=noresultembed)
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred during the API request: {e}")
-        errorembed = discord.Embed(
-            title=":x: An error occurred while searching Google. Please try again later. :x:",
-            color=discord.Color.red()
+    more = f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}"
+    providers = _search_providers()
+    results, used, failed = None, None, False
+    async with aiohttp.ClientSession() as session:
+        for name, fn in providers:
+            try:
+                results, used = await fn(session, query), name
+                break
+            except Exception as e:
+                failed = True
+                print(f"[google] {name} search failed: {type(e).__name__}: {e}")
+
+    if results:
+        lines = [f"**{i}. [{r['title']}]({r['link']})**\n{r['snippet']}" for i, r in enumerate(results, 1) if r["link"]]
+        embed = discord.Embed(
+            title=f"Search Results For {query}",
+            description="\n\n".join(lines) + f"\n\n[Search For More Results]({more})",
+            color=ecolor(interaction.user.id)
         )
-        errorembed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
-        await interaction.edit_original_response(embed=errorembed)
+        embed.set_footer(text=f"Requested By {interaction.user.name} via {used} | {MainURL}")
+        await interaction.edit_original_response(embed=embed)
+        return
+
+    if not providers:
+        title, desc = ":x: Search isn't set up :x:", f"The bot owner needs to set BRAVE_API_KEY. [Search it yourself]({more})"
+    elif failed:
+        title, desc = ":x: An error occurred while searching. Please try again later. :x:", f"[Search it yourself]({more})"
+    else:
+        title, desc = ":x: No results found! :x:", f"No Results for {query} | [Search on Google Yourself For More Results]({more})"
+    embed = discord.Embed(title=title, description=desc, color=discord.Color.red())
+    embed.set_footer(text=f"Requested By {interaction.user.name} | {MainURL}")
+    await interaction.edit_original_response(embed=embed)
 
 
 # --- robloxinfo ---

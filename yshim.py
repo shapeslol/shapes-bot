@@ -19,6 +19,7 @@ Embeds
   YAPPER_EMBED_MODE=auto (default) | embed (never fall back) | text (never send embeds).
   If the format is different, fix Embed.to_dict() below, it is the only place that builds it.
 """
+
 import asyncio
 import functools
 import inspect
@@ -43,7 +44,7 @@ _embeds_ok = EMBED_MODE != "text"
 _uid = itertools.count(1)
 
 OWNER_IDS = {x.strip() for x in os.environ.get("OWNER_IDS", "").split(",") if x.strip()}
-OWNER_USERNAMES = {x.strip().lower() for x in os.environ.get("OWNER_USERNAMES", "lcjunior1220,sl.ip,kiwixor").split(",") if x.strip()}
+OWNER_USERNAMES = {x.strip().lower() for x in os.environ.get("OWNER_USERNAMES", "leandre,pj,lecanact,phis,shapes").split(",") if x.strip()}
 
 
 # --------------------------------------------------------------------------- text cleanup
